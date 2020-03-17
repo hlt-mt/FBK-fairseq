@@ -163,6 +163,14 @@ def parse_args_and_arch(
             elif hasattr(cls, "__dataclass"):
                 gen_parser_from_dataclass(parser, cls.__dataclass())
 
+    if hasattr(args, 'criterion'):
+        from fairseq.criterions import CRITERION_REGISTRY
+
+        # In order to get also underlying criterion if available
+        args, _ = parser.parse_known_args(input_args)
+        if hasattr(args, 'underlying_criterion'):
+            CRITERION_REGISTRY[args.underlying_criterion].add_args(parser)
+
     # Modify the parser a second time, since defaults may have been reset
     if modify_parser is not None:
         modify_parser(parser)
