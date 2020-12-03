@@ -17,6 +17,9 @@ class MultiTaskModel(FairseqEncoderDecoderModel):
         auxiliary_out = self.auxiliary_decoder(encoder_out)
         return decoder_out, auxiliary_out
 
+    def get_auxiliary_target(self, sample, auxiliary_output):
+        return sample["auxiliary_target"]
+
 
 class ClassifierDecoder(nn.Module):
     def get_normalized_probs(self, net_output, log_probs=False):
