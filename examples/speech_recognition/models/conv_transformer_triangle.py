@@ -91,7 +91,7 @@ class ConvolutionalTransformerTriangle(MultiTaskModel):
         )
         return decoder_out, (self.auxiliary_decoder.output_layer(auxiliary_out[0]), auxiliary_out[1])
 
-    def forward_decoder(self, encoder_out, prev_output_tokens, auxiliary_out, auxiliary_tokens, **kwargs):
+    def forward_decoder(self, prev_output_tokens, encoder_out, auxiliary_out, auxiliary_tokens, **kwargs):
         auxiliary_padding_mask = auxiliary_tokens.eq(
             self.auxiliary_decoder.padding_idx)
         return self.decoder(

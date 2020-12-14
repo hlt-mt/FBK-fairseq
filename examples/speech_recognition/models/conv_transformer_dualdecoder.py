@@ -80,6 +80,9 @@ class ConvolutionalTransformerDualDecoder(MultiTaskModel):
             transcript_prev_output_tokens, encoder_out=encoder_out, **kwargs)
         return decoder_out, auxiliary_out
 
+    def forward_decoder(self, prev_output_tokens, encoder_out, auxiliary_out, auxiliary_tokens, **kwargs):
+        return self.decoder(prev_output_tokens, encoder_out=encoder_out, **kwargs)
+
 
 def Embedding(num_embeddings, embedding_dim, padding_idx):
     m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
