@@ -68,6 +68,9 @@ class ConvolutionalTransformerDualDecoder(MultiTaskModel):
     def get_auxiliary_target(self, sample, auxiliary_output):
         return sample["transcript_target"]
 
+    def get_auxiliary_token_lens(self, sample):
+        return sample["transcript_target_lengths"]
+
     def forward(self, src_tokens, src_lengths, prev_output_tokens, transcript_prev_output_tokens, **kwargs):
         encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
         decoder_out = self.decoder(

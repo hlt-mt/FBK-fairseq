@@ -37,6 +37,7 @@ class CrossEntropyDualDecoder(FairseqCriterion):
         primary_loss, primary_nll_loss = label_smoothed_nll_loss(
             lprobs, target, self.eps, ignore_index=self.padding_idx, reduce=reduce,
         )
+        auxiliary_token_lens = model.get_auxiliary_token_lens(sample)
         auxiliary_probs = model.auxiliary_decoder.get_normalized_probs(net_output[1], log_probs=True)
         auxiliary_probs = auxiliary_probs.view(-1, auxiliary_probs.size(-1))
         auxiliary_target = model.get_auxiliary_target(sample, net_output[1]).view(-1, 1)
@@ -51,6 +52,7 @@ class CrossEntropyDualDecoder(FairseqCriterion):
             'auxiliary_loss': auxiliary_loss.data,
             'auxiliary_nll_loss': auxiliary_nll_loss.data,
             'ntokens': sample['ntokens'],
+            'auxiliary_ntokens': auxiliary_token_lens.sum().data,
             'nsentences': sample['target'].size(0),
             'sample_size': sample_size,
         }
@@ -69,12 +71,13 @@ class CrossEntropyDualDecoder(FairseqCriterion):
         primary_nll_loss = sum(log.get('primary_nll_loss', 0) for log in logging_outputs)
         auxiliary_nll_loss = sum(log.get('auxiliary_nll_loss', 0) for log in logging_outputs)
         ntokens = sum(log.get('ntokens', 0) for log in logging_outputs)
+        auxiliary_ntokens = sum(log.get('auxiliary_ntokens', 0) for log in logging_outputs)
         sample_size = sum(log.get('sample_size', 0) for log in logging_outputs)
 
         metrics.log_scalar('loss', loss_sum / sample_size / math.log(2), sample_size, round=3)
         metrics.log_scalar('primary_loss', primary_loss_sum / sample_size / math.log(2), sample_size, round=3)
         metrics.log_scalar('auxiliary_loss', auxiliary_loss_sum / sample_size / math.log(2), sample_size, round=3)
         metrics.log_scalar('primary_nll_loss', primary_nll_loss / ntokens / math.log(2), ntokens, round=3)
-        metrics.log_scalar('auxiliary_nll_loss', auxiliary_nll_loss / ntokens / math.log(2), ntokens, round=3)
+        metrics.log_scalar('auxiliary_nll_loss', auxiliary_nll_loss / auxiliary_ntokens / math.log(2), auxiliary_ntokens, round=3)
         metrics.log_derived('primary_ppl', lambda meters: utils.get_perplexity(meters['primary_nll_loss'].avg))
         metrics.log_derived('auxiliary_ppl', lambda meters: utils.get_perplexity(meters['auxiliary_nll_loss'].avg))
