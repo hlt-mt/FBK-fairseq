@@ -21,9 +21,9 @@ class CrossEntropyDualDecoder(FairseqCriterion):
 
     @staticmethod
     def add_args(parser):
-        parser.add_argument('--primary-loss-weight', default=1.0, type=float, metavar='W',
+        parser.add_argument('--primary-loss-weight', default=0.5, type=float, metavar='W',
                             help='The weight to apply to the primary loss function when summing losses')
-        parser.add_argument('--auxiliary-loss-weight', default=1.0, type=float, metavar='W',
+        parser.add_argument('--auxiliary-loss-weight', default=0.5, type=float, metavar='W',
                             help='The weight to apply to the auxiliary loss function when summing losses')
         parser.add_argument('--label-smoothing', default=0., type=float, metavar='D',
                             help='epsilon for label smoothing, 0 means no label smoothing')
