@@ -173,6 +173,12 @@ def get_features_or_waveform(path: str, need_waveform=False):
         features_or_waveform (numpy.ndarray): speech features or waveform.
     """
     _path, *extra = path.split(":")
+    ####### ADDED
+    corr_path = _path.split("/")
+    if corr_path[-2]==corr_path[-3]:
+        corr_path = corr_path[:-2]+[corr_path[-1]]
+        _path="/".join(corr_path)
+    #######
     if not op.exists(_path):
         raise FileNotFoundError(f"File not found: {_path}")
 
