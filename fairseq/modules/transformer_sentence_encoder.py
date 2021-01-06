@@ -145,11 +145,6 @@ class TransformerSentenceEncoder(nn.Module):
             else None
         )
 
-        if encoder_normalize_before:
-            self.emb_layer_norm = LayerNorm(self.embedding_dim, export=export)
-        else:
-            self.emb_layer_norm = None
-
         if self.layerdrop > 0.0:
             self.layers = LayerDropModuleList(p=self.layerdrop)
         else:
@@ -171,6 +166,11 @@ class TransformerSentenceEncoder(nn.Module):
                 for _ in range(num_encoder_layers)
             ]
         )
+
+        if encoder_normalize_before:
+            self.emb_layer_norm = LayerNorm(self.embedding_dim, export=export)
+        else:
+            self.emb_layer_norm = None
 
         # Apply initialization of model params after building the model
         if self.apply_bert_init:

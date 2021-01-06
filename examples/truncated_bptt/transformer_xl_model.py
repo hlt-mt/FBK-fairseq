@@ -49,13 +49,8 @@ class TransformerXLLanguageModel(FairseqLanguageModel):
 
 class TransformerXLDecoder(FairseqIncrementalDecoder):
     def __init__(self, cfg, task):
-        try:
-            from transformers.models.transfo_xl import (
-                TransfoXLConfig, TransfoXLLMHeadModel
-            )
-        except ImportError:
-            from transformers.configuration_transfo_xl import TransfoXLConfig
-            from transformers.modeling_transfo_xl import TransfoXLLMHeadModel
+        from transformers.configuration_transfo_xl import TransfoXLConfig
+        from transformers.modeling_transfo_xl import TransfoXLLMHeadModel
 
         super().__init__(task.target_dictionary)
         self.cfg = cfg

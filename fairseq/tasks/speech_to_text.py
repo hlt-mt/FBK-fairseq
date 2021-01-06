@@ -18,7 +18,6 @@ from fairseq.tasks import LegacyFairseqTask, register_task
 
 logger = logging.getLogger(__name__)
 
-
 @register_task("speech_to_text")
 class SpeechToTextTask(LegacyFairseqTask):
     @staticmethod

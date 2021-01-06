@@ -186,13 +186,6 @@ class CommonConfig(FairseqDataclass):
             "help": "when using Hydra, reset the logging at the beginning of training"
         },
     )
-    suppress_crashes: bool = field(
-        default=False,
-        metadata={
-            "help": "suppress crashes when training with the hydra_train entry point so that the "
-                    "main method can return a value (useful for sweeps)"
-        },
-    )
 
 
 @dataclass
@@ -258,13 +251,6 @@ class DistributedTrainingConfig(FairseqDataclass):
     fast_stat_sync: bool = field(
         default=False,
         metadata={"help": "[deprecated] this is now defined per Criterion"},
-    )
-    heartbeat_timeout: int = field(
-        default=-1,
-        metadata={
-            "help": "kill the job if no progress is made in N seconds; "
-            "set to -1 to disable"
-        }
     )
     broadcast_buffers: bool = field(
         default=False,
@@ -845,11 +831,9 @@ class CommonEvalConfig(FairseqDataclass):
     post_process: Optional[str] = field(
         default=None,
         metadata={
-            "help": (
-                "post-process text by removing BPE, letter segmentation, etc. "
-                "Valid options can be found in fairseq.data.utils.post_process."
-            ),
-            "argparse_const": "subword_nmt",
+            "help": "post-process text by removing pre-processing such as BPE, letter segmentation, etc "
+            "(valid options are: sentencepiece, wordpiece, letter, _EOW, none, otherwise treated as BPE symbol)",
+            "argparse_const": "@@ ",
             "argparse_alias": "--remove-bpe",
         },
     )

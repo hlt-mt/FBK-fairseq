@@ -145,10 +145,6 @@ class BaseProgressBar(object):
         """Print end-of-epoch stats."""
         raise NotImplementedError
 
-    def update_config(self, config):
-        """Log latest configuration."""
-        pass
-
     def _str_commas(self, stats):
         return ", ".join(key + "=" + stats[key].strip() for key in stats.keys())
 
@@ -307,12 +303,9 @@ class TqdmProgressBar(BaseProgressBar):
 
 try:
     _tensorboard_writers = {}
-    from torch.utils.tensorboard import SummaryWriter
+    from tensorboardX import SummaryWriter
 except ImportError:
-    try:
-        from tensorboardX import SummaryWriter
-    except ImportError:
-        SummaryWriter = None
+    SummaryWriter = None
 
 
 def _close_writers():
@@ -332,7 +325,7 @@ class TensorboardProgressBarWrapper(BaseProgressBar):
 
         if SummaryWriter is None:
             logger.warning(
-                "tensorboard not found, please install with: pip install tensorboard"
+                "tensorboard not found, please install with: pip install tensorboardX"
             )
 
     def _writer(self, key):
@@ -356,11 +349,6 @@ class TensorboardProgressBarWrapper(BaseProgressBar):
         """Print end-of-epoch stats."""
         self._log_to_tensorboard(stats, tag, step)
         self.wrapped_bar.print(stats, tag=tag, step=step)
-
-    def update_config(self, config):
-        """Log latest configuration."""
-        # TODO add hparams to Tensorboard
-        self.wrapped_bar.update_config(config)
 
     def _log_to_tensorboard(self, stats, tag=None, step=None):
         writer = self._writer(tag or "")
@@ -410,12 +398,6 @@ class WandBProgressBarWrapper(BaseProgressBar):
         self._log_to_wandb(stats, tag, step)
         self.wrapped_bar.print(stats, tag=tag, step=step)
 
-    def update_config(self, config):
-        """Log latest configuration."""
-        if wandb is not None:
-            wandb.config.update(config)
-        self.wrapped_bar.update_config(config)
-
     def _log_to_wandb(self, stats, tag=None, step=None):
         if wandb is None:
             return
@@ -464,10 +446,6 @@ class AzureMLProgressBarWrapper(BaseProgressBar):
         """Print end-of-epoch stats"""
         self._log_to_azureml(stats, tag, step)
         self.wrapped_bar.print(stats, tag=tag, step=step)
-
-    def update_config(self, config):
-        """Log latest configuration."""
-        self.wrapped_bar.update_config(config)
 
     def _log_to_azureml(self, stats, tag=None, step=None):
         if Run is None:

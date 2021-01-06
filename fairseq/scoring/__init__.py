@@ -37,9 +37,10 @@ _build_scorer, register_scorer, SCORER_REGISTRY, _ = registry.setup_registry(
 
 
 def build_scorer(choice, tgt_dict):
-    _choice = choice._name if isinstance(choice, DictConfig) else choice
+    if isinstance(choice, DictConfig):
+        choice = choice._name
 
-    if _choice == "bleu":
+    if choice == "bleu":
         from fairseq.scoring import bleu
 
         return bleu.Scorer(

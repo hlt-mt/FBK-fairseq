@@ -2,10 +2,10 @@ import importlib
 import os
 
 
-# ASG loss requires flashlight bindings
+# ASG loss requires wav2letter
 files_to_skip = set()
 try:
-    import flashlight.lib.sequence.criterion
+    import wav2letter
 except ImportError:
     files_to_skip.add("ASG_loss.py")
 
