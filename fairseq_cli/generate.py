@@ -170,8 +170,8 @@ def _main(cfg: DictConfig, output_file):
     )
 
     # Handle tokenization and BPE
-    tokenizer = encoders.build_tokenizer(cfg.tokenizer)
-    bpe = encoders.build_bpe(cfg.bpe)
+    tokenizer = task.build_tokenizer(cfg.tokenizer)
+    bpe = task.build_bpe(cfg.bpe)
 
     def decode_fn(x):
         if bpe is not None:
@@ -370,7 +370,7 @@ def _main(cfg: DictConfig, output_file):
 
     logger.info("NOTE: hypothesis and token scores are output in base 2")
     logger.info(
-        "Translated {} sentences ({} tokens) in {:.1f}s ({:.2f} sentences/s, {:.2f} tokens/s)".format(
+        "Translated {:,} sentences ({:,} tokens) in {:.1f}s ({:.2f} sentences/s, {:.2f} tokens/s)".format(
             num_sentences,
             gen_timer.n,
             gen_timer.sum,

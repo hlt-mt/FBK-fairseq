@@ -263,10 +263,6 @@ class Trainer(object):
     def save_checkpoint(self, filename, extra_state):
         """Save all training state in a checkpoint file."""
         if self.is_data_parallel_master:  # only save one checkpoint
-            logger.info(
-                f"Preparing to save checkpoint to {filename} after "
-                f"{self.get_num_updates()} updates"
-            )
             extra_state["metrics"] = metrics.state_dict()
             extra_state["previous_training_time"] = self.cumulative_training_time()
             checkpoint_utils.save_state(
@@ -297,6 +293,8 @@ class Trainer(object):
         """
         extra_state, self._optim_history, last_optim_state = None, [], None
 
+        logger.info(f"Preparing to load checkpoint {filename}")
+        is_distributed = self.data_parallel_world_size > 1
         bexists = PathManager.isfile(filename)
         if bexists:
             load_on_all_ranks = (
@@ -307,7 +305,9 @@ class Trainer(object):
             )
 
             if load_on_all_ranks or self.data_parallel_rank == 0:
-                state = checkpoint_utils.load_checkpoint_to_cpu(filename)
+                state = checkpoint_utils.load_checkpoint_to_cpu(
+                    filename, load_on_all_ranks=load_on_all_ranks
+                )
                 last_optim_state = state.get("last_optimizer_state", None)
 
                 # If doing zero_sharding, do not broadcast global optimizer
@@ -317,14 +317,14 @@ class Trainer(object):
                     not load_on_all_ranks
                     and self.cfg.distributed_training.zero_sharding == "os"
                     and "last_optimizer_state" in state
-                    and self.data_parallel_world_size > 1
+                    and is_distributed
                 ):
                     state["last_optimizer_state"] = "SHARDED"
             else:
                 last_optim_state = None
                 state = None
 
-            if self.data_parallel_world_size > 1 and not load_on_all_ranks:
+            if is_distributed and not load_on_all_ranks:
                 state = distributed_utils.broadcast_object(
                     state,
                     src_rank=0,
@@ -367,7 +367,7 @@ class Trainer(object):
             if not reset_lr_scheduler:
                 self.lr_scheduler.load_state_dict(last_optim["lr_scheduler_state"])
 
-            if not load_on_all_ranks and self.data_parallel_world_size > 1:
+            if not load_on_all_ranks and is_distributed:
                 last_optim_state = self.optimizer.broadcast_global_state_dict(
                     last_optim_state
                 )
@@ -377,11 +377,6 @@ class Trainer(object):
 
         if extra_state is not None:
             epoch = extra_state["train_iterator"]["epoch"]
-            logger.info(
-                "loaded checkpoint {} (epoch {} @ {} updates)".format(
-                    filename, epoch, self.get_num_updates()
-                )
-            )
 
             if "previous_training_time" in extra_state:
                 self._previous_training_time = extra_state["previous_training_time"]
@@ -396,8 +391,15 @@ class Trainer(object):
                 for meter in metrics.get_meters("default"):
                     if isinstance(meter, meters.TimeMeter):
                         meter.reset()
+
+            logger.info(
+                "Loaded checkpoint {} (epoch {} @ {} updates)".format(
+                    filename, epoch, self.get_num_updates()
+                )
+            )
+
         else:
-            logger.info("no existing checkpoint found {}".format(filename))
+            logger.info("No existing checkpoint found {}".format(filename))
 
         return extra_state
 
