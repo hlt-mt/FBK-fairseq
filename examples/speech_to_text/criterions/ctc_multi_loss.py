@@ -1,14 +1,14 @@
 import math
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
-
-from examples.speech_recognition.criterions.CTC_loss import CTCCriterion
 from fairseq import utils, metrics
-from fairseq.criterions import FairseqCriterion, register_criterion
+from fairseq.criterions import register_criterion, LegacyFairseqCriterion, FairseqCriterion
+from fairseq.criterions.ctc import CtcCriterion, CtcCriterionConfig
 from fairseq.models import BaseFairseqModel
+from fairseq.tasks import FairseqTask
 
 
 class CTCEncoderWrapperModel(BaseFairseqModel):
@@ -95,37 +95,39 @@ class FakeDecoderModel(nn.Module):
     def decoder(self):
         return self.model.decoder
 
-
-class BaseCTCLoss(CTCCriterion):
+class BaseCTCLoss(CtcCriterion):
     def __init__(self, args, task):
-        super(CTCCriterion, self).__init__(args, task)
+        cfg = CtcCriterionConfig()
+        super().__init__(cfg, task)
         self.args = args
         self.blank_idx = task.source_dictionary.index("<ctc_blank>")
         self.pad_idx = task.source_dictionary.pad()
 
-
-@register_criterion("ctc_multi_loss")
-class CTCMultiLoss(FairseqCriterion):
-    def __init__(self, args, task):
+@register_criterion("ctc_multi_loss")#, dataclass=CtcCriterionConfig)
+class CTCMultiLoss(LegacyFairseqCriterion):
+    def __init__(self, args, task):#: FairseqTask, cfg: CtcCriterionConfig)
         super().__init__(args, task)
         assert task.source_dictionary is not None
         self.ctc_aware_model = CTCEncoderWrapperModel(args, task.source_dictionary)
         self.ctc_criterion = BaseCTCLoss(args, task)
+        #self.ctc_criterion = CtcCriterion(args, task)
         self.real_criterion = CTCMultiLoss.build_real_criterion(args, task)
         self.ctc_weight = args.ctc_weight
 
     @staticmethod
+    #def build_criterion(args, task):
     def build_real_criterion(args, task):
         saved_criterion = args.criterion
         args.criterion = args.underlying_criterion
         assert saved_criterion != args.underlying_criterion
-        underlying_criterion = task.build_criterion(args)
+        underlying_criterion = task.build_criterion(task)
+        #underlying_criterion = task.build_criterion(args)
         args.criterion = saved_criterion
         return underlying_criterion
 
     @staticmethod
     def add_args(parser):
-        CTCCriterion.add_args(parser)
+        CtcCriterion.add_args(parser)
         parser.add_argument('--ctc-encoder-layer', default=6, type=int, metavar='LAYER_NUM',
                             help='The encoder layer whose feature are used to compute the CTC loss')
         parser.add_argument('--ctc-weight', default=1.0, type=float, metavar='W',

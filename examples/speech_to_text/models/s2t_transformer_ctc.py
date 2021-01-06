@@ -3,9 +3,11 @@
 import logging
 import math
 from typing import Dict, List, Optional, Tuple
+from itertools import groupby
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from fairseq import checkpoint_utils, utils
 from fairseq.data.data_utils import lengths_to_padding_mask
 from fairseq.models import (
@@ -23,64 +25,9 @@ from fairseq.modules import (
     TransformerEncoderLayer,
 )
 from torch import Tensor
-
+from fairseq.models.speech_to_text.s2t_transformer import Conv1dSubsampler
 
 logger = logging.getLogger(__name__)
-
-CTCAwareEncoderOut = NamedTuple(
-    'CTCAwareEncoderOut',
-    list(EncoderOut._field_types.items()) + [
-        ("ctc_out", torch.Tensor),
-        ("ctc_padding_mask", torch.Tensor)],)
-
-class Conv1dSubsampler(nn.Module):
-    """Convolutional subsampler: a stack of 1D convolution (along temporal
-    dimension) followed by non-linear activation via gated linear units
-    (https://arxiv.org/abs/1911.08460)
-
-    Args:
-        in_channels (int): the number of input channels
-        mid_channels (int): the number of intermediate channels
-        out_channels (int): the number of output channels
-        kernel_sizes (List[int]): the kernel size for each convolutional layer
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        mid_channels: int,
-        out_channels: int,
-        kernel_sizes: List[int] = (3, 3),
-    ):
-        super(Conv1dSubsampler, self).__init__()
-        self.n_layers = len(kernel_sizes)
-        self.conv_layers = nn.ModuleList(
-            nn.Conv1d(
-                in_channels if i == 0 else mid_channels // 2,
-                mid_channels if i < self.n_layers - 1 else out_channels * 2,
-                k,
-                stride=2,
-                padding=k // 2,
-            )
-            for i, k in enumerate(kernel_sizes)
-        )
-
-    def get_out_seq_lens_tensor(self, in_seq_lens_tensor):
-        out = in_seq_lens_tensor.clone()
-        for _ in range(self.n_layers):
-            out = ((out.float() - 1) / 2 + 1).floor().long()
-        return out
-
-    def forward(self, src_tokens, src_lengths):
-        bsz, in_seq_len, _ = src_tokens.size()  # B x T x (C x D)
-        x = src_tokens.transpose(1, 2).contiguous()  # -> B x (C x D) x T
-        for conv in self.conv_layers:
-            x = conv(x)
-            x = nn.functional.glu(x, dim=1)
-        _, _, out_seq_len = x.size()
-        x = x.transpose(1, 2).transpose(0, 1).contiguous()  # -> T x B x (C x D)
-        return x, self.get_out_seq_lens_tensor(src_lengths)
-
 
 @register_model("s2t_transformer")
 class S2TTransformerModel(FairseqEncoderDecoderModel):
@@ -215,8 +162,8 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
                             help='if set, all params loaded from the pretrained model are freezed')
 
     @classmethod
-    def build_encoder(cls, args):
-        encoder = S2TTransformerEncoder(args)
+    def build_encoder(cls, args, dictionary):
+        encoder = S2TTransformerEncoder(args, dictionary)
         if getattr(args, "load_pretrained_encoder_from", None):
             encoder = checkpoint_utils.load_pretrained_component_from_model(
                 component=encoder, checkpoint=args.load_pretrained_encoder_from
@@ -238,15 +185,17 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
         # make sure all arguments are present in older models
         base_architecture(args)
 
+        src_dict, tgt_dict = task.source_dictionary, task.target_dictionary
+
         def build_embedding(dictionary, embed_dim):
             num_embeddings = len(dictionary)
             padding_idx = dictionary.pad()
             return Embedding(num_embeddings, embed_dim, padding_idx)
 
         decoder_embed_tokens = build_embedding(
-            task.target_dictionary, args.decoder_embed_dim
+            tgt_dict, args.decoder_embed_dim
         )
-        encoder = cls.build_encoder(args)
+        encoder = cls.build_encoder(args, src_dict if src_dict is not None else tgt_dict)
         decoder = cls.build_decoder(args, task, decoder_embed_tokens)
         return cls(encoder, decoder)
 
@@ -278,8 +227,8 @@ class S2TTransformerEncoder(FairseqEncoder):
     """Speech-to-text Transformer encoder that consists of input subsampler and
     Transformer encoder."""
 
-    def __init__(self, args):
-        super().__init__(None)
+    def __init__(self, args, dictionary):
+        super().__init__(dictionary)
 
         self.dropout_module = FairseqDropout(
             p=args.dropout, module_name=self.__class__.__name__
@@ -313,9 +262,10 @@ class S2TTransformerEncoder(FairseqEncoder):
             self.ctc_fc = nn.Linear(args.encoder_embed_dim, len(dictionary))
             assert args.criterion == "ctc_multi_loss"
             self.ctc_layer = args.ctc_encoder_layer
+            self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
 
 
-    def forward(self, src_tokens, src_lengths):
+    def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False,):
         x, input_lengths = self.subsample(src_tokens, src_lengths)
         x = self.embed_scale * x
 
@@ -324,8 +274,16 @@ class S2TTransformerEncoder(FairseqEncoder):
         x += positions
         x = self.dropout_module(x)
 
-        for layer in self.transformer_layers:
+        encoder_states = [] if return_all_hiddens else None
+
+        x_ctc = None
+        ctc_padding_mask = None
+        for l_idx, layer in enumerate(self.transformer_layers):
             x = layer(x, encoder_padding_mask)
+            if self.ctc_compress_out and self.ctc_layer == l_idx + 1:
+                ctc_padding_mask = encoder_padding_mask
+                x_ctc, x, src_lengths = self.average_same_ctc_features(x, src_lengths)
+                encoder_padding_mask = self.create_mask(src_lengths)
 
         if not encoder_padding_mask.any():
             encoder_padding_mask = None
@@ -351,6 +309,29 @@ class S2TTransformerEncoder(FairseqEncoder):
                 "src_tokens":None,
                 "src_lengths":None,
             }
+
+    def average_same_ctc_features(self, x, src_lengths):
+        x_ctc = self.ctc_fc(x)
+        with torch.no_grad():
+            batch_predicted = []
+            prob_ctc = F.softmax(x_ctc, dim=-1).transpose(0, 1)  # from T x B x D to B x T x D
+            for b in range(prob_ctc.shape[0]):
+                predicted = prob_ctc[b][: src_lengths[b]].argmax(-1).tolist()
+                batch_predicted.append([(p[0], len(p)) for p in groupby(predicted)])
+
+            new_lengths = [len(p) for p in batch_predicted]
+            new_maxlen = max(new_lengths)
+            weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=x.dtype)
+            processed_inputs_cnt = 0
+            for b_idx, pred in enumerate(batch_predicted):
+                for t_idx, same in enumerate(pred):
+                    new_processed_inputs_cnt = processed_inputs_cnt + same[1]
+                    weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = 1.0 / same[1]
+                    processed_inputs_cnt = new_processed_inputs_cnt
+            weights_matrix = weights_matrix.to(x.device)
+        # x is T x B x C -> B x C x T; weights_matrix is B x T x T'
+        compressed_output = x.transpose(1, 2, 0).bmm(weights_matrix)  # B x C x T'
+        return x_ctc, compressed_output.transpose(2, 0, 1), src_lengths.new(new_lengths)
 
     @torch.jit.export
     def reorder_encoder_out(self, encoder_out: Dict[str, List[Tensor]], new_order):
@@ -405,6 +386,49 @@ class TransformerDecoderScriptable(TransformerDecoder):
             alignment_heads,
         )
         return x, None
+
+class CTCCompressStrategy:
+    @staticmethod
+    def avg(prob_ctc, predicted, new_lengths, dtype, device):
+        new_maxlen = max(new_lengths)
+        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype)
+        for b_idx, pred in enumerate(predicted):
+            processed_inputs_cnt = 0
+            for t_idx, same in enumerate(pred):
+                new_processed_inputs_cnt = processed_inputs_cnt + same[1]
+                weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = 1.0 / same[1]
+                processed_inputs_cnt = new_processed_inputs_cnt
+        return weights_matrix.to(device)
+
+    @staticmethod
+    def weighted(prob_ctc, predicted, new_lengths, dtype, device):
+        new_maxlen = max(new_lengths)
+        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype, device=device)
+        for b_idx, pred in enumerate(predicted):
+            processed_inputs_cnt = 0
+            for t_idx, same in enumerate(pred):
+                new_processed_inputs_cnt = processed_inputs_cnt + same[1]
+                # Get the probabilities of the prediction for the different time steps as weight
+                weights = prob_ctc[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, same[0]]
+                weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = \
+                    weights / weights.sum()
+                processed_inputs_cnt = new_processed_inputs_cnt
+        return weights_matrix
+
+    @staticmethod
+    def softmax(prob_ctc, predicted, new_lengths, dtype, device):
+        new_maxlen = max(new_lengths)
+        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype, device=device)
+        for b_idx, pred in enumerate(predicted):
+            processed_inputs_cnt = 0
+            for t_idx, same in enumerate(pred):
+                new_processed_inputs_cnt = processed_inputs_cnt + same[1]
+                # Get the probabilities of the prediction for the different time steps as weight
+                weights = F.softmax(prob_ctc[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, same[0]])
+                weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = \
+                    weights / weights.sum()
+                processed_inputs_cnt = new_processed_inputs_cnt
+        return weights_matrix
 
 
 @register_model_architecture(model_name="s2t_transformer", arch_name="s2t_transformer")

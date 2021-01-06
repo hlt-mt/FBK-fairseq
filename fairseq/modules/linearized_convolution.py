@@ -10,8 +10,6 @@ from fairseq.incremental_decoding_utils import with_incremental_state
 
 from .conv_tbc import ConvTBC
 
-from typing import Dict, Optional
-from torch import Tensor
 
 @with_incremental_state
 class LinearizedConvolution(ConvTBC):
@@ -40,8 +38,8 @@ class LinearizedConvolution(ConvTBC):
         if prefix + "_linearized_weight" in state_dict:
             del state_dict[prefix + "_linearized_weight"]
 
-    @torch.jit.export
-    def forward(self, input, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None):
+    @torch.jit.ignore
+    def forward(self, input, incremental_state=None):
         """
         Args:
             incremental_state: Used to buffer signal; if not None, then input is
@@ -52,7 +50,7 @@ class LinearizedConvolution(ConvTBC):
             Batch x Time x Channel during inference
         """
         if incremental_state is None:
-            output = self.conv_tbc(input)
+            output = super().forward(input)
             if self.kernel_size[0] > 1 and self.padding[0] > 0:
                 # remove future timesteps added by padding
                 output = output[: -self.padding[0], :, :]
@@ -79,32 +77,29 @@ class LinearizedConvolution(ConvTBC):
             output = F.linear(input.view(bsz, -1), weight, self.bias)
         return output.view(bsz, 1, -1)
 
-    @torch.jit.unused
-    def reorder_incremental_state(self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]], new_order):
+    def reorder_incremental_state(self, incremental_state, new_order):
         input_buffer = self._get_input_buffer(incremental_state)
         if input_buffer is not None:
             input_buffer = input_buffer.index_select(0, new_order)
             self._set_input_buffer(incremental_state, input_buffer)
 
-    @torch.jit.unused
-    def _get_input_buffer(self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]]):
+    def _get_input_buffer(self, incremental_state):
         return utils.get_incremental_state(self, incremental_state, "input_buffer")
 
-    @torch.jit.unused
-    def _set_input_buffer(self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]], new_buffer):
+    def _set_input_buffer(self, incremental_state, new_buffer):
         return utils.set_incremental_state(
             self, incremental_state, "input_buffer", new_buffer
         )
 
-    @torch.jit.unused
     def _get_linearized_weight(self):
         if self._linearized_weight is None:
             kw = self.kernel_size[0]
             weight = self.weight.transpose(2, 1).transpose(1, 0).contiguous()
             assert weight.size() == (self.out_channels, kw, self.in_channels)
-            return weight.view(self.out_channels, -1)
+            self._linearized_weight = torch.nn.Parameter(
+                weight.view(self.out_channels, -1)
+            )
         return self._linearized_weight
 
-    @torch.jit.unused
     def _clear_linearized_weight(self, *args):
         self._linearized_weight = None
