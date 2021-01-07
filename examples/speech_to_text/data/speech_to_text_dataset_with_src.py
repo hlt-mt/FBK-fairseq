@@ -104,16 +104,16 @@ class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
 
         return index, source, target, transcript
 
-    def collater(self, samples: List[Tuple[int, torch.Tensor, torch.Tensor]]) -> Dict:
-        super().collater(samples)
+    def collater(self, samples: List[Tuple[int, torch.Tensor, torch.Tensor, torch.Tensor]]) -> Dict:
+        #super().collater(samples)
         if len(samples) == 0:
             return {}
-        indices = torch.tensor([i for i, _, _ in samples], dtype=torch.long)
+        indices = torch.tensor([i for i, _, _, _ in samples], dtype=torch.long)
         frames = _collate_frames(
-            [s for _, s, _ in samples], self.data_cfg.use_audio_input
+            [s for _, s, _, _ in samples], self.data_cfg.use_audio_input
         )
         # sort samples by descending number of frames
-        n_frames = torch.tensor([s.size(0) for _, s, _ in samples], dtype=torch.long)
+        n_frames = torch.tensor([s.size(0) for _, s, _, _ in samples], dtype=torch.long)
         n_frames, order = n_frames.sort(descending=True)
         indices = indices.index_select(0, order)
         frames = frames.index_select(0, order)
@@ -123,7 +123,7 @@ class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
         ntokens = None
         if self.tgt_texts is not None:
             target = fairseq_data_utils.collate_tokens(
-                [t for _, _, t in samples],
+                [t for _, _, t, _ in samples],
                 self.tgt_dict.pad(),
                 self.tgt_dict.eos(),
                 left_pad=False,
@@ -131,17 +131,17 @@ class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
             )
             target = target.index_select(0, order)
             target_lengths = torch.tensor(
-                [t.size(0) for _, _, t in samples], dtype=torch.long
+                [t.size(0) for _, _, t, _ in samples], dtype=torch.long
             ).index_select(0, order)
             prev_output_tokens = fairseq_data_utils.collate_tokens(
-                [t for _, _, t in samples],
+                [t for _, _, t, _ in samples],
                 self.tgt_dict.pad(),
                 self.tgt_dict.eos(),
                 left_pad=False,
                 move_eos_to_beginning=True,
             )
             prev_output_tokens = prev_output_tokens.index_select(0, order)
-            ntokens = sum(t.size(0) for _, _, t in samples)
+            ntokens = sum(t.size(0) for _, _, t, _ in samples)
 
         # Source transcripts
         transcript, transcript_lengths = None, None
@@ -149,7 +149,7 @@ class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
         ntokens_transcript = None
         if self.src_texts is not None:
             transcript = fairseq_data_utils.collate_tokens(
-                [t for _, _, t in samples],
+                [t for _, _, _, t in samples],
                 self.src_dict.pad(),
                 self.src_dict.eos(),
                 left_pad=False,
@@ -157,17 +157,17 @@ class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
             )
             transcript = transcript.index_select(0, order)
             transcript_lengths = torch.tensor(
-                [t.size(0) for _, _, t in samples], dtype=torch.long
+                [t.size(0) for _, _, _, t in samples], dtype=torch.long
             ).index_select(0, order)
             prev_transcript_tokens = fairseq_data_utils.collate_tokens(
-                [t for _, _, t in samples],
+                [t for _, _, _, t in samples],
                 self.src_dict.pad(),
                 self.src_dict.eos(),
                 left_pad=False,
                 move_eos_to_beginning=True,
             )
             prev_transcript_tokens = prev_transcript_tokens.index_select(0, order)
-            ntokens_transcript = sum(t.size(0) for _, _, t in samples)
+            ntokens_transcript = sum(t.size(0) for _, _, _, t in samples)
 
         out = {
             "id": indices,
