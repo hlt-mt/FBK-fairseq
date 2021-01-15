@@ -4,6 +4,7 @@ import logging
 import math
 from typing import Dict, List, Optional, Tuple
 
+import torch
 import torch.nn as nn
 from fairseq import checkpoint_utils, utils
 from fairseq.data.data_utils import lengths_to_padding_mask
@@ -13,6 +14,7 @@ from fairseq.models import (
     register_model,
     register_model_architecture,
 )
+from fairseq.models.fairseq_encoder import EncoderOut
 from fairseq.models.transformer import Embedding, TransformerDecoder
 from fairseq.modules import (
     FairseqDropout,
@@ -306,46 +308,51 @@ class S2TTransformerEncoder(FairseqEncoder):
         for layer in self.transformer_layers:
             x = layer(x, encoder_padding_mask)
 
+        if not encoder_padding_mask.any():
+            encoder_padding_mask = None
+
         if self.layer_norm is not None:
             x = self.layer_norm(x)
 
         return {
-            "encoder_out": [x],  # T x B x C
-            "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],  # B x T
-            "encoder_embedding": [],  # B x T x C
-            "encoder_states": [],  # List[T x B x C]
-            "src_tokens": [],
-            "src_lengths": [],
+            "encoder_out": [x],
+            "encoder_padding_mask": [encoder_padding_mask],
+            "encoder_embedding":None,
+            "encoder_states":None,
+            "src_tokens":None,
+            "src_lengths":None,
         }
 
-    def reorder_encoder_out(self, encoder_out, new_order):
-        new_encoder_out = (
-            [] if len(encoder_out["encoder_out"]) == 0
-            else [x.index_select(1, new_order) for x in encoder_out["encoder_out"]]
-        )
+    @torch.jit.export
+    def reorder_encoder_out(self, encoder_out: Dict[str, List[Tensor]], new_order):
+        """
+        Reorder encoder output according to *new_order*.
 
-        new_encoder_padding_mask = (
-            [] if len(encoder_out["encoder_padding_mask"]) == 0
-            else [x.index_select(0, new_order) for x in encoder_out["encoder_padding_mask"]]
-        )
+        Args:
+            encoder_out: output from the ``forward()`` method
+            new_order (LongTensor): desired order
 
-        new_encoder_embedding = (
-            [] if len(encoder_out["encoder_embedding"]) == 0
-            else [x.index_select(0, new_order) for x in encoder_out["encoder_embedding"]]
-        )
-
-        encoder_states = encoder_out["encoder_states"]
-        if len(encoder_states) > 0:
-            for idx, state in enumerate(encoder_states):
-                encoder_states[idx] = state.index_select(1, new_order)
+        Returns:
+            *encoder_out* rearranged according to *new_order*
+        """
+        if len(encoder_out["encoder_out"]) == 0:
+            new_encoder_out = []
+        else:
+            new_encoder_out = [encoder_out["encoder_out"][0].index_select(1, new_order)]
+        if len(encoder_out["encoder_padding_mask"]) == 0:
+            new_encoder_padding_mask = []
+        else:
+            new_encoder_padding_mask = [
+                encoder_out["encoder_padding_mask"][0].index_select(0, new_order)
+            ]
 
         return {
             "encoder_out": new_encoder_out,  # T x B x C
             "encoder_padding_mask": new_encoder_padding_mask,  # B x T
-            "encoder_embedding": new_encoder_embedding,  # B x T x C
-            "encoder_states": encoder_states,  # List[T x B x C]
-            "src_tokens": [],  # B x T
-            "src_lengths": [],  # B x 1
+            "encoder_embedding": None,  # B x T x C
+            "encoder_states": None,  # List[T x B x C]
+            "src_tokens": None,  # B x T
+            "src_lengths": None,  # B x 1
         }
 
 
@@ -353,7 +360,7 @@ class TransformerDecoderScriptable(TransformerDecoder):
     def extract_features(
         self,
         prev_output_tokens,
-        encoder_out: Optional[Dict[str, List[Tensor]]] = None,
+        encoder_out: Optional[EncoderOut] = None,
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         full_context_alignment: bool = False,
         alignment_layer: Optional[int] = None,
