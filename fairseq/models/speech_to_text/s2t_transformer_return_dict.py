@@ -253,7 +253,7 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
         """
         The forward method inherited from the base class has a **kwargs
         argument in its input, which is not supported in torchscript. This
-        method overwrites the forward method definition without **kwargs.
+        method overrites the forward method definition without **kwargs.
         """
         encoder_out = self.encoder(src_tokens=src_tokens, src_lengths=src_lengths)
         decoder_out = self.decoder(
@@ -404,7 +404,7 @@ def base_architecture(args):
     args.adaptive_softmax_cutoff = getattr(args, "adaptive_softmax_cutoff", None)
     args.adaptive_softmax_dropout = getattr(args, "adaptive_softmax_dropout", 0)
     args.share_decoder_input_output_embed = getattr(
-        args, "share_decoder_input_output_embed", False
+        args, "share_decoder_input_output_embed", True
     )
     args.no_token_positional_embeddings = getattr(
         args, "no_token_positional_embeddings", False

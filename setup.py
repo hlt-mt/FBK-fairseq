@@ -109,6 +109,7 @@ try:
             )
         ]
     )
+
     if "CUDA_HOME" in os.environ:
         extensions.extend(
             [
@@ -118,14 +119,7 @@ try:
                         "fairseq/clib/libnat_cuda/edit_dist.cu",
                         "fairseq/clib/libnat_cuda/binding.cpp",
                     ],
-                ),
-                cpp_extension.CppExtension(
-                    "fairseq.ngram_repeat_block_cuda",
-                    sources=[
-                        "fairseq/clib/cuda/ngram_repeat_block_cuda.cpp",
-                        "fairseq/clib/cuda/ngram_repeat_block_cuda_kernel.cu",
-                    ],
-                ),
+                )
             ]
         )
     cmdclass["build_ext"] = cpp_extension.BuildExtension
