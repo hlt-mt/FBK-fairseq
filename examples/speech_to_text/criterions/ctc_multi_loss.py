@@ -1,13 +1,14 @@
 import math
+from argparse import Namespace
 
 import torch
 import torch.nn.functional as F
+from omegaconf import II
 from torch import nn
 
 from fairseq import utils, metrics
-from fairseq.criterions import register_criterion, LegacyFairseqCriterion
-from fairseq.criterions.ctc import CtcCriterion, CtcCriterionConfig
-from omegaconf import II
+from fairseq.criterions import register_criterion, LegacyFairseqCriterion, FairseqCriterion
+from fairseq.criterions.ctc import CtcCriterion
 
 
 class FakeEncoderModel(nn.Module):
@@ -62,20 +63,44 @@ class FakeDecoderModel(nn.Module):
 
 class BaseCTCLoss(CtcCriterion):
     def __init__(self, args, task):
-        cfg = CtcCriterionConfig()
-        super().__init__(cfg, task)
+        super(FairseqCriterion, self).__init__(task)
         self.args = args
-        self.zero_infinity = self.args.zero_infinity
-        self.sentence_avg = self.args.sentence_avg
-        self.post_process = self.args.post_process
-        self.wer_kenlm_model = self.args.wer_kenlm_model
-        self.wer_lexicon = self.args.wer_lexicon
-        self.wer_lm_weight = self.args.wer_lm_weight
-        self.wer_word_score = self.args.wer_word_score
-        self.wer_args = self.args.wer_args
         self.blank_idx = task.source_dictionary.index("<ctc_blank>")
         self.pad_idx = task.source_dictionary.pad()
         self.eos_idx = task.source_dictionary.eos()
+
+        self.post_process = self.args.post_process
+
+        if self.args.wer_args is not None:
+            (
+                self.args.wer_kenlm_model,
+                self.args.wer_lexicon,
+                self.args.wer_lm_weight,
+                self.args.wer_word_score,
+            ) = eval(self.args.wer_args)
+
+        if self.args.wer_kenlm_model is not None:
+            from examples.speech_recognition.w2l_decoder import W2lKenLMDecoder
+
+            dec_args = Namespace()
+            dec_args.nbest = 1
+            dec_args.criterion = "ctc"
+            dec_args.kenlm_model = self.args.wer_kenlm_model
+            dec_args.lexicon = self.args.wer_lexicon
+            dec_args.beam = 50
+            dec_args.beam_size_token = min(50, len(task.target_dictionary))
+            dec_args.beam_threshold = min(50, len(task.target_dictionary))
+            dec_args.lm_weight = self.args.wer_lm_weight
+            dec_args.word_score = self.args.wer_word_score
+            dec_args.unk_weight = -math.inf
+            dec_args.sil_weight = 0
+
+            self.w2l_decoder = W2lKenLMDecoder(dec_args, task.target_dictionary)
+        else:
+            self.w2l_decoder = None
+
+        self.zero_infinity = self.args.zero_infinity
+        self.sentence_avg = self.args.sentence_avg
 
 @register_criterion("ctc_multi_loss")
 class CTCMultiLoss(LegacyFairseqCriterion):
@@ -91,7 +116,6 @@ class CTCMultiLoss(LegacyFairseqCriterion):
         saved_criterion = args.criterion
         args.criterion = args.underlying_criterion
         assert saved_criterion != args.underlying_criterion
-        #underlying_criterion = task.build_criterion(task)
         underlying_criterion = task.build_criterion(args)
         args.criterion = saved_criterion
         return underlying_criterion
