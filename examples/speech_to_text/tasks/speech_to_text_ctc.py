@@ -7,9 +7,10 @@ import os.path as op
 
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import SpeechToTextDatasetWithSrc, S2TDataConfigSrc, \
 SpeechToTextDatasetCreatorWithSrc
-from fairseq.data import Dictionary
+from fairseq.data import Dictionary, encoders
 from fairseq.tasks import register_task
 from fairseq.tasks.speech_to_text import SpeechToTextTask
+from argparse import Namespace
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class SpeechToTextCtcTask(SpeechToTextTask):
         """Add task-specific arguments to the parser."""
         SpeechToTextTask.add_args(parser)
 
-    def __init__(self, args, src_dict, tgt_dict):
+    def __init__(self, args, tgt_dict, src_dict):
         super().__init__(args, tgt_dict)
         self.src_dict = src_dict
         self.data_cfg = S2TDataConfigSrc(op.join(args.data, args.config_yaml))
@@ -60,6 +61,7 @@ class SpeechToTextCtcTask(SpeechToTextTask):
         is_train_split = split.startswith("train")
         pre_tokenizer = self.build_tokenizer(self.args)
         bpe_tokenizer = self.build_bpe(self.args)
+        bpe_tokenizer_src = self.build_bpe_src(self.args)
         self.datasets[split] = SpeechToTextDatasetCreatorWithSrc.from_tsv(
             self.args.data,
             self.data_cfg,
@@ -68,6 +70,7 @@ class SpeechToTextCtcTask(SpeechToTextTask):
             self.src_dict,
             pre_tokenizer,
             bpe_tokenizer,
+            bpe_tokenizer_src,
             is_train_split=is_train_split,
             epoch=epoch,
             seed=self.args.seed,
@@ -76,3 +79,7 @@ class SpeechToTextCtcTask(SpeechToTextTask):
     @property
     def source_dictionary(self):
         return self.src_dict
+
+    def build_bpe_src(self, args):
+        logger.info(f"source tokenizer: {self.data_cfg.bpe_tokenizer_src}")
+        return encoders.build_bpe(Namespace(**self.data_cfg.bpe_tokenizer_src))

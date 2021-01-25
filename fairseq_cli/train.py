@@ -32,6 +32,9 @@ from fairseq.model_parallel.megatron_trainer import MegatronTrainer
 from omegaconf import DictConfig
 from fairseq.trainer import Trainer
 
+#import pydevd_pycharm
+#pydevd_pycharm.settrace('frontend', port=1432, stdoutToServer=True, stderrToServer=True)
+
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",

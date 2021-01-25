@@ -122,45 +122,49 @@ class CTCMultiLoss(LegacyFairseqCriterion):
 
     @staticmethod
     def add_args(parser):
-        CtcCriterion.add_args(parser)
         parser.add_argument('--ctc-encoder-layer', default=6, type=int, metavar='LAYER_NUM',
                             help='The encoder layer whose feature are used to compute the CTC loss')
         parser.add_argument('--ctc-weight', default=1.0, type=float, metavar='W',
                             help='The relative weight to assign to the CTC loss')
         parser.add_argument('--underlying-criterion', type=str, metavar='VAL', required=True,
                             help='underlying criterion to use for the model output loss')
-        parser.add_argument('--zero_infinity', default=True, type=bool, metavar='ZERO_INF',
+        parser.add_argument('--zero-infinity', default=True, type=bool, metavar='ZERO_INF',
                             help='zero inf loss when source length <= target length')
-        parser.add_argument('--sentence_avg', default=II("optimization.sentence_avg"), metavar="SEN_AVG",
-                            )
-        parser.add_argument('--post_process', default='letter', metavar='POST_PROC',
+        #parser.add_argument('--sentence-avg', default=II("optimization.sentence_avg"), metavar="SEN_AVG",
+        #                    )
+        parser.add_argument('--post-process', default='letter', metavar='POST_PROC',
                             help='how to post process predictions into words. can be letter, wordpiece, BPE symbols, etc. \
             See fairseq.data.data_utils.post_process() for full list of options')
-        parser.add_argument('--wer_kenlm_model', default=None, metavar='WER_KENLM',
+        parser.add_argument('--wer-kenlm-model', default=None, metavar='WER_KENLM',
                             help='if this is provided, use kenlm to compute wer (along with other wer_* args)')
-        parser.add_argument('--wer_lexicon', default=None, metavar='WER_LEX',
+        parser.add_argument('--wer-lexicon', default=None, metavar='WER_LEX',
                             help='lexicon to use with wer_kenlm_model')
-        parser.add_argument('--wer_lm_weight', default=2.0, metavar='WER_LM_W',
+        parser.add_argument('--wer-lm-weight', default=2.0, metavar='WER_LM_W',
                             help='lm weight to use with wer_kenlm_model')
-        parser.add_argument('--wer_word_score', default=1.0, metavar='WER_WORD_SCORE',
+        parser.add_argument('--wer-word-score', default=1.0, metavar='WER_WORD_SCORE',
                             help='lm word score to use with wer_kenlm_model')
-        parser.add_argument('--wer_args', default=None, metavar='WER_ARGS',
+        parser.add_argument('--wer-args', default=None, metavar='WER_ARGS',
                             help='DEPRECATED: tuple of (wer_kenlm_model, wer_lexicon, wer_lm_weight, wer_word_score)')
 
     def forward(self, model, sample, reduce=True):
         decoder_out, encoder_out = model(**sample["net_input"])
         encoder_fake_model = FakeEncoderModel(model.encoder, encoder_out, sample["transcript"])
         decoder_fake_model = FakeDecoderModel(model, decoder_out, sample["target"])
-        fake_encoder_net_input = {
-            "src_lengths": encoder_out["ctc_lengths"]
-        }
         encoder_sample = {
-            "net_input": fake_encoder_net_input,
+            "net_input": {
+                "src_lengths": encoder_out["ctc_lengths"]
+            },
             "target": sample["transcript"],
             "target_lengths": sample["transcript_lengths"]-1,
             "ntokens": sum(sample["transcript_lengths"]).item(),
             "id": sample["id"]
         }
+        if (encoder_out["ctc_lengths"] < sample["transcript_lengths"]).any():
+            print("Mi sa che lo pijiamo nel...")
+            print("CTC: ", encoder_out["ctc_lengths"])
+            print("TGT: ", sample["transcript_lengths"])
+            print("---------------------------------------------------")
+
         ctc_loss, ctc_sample_size, ctc_logging_output = self.ctc_criterion(
             encoder_fake_model, encoder_sample, reduce=reduce)
         real_loss, _, real_logging_output = self.real_criterion(

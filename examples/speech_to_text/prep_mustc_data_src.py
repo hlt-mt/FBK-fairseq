@@ -146,7 +146,8 @@ def process(args):
                 manifest["speaker"].append(speaker_id)
             if is_train_split:
                 train_text.extend(manifest["tgt_text"])
-                train_text_src.extend(manifest["src_text"])
+                if args.task == "st":
+                    train_text_src.extend(manifest["src_text"])
             df = pd.DataFrame.from_dict(manifest)
             df = filter_manifest_df(df, is_train_split=is_train_split)
             save_df_to_tsv(df, op.join(cur_root, f"{split}_{args.task}_src.tsv"))

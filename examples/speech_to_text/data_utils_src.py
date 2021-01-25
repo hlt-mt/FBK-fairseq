@@ -51,6 +51,12 @@ def gen_config_yaml_with_src(
             "sentencepiece_model_src": op.join(data_root, spm_filename_src),
         }
     )
+    writer.set_bpe_tokenizer_src(
+        {
+            "bpe": "sentencepiece",
+            "sentencepiece_model": op.join(data_root, spm_filename_src),
+        }
+    )
     if prepend_tgt_lang_tag:
         writer.set_prepend_tgt_lang_tag(True)
     writer.set_sampling_alpha(sampling_alpha)
@@ -151,6 +157,9 @@ class S2TDataConfigWriter(object):
 
     def set_bpe_tokenizer(self, bpe_tokenizer: Dict[str, Any]):
         self.config["bpe_tokenizer"] = bpe_tokenizer
+
+    def set_bpe_tokenizer_src(self, bpe_tokenizer: Dict[str, Any]):
+        self.config["bpe_tokenizer_src"] = bpe_tokenizer
 
     def set_feature_transforms(self, split, transforms: List[str]):
         if "transforms" not in self.config:

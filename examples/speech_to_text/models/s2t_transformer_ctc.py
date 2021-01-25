@@ -208,7 +208,7 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
         lprobs.batch_first = True
         return lprobs
 
-    def forward(self, src_tokens, src_lengths, prev_output_tokens):
+    def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
         """
         The forward method inherited from the base class has a **kwargs
         argument in its input, which is not supported in torchscript. This
@@ -218,7 +218,7 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
         decoder_out = self.decoder(
             prev_output_tokens=prev_output_tokens, encoder_out=encoder_out
         )
-        return decoder_out
+        return decoder_out, {"ctc_out": encoder_out["ctc_out"], "ctc_lengths": encoder_out["ctc_lengths"]}
 
 
 class S2TTransformerEncoder(FairseqEncoder):
@@ -261,7 +261,7 @@ class S2TTransformerEncoder(FairseqEncoder):
         self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
 
 
-    def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False,):
+    def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False):
         x, input_lengths = self.subsample(src_tokens, src_lengths)
         x = self.embed_scale * x
 
@@ -278,8 +278,8 @@ class S2TTransformerEncoder(FairseqEncoder):
             x = layer(x, encoder_padding_mask)
             if self.ctc_layer == l_idx + 1:
                 ctc_padding_mask = encoder_padding_mask
-                x_ctc, x, src_lengths = self.average_same_ctc_features(x, src_lengths)
-                encoder_padding_mask = self.create_mask(src_lengths)
+                x_ctc, x, input_lengths = self.average_same_ctc_features(x, input_lengths)
+                encoder_padding_mask = lengths_to_padding_mask(input_lengths)
 
         if not encoder_padding_mask.any():
             encoder_padding_mask = None
@@ -289,11 +289,11 @@ class S2TTransformerEncoder(FairseqEncoder):
 
         return {
             "encoder_out": [x],  # T x B x C
-            "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],  # B x T
+            "encoder_padding_mask": [encoder_padding_mask],  # B x T
             "encoder_embedding": [],
             "encoder_states": encoder_states,  # List[T x B x C]
             "ctc_out": x_ctc,  # T x B x D
-            "ctc_padding_mask": ctc_padding_mask
+            "ctc_lengths": input_lengths
         }
 
     def average_same_ctc_features(self, x, src_lengths):
@@ -316,8 +316,8 @@ class S2TTransformerEncoder(FairseqEncoder):
                     processed_inputs_cnt = new_processed_inputs_cnt
             weights_matrix = weights_matrix.to(x.device)
         # x is T x B x C -> B x C x T; weights_matrix is B x T x T'
-        compressed_output = x.transpose(1, 2, 0).bmm(weights_matrix)  # B x C x T'
-        return x_ctc, compressed_output.transpose(2, 0, 1), src_lengths.new(new_lengths)
+        compressed_output = x.permute(1, 2, 0).bmm(weights_matrix)  # B x C x T'
+        return x_ctc, compressed_output.permute(2, 0, 1), src_lengths.new(new_lengths)
 
     def reorder_encoder_out(self, encoder_out, new_order):
         new_encoder_out = (
@@ -444,13 +444,13 @@ def s2t_transformer_s(args):
     base_architecture(args)
 
 
-@register_model_architecture("s2t_transformer", "s2t_transformer_sp")
+@register_model_architecture("s2t_transformer_ctc", "s2t_transformer_sp_ctc")
 def s2t_transformer_sp(args):
     args.encoder_layers = getattr(args, "encoder_layers", 16)
     s2t_transformer_s(args)
 
 
-@register_model_architecture("s2t_transformer", "s2t_transformer_m")
+@register_model_architecture("s2t_transformer_ctc", "s2t_transformer_m_ctc")
 def s2t_transformer_m(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 512 * 4)
@@ -460,13 +460,13 @@ def s2t_transformer_m(args):
     base_architecture(args)
 
 
-@register_model_architecture("s2t_transformer", "s2t_transformer_mp")
+@register_model_architecture("s2t_transformer_ctc", "s2t_transformer_mp_ctc")
 def s2t_transformer_mp(args):
     args.encoder_layers = getattr(args, "encoder_layers", 16)
     s2t_transformer_m(args)
 
 
-@register_model_architecture("s2t_transformer", "s2t_transformer_l")
+@register_model_architecture("s2t_transformer_ctc", "s2t_transformer_l_ctc")
 def s2t_transformer_l(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 1024)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 1024 * 4)
@@ -476,7 +476,7 @@ def s2t_transformer_l(args):
     base_architecture(args)
 
 
-@register_model_architecture("s2t_transformer", "s2t_transformer_lp")
+@register_model_architecture("s2t_transformer_ctc", "s2t_transformer_lp_ctc")
 def s2t_transformer_lp(args):
     args.encoder_layers = getattr(args, "encoder_layers", 16)
     s2t_transformer_l(args)

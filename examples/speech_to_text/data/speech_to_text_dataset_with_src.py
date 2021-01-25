@@ -29,8 +29,16 @@ class S2TDataConfigSrc(S2TDataConfig):
 
     @property
     def vocab_filename_src(self):
-        """fairseq vocabulary file under data root"""
+        """fairseq source vocabulary file under data root"""
         return self.config.get("vocab_filename_src", "dict.txt")
+
+    @property
+    def bpe_tokenizer_src(self) -> Dict:
+        """Subword tokenizer to apply after pre-tokenization. Returning
+        a dictionary with `bpe` providing the tokenizer name and
+        the other items providing the tokenizer-specific arguments.
+        Tokenizers are defined in `fairseq.data.encoders.*`"""
+        return self.config.get("bpe_tokenizer_src", {"bpe": None})
 
 
 class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
@@ -52,6 +60,7 @@ class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
         src_dict: Optional[Dictionary] = None,
         pre_tokenizer=None,
         bpe_tokenizer=None,
+        bpe_tokenizer_src=None,
     ):
         super().__init__(split, is_train_split, data_cfg, audio_paths, n_frames,
                                             src_texts, tgt_texts, speakers, src_langs, tgt_langs,
@@ -87,8 +96,16 @@ class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
 
         self.pre_tokenizer = pre_tokenizer
         self.bpe_tokenizer = bpe_tokenizer
+        self.bpe_tokenizer_src = bpe_tokenizer_src
 
         logger.info(self.__repr__())
+
+    def tokenize_text_src(self, text: str):
+        if self.pre_tokenizer is not None:
+            text = self.pre_tokenizer.encode(text)
+        if self.bpe_tokenizer_src is not None:
+            text = self.bpe_tokenizer_src.encode(text)
+        return text
 
     def __getitem__(
         self, index: int
@@ -97,7 +114,7 @@ class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
 
         transcript = None
         if self.src_texts is not None:
-            tokenized = self.tokenize_text(self.src_texts[index])
+            tokenized = self.tokenize_text_src(self.src_texts[index])
             transcript = self.src_dict.encode_line(
                 tokenized, add_if_not_exist=False, append_eos=True
             ).long()
@@ -200,6 +217,7 @@ class SpeechToTextDatasetCreatorWithSrc(SpeechToTextDatasetCreator):
         src_dict,
         pre_tokenizer,
         bpe_tokenizer,
+        bpe_tokenizer_src,
     ) -> SpeechToTextDatasetWithSrc:
         audio_paths, n_frames, src_texts, tgt_texts, ids = [], [], [], [], []
         speakers, src_langs, tgt_langs = [], [], []
@@ -230,6 +248,7 @@ class SpeechToTextDatasetCreatorWithSrc(SpeechToTextDatasetCreator):
             src_dict,
             pre_tokenizer,
             bpe_tokenizer,
+            bpe_tokenizer_src
         )
 
     @classmethod
@@ -242,6 +261,7 @@ class SpeechToTextDatasetCreatorWithSrc(SpeechToTextDatasetCreator):
         src_dict,
         pre_tokenizer,
         bpe_tokenizer,
+        bpe_tokenizer_src,
         is_train_split: bool,
         epoch: int,
         seed: int,
@@ -274,6 +294,7 @@ class SpeechToTextDatasetCreatorWithSrc(SpeechToTextDatasetCreator):
                 src_dict,
                 pre_tokenizer,
                 bpe_tokenizer,
+                bpe_tokenizer_src
             )
             for name, s in zip(_splits, samples)
         ]
