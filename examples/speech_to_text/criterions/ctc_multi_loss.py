@@ -3,7 +3,6 @@ from argparse import Namespace
 
 import torch
 import torch.nn.functional as F
-from omegaconf import II
 from torch import nn
 
 from fairseq import utils, metrics
@@ -130,8 +129,6 @@ class CTCMultiLoss(LegacyFairseqCriterion):
                             help='underlying criterion to use for the model output loss')
         parser.add_argument('--zero-infinity', default=True, type=bool, metavar='ZERO_INF',
                             help='zero inf loss when source length <= target length')
-        #parser.add_argument('--sentence-avg', default=II("optimization.sentence_avg"), metavar="SEN_AVG",
-        #                    )
         parser.add_argument('--post-process', default='letter', metavar='POST_PROC',
                             help='how to post process predictions into words. can be letter, wordpiece, BPE symbols, etc. \
             See fairseq.data.data_utils.post_process() for full list of options')
@@ -159,11 +156,6 @@ class CTCMultiLoss(LegacyFairseqCriterion):
             "ntokens": sum(sample["transcript_lengths"]).item(),
             "id": sample["id"]
         }
-        if (encoder_out["ctc_lengths"] < sample["transcript_lengths"]).any():
-            print("Mi sa che lo pijiamo nel...")
-            print("CTC: ", encoder_out["ctc_lengths"])
-            print("TGT: ", sample["transcript_lengths"])
-            print("---------------------------------------------------")
 
         ctc_loss, ctc_sample_size, ctc_logging_output = self.ctc_criterion(
             encoder_fake_model, encoder_sample, reduce=reduce)

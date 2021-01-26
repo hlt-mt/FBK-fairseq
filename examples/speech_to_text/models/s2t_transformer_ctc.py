@@ -153,8 +153,8 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
             metavar="STR",
             help="model to take encoder weights from (for initialization)",
         )
-        parser.add_argument('--ctc-compress-strategy', type=str, default="avg",
-                            choices=['avg', 'weighted', 'softmax'],
+        parser.add_argument('--ctc-compress-strategy', type=str, default="none",
+                            choices=['none', 'avg', 'weighted', 'softmax'],
                             help="Strategy to use when compressing CTC output")
         parser.add_argument('--freeze-pretrained', action='store_true',
                             help='if set, all params loaded from the pretrained model are freezed')
@@ -258,7 +258,10 @@ class S2TTransformerEncoder(FairseqEncoder):
         self.ctc_fc = nn.Linear(args.encoder_embed_dim, len(dictionary))
         assert args.criterion == "ctc_multi_loss"
         self.ctc_layer = args.ctc_encoder_layer
-        self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
+        if args.ctc_compress_strategy != "none":
+            self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
+        else:
+            self.ctc_compress_method = "none"
 
 
     def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False):
@@ -273,12 +276,12 @@ class S2TTransformerEncoder(FairseqEncoder):
         encoder_states = [] if return_all_hiddens else None
 
         x_ctc = None
-        ctc_padding_mask = None
         for l_idx, layer in enumerate(self.transformer_layers):
             x = layer(x, encoder_padding_mask)
             if self.ctc_layer == l_idx + 1:
-                ctc_padding_mask = encoder_padding_mask
-                x_ctc, x, input_lengths = self.average_same_ctc_features(x, input_lengths)
+                x_ctc = self.ctc_fc(x)
+                if self.ctc_compress_method != "none":
+                    x, input_lengths = self.average_same_ctc_features(x_ctc, x, input_lengths)
                 encoder_padding_mask = lengths_to_padding_mask(input_lengths)
 
         if not encoder_padding_mask.any():
@@ -296,28 +299,18 @@ class S2TTransformerEncoder(FairseqEncoder):
             "ctc_lengths": input_lengths
         }
 
-    def average_same_ctc_features(self, x, src_lengths):
-        x_ctc = self.ctc_fc(x)
+    def average_same_ctc_features(self, x_ctc, x, src_lengths):
         with torch.no_grad():
             batch_predicted = []
             prob_ctc = F.softmax(x_ctc, dim=-1).transpose(0, 1)  # from T x B x D to B x T x D
             for b in range(prob_ctc.shape[0]):
                 predicted = prob_ctc[b][: src_lengths[b]].argmax(-1).tolist()
-                batch_predicted.append([(p[0], len(p)) for p in groupby(predicted)])
-
+                batch_predicted.append([(p[0], len(list(p[1]))) for p in groupby(predicted)])
             new_lengths = [len(p) for p in batch_predicted]
-            new_maxlen = max(new_lengths)
-            weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=x.dtype)
-            processed_inputs_cnt = 0
-            for b_idx, pred in enumerate(batch_predicted):
-                for t_idx, same in enumerate(pred):
-                    new_processed_inputs_cnt = processed_inputs_cnt + same[1]
-                    weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = 1.0 / same[1]
-                    processed_inputs_cnt = new_processed_inputs_cnt
-            weights_matrix = weights_matrix.to(x.device)
+            weights_matrix = self.ctc_compress_method(prob_ctc, batch_predicted, new_lengths, x.dtype, x.device)
         # x is T x B x C -> B x C x T; weights_matrix is B x T x T'
         compressed_output = x.permute(1, 2, 0).bmm(weights_matrix)  # B x C x T'
-        return x_ctc, compressed_output.permute(2, 0, 1), src_lengths.new(new_lengths)
+        return compressed_output.permute(2, 0, 1), src_lengths.new(new_lengths)
 
     def reorder_encoder_out(self, encoder_out, new_order):
         new_encoder_out = (
