@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from examples.speech_to_text.modules.transformer_layer_penalty import TransformerEncoderLayerPenalty
 from fairseq import checkpoint_utils, utils
 from fairseq.data.data_utils import lengths_to_padding_mask
 from fairseq.models import (
@@ -24,7 +25,6 @@ from fairseq.modules import (
     FairseqDropout,
     LayerNorm,
     PositionalEmbedding,
-    TransformerEncoderLayer,
 )
 
 logger = logging.getLogger(__name__)
@@ -158,6 +158,9 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
                             help="Strategy to use when compressing CTC output")
         parser.add_argument('--freeze-pretrained', action='store_true',
                             help='if set, all params loaded from the pretrained model are freezed')
+        parser.add_argument('--distance-penalty', type=str, default=False,
+                            choices=['log', 'gauss'],
+                            help='Add distance penalty to the encoder')
 
     @classmethod
     def build_encoder(cls, args, dictionary):
@@ -251,12 +254,17 @@ class S2TTransformerEncoder(FairseqEncoder):
         )
 
         self.transformer_layers = nn.ModuleList(
-            [TransformerEncoderLayer(args) for _ in range(args.encoder_layers)]
+            [TransformerEncoderLayerPenalty(args) for _ in range(args.encoder_layers)]
         )
         if args.encoder_normalize_before:
             self.layer_norm = LayerNorm(args.encoder_embed_dim)
         else:
             self.layer_norm = None
+
+        # distance penalty
+        if args.distance_penalty == True:
+            args.distance_penalty = 'log'
+
         # ctc
         self.ctc_flag = False
         if args.criterion == "ctc_multi_loss" or args.ctc_compress_strategy != "none":
@@ -466,6 +474,8 @@ def base_architecture(args):
     args.decoder_input_dim = getattr(args, "decoder_input_dim", args.decoder_embed_dim)
     args.no_scale_embedding = getattr(args, "no_scale_embedding", False)
     args.quant_noise_pq = getattr(args, "quant_noise_pq", 0)
+
+    args.distance_penalty = getattr(args, 'distance_penalty', False)
 
 
 @register_model_architecture("s2t_transformer_fbk", "s2t_transformer_s_fbk")
