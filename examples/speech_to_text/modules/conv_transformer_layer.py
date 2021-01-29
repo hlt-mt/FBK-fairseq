@@ -18,7 +18,7 @@ class ConvTransformerEncoderLayer(TransformerEncoderLayer):
                 qn_block_size=self.quant_noise_block_size,
                 penalty=PENALTIES[args.distance_penalty](args))
         else:
-            super().build_self_attention(embed_dim, args)
+            return super().build_self_attention(embed_dim, args)
 
 
 class LogPenalty(nn.Module):
