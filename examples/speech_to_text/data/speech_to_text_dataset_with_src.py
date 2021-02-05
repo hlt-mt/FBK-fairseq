@@ -122,7 +122,6 @@ class SpeechToTextDatasetWithSrc(SpeechToTextDataset):
         return index, source, target, transcript
 
     def collater(self, samples: List[Tuple[int, torch.Tensor, torch.Tensor, torch.Tensor]]) -> Dict:
-        #super().collater(samples)
         if len(samples) == 0:
             return {}
         indices = torch.tensor([i for i, _, _, _ in samples], dtype=torch.long)

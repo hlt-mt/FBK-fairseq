@@ -106,8 +106,12 @@ def process(args):
             print(f"{cur_root} does not exist. Skipped.")
             continue
         # Extract features
-        feature_root = op.join(cur_root, "fbank80")
-        zip_filename = "fbank80.zip"
+        if args.task == "st":
+            zip_filename = "fbank80.zip"
+            feature_root = op.join(cur_root, "fbank80")
+        else:
+            zip_filename = "fbank80_asr.zip"
+            feature_root = op.join(cur_root, "fbank80_asr")
         zip_path = op.join(cur_root, zip_filename)
         if not os.path.exists(zip_path):
             os.makedirs(feature_root, exist_ok=True)
