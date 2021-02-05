@@ -262,7 +262,7 @@ class S2TTransformerEncoderConv2d(FairseqEncoder):
                 self.ctc_compress_method = "none"
 
 
-    def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False):
+    def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False, **kwargs):
         x, input_lengths = self.subsample(src_tokens, src_lengths)
         x = self.embed_scale * x
 
@@ -353,14 +353,9 @@ class S2TTransformerEncoderConv2d(FairseqEncoder):
                 encoder_out["encoder_padding_mask"][0].index_select(0, new_order)
             ]
         # ctc
-        if len(encoder_out["ctc_out"]) == 0:
-            new_ctc_out = []
-        else:
-            new_ctc_out = [encoder_out["ctc_out"][0].index_select(1, new_order)]
-        if len(encoder_out["ctc_lengths"]) == 0:
-            new_ctc_lengths = []
-        else:
-            new_ctc_lengths = [encoder_out["ctc_lengths"][0].index_select(1, new_order)]
+        if self.ctc_flag:
+            new_ctc_out = encoder_out["ctc_out"].index_select(1, new_order)
+            new_ctc_lengths = encoder_out["ctc_lengths"].index_select(0, new_order)
 
         if self.ctc_flag:
             return {

@@ -68,7 +68,7 @@ class BaseCTCLoss(CtcCriterion):
         self.pad_idx = task.source_dictionary.pad()
         self.eos_idx = task.source_dictionary.eos()
 
-        self.post_process = self.args.post_process
+        self.post_process = self.args.ctc_post_process
 
         if self.args.wer_args is not None:
             (
@@ -129,7 +129,7 @@ class CTCMultiLoss(LegacyFairseqCriterion):
                             help='underlying criterion to use for the model output loss')
         parser.add_argument('--zero-infinity', default=True, type=bool, metavar='ZERO_INF',
                             help='zero inf loss when source length <= target length')
-        parser.add_argument('--post-process', default='letter', metavar='POST_PROC',
+        parser.add_argument('--ctc-post-process', default='letter', metavar='POST_PROC',
                             help='how to post process predictions into words. can be letter, wordpiece, BPE symbols, etc. \
             See fairseq.data.data_utils.post_process() for full list of options')
         parser.add_argument('--wer-kenlm-model', default=None, metavar='WER_KENLM',

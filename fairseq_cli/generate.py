@@ -17,12 +17,12 @@ from itertools import chain
 
 import numpy as np
 import torch
+from fairseq.data import encoders
 from fairseq import checkpoint_utils, options, scoring, tasks, utils
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from fairseq.logging import progress_bar
 from fairseq.logging.meters import StopwatchMeter, TimeMeter
 from omegaconf import DictConfig
-
 
 def main(cfg: DictConfig):
 
@@ -84,7 +84,10 @@ def _main(cfg: DictConfig, output_file):
 
     # Set dictionaries
     try:
-        src_dict = getattr(task, "source_dictionary", None)
+        if getattr(task, "src_speech", False):
+            src_dict = None
+        else:
+            src_dict = getattr(task, "source_dictionary", None)
     except NotImplementedError:
         src_dict = None
     tgt_dict = task.target_dictionary

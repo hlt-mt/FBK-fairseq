@@ -30,6 +30,7 @@ class SpeechToTextCtcTask(SpeechToTextTask):
         super().__init__(args, tgt_dict)
         self.src_dict = src_dict
         self.data_cfg = S2TDataConfigSrc(op.join(args.data, args.config_yaml))
+        self.src_speech = True
 
     @classmethod
     def setup_task(cls, args, **kwargs):

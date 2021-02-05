@@ -29,6 +29,7 @@ from fairseq.modules import (
 
 logger = logging.getLogger(__name__)
 
+
 @register_model("s2t_transformer_fbk")
 class S2TTransformerModel(FairseqEncoderDecoderModel):
     """Adapted Transformer model (https://arxiv.org/abs/1706.03762) for
@@ -201,10 +202,10 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
         return cls(encoder, decoder)
 
     def get_normalized_probs(
-        self,
-        net_output: Tuple[Tensor, Optional[Dict[str, List[Optional[Tensor]]]]],
-        log_probs: bool,
-        sample: Optional[Dict[str, Tensor]] = None,
+            self,
+            net_output: Tuple[Tensor, Optional[Dict[str, List[Optional[Tensor]]]]],
+            log_probs: bool,
+            sample: Optional[Dict[str, Tensor]] = None,
     ):
         # net_output['encoder_out'] is a (B, T, D) tensor
         lprobs = self.get_normalized_probs_scriptable(net_output, log_probs, sample)
@@ -277,8 +278,14 @@ class S2TTransformerEncoder(FairseqEncoder):
             else:
                 self.ctc_compress_method = "none"
 
+    @torch.jit.unused
+    def forward_non_torchscript(self, net_input: Dict[str, Tensor]):
+        encoder_input = {
+            k: v for k, v in net_input.items() if k not in ["prev_output_tokens", "prev_transcript_tokens"]
+        }
+        return self.forward(**encoder_input)
 
-    def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False):
+    def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False, **kwargs):
         x, input_lengths = self.subsample(src_tokens, src_lengths)
         x = self.embed_scale * x
 
@@ -341,6 +348,18 @@ class S2TTransformerEncoder(FairseqEncoder):
         return compressed_output.permute(2, 0, 1), src_lengths.new(new_lengths)
 
     def reorder_encoder_out(self, encoder_out, new_order):
+        """
+            Reorder encoder output according to *new_order*.
+
+            Args:
+                encoder_out: output from the ``forward()`` method
+                new_order (LongTensor): desired order
+
+            Returns:
+                *encoder_out* rearranged according to *new_order*
+
+            The other things reordered a.t.m. are not mandatory
+        """
         new_encoder_out = (
             [] if len(encoder_out["encoder_out"]) == 0
             else [x.index_select(1, new_order) for x in encoder_out["encoder_out"]]
@@ -355,29 +374,27 @@ class S2TTransformerEncoder(FairseqEncoder):
             [] if len(encoder_out["encoder_embedding"]) == 0
             else [x.index_select(0, new_order) for x in encoder_out["encoder_embedding"]]
         )
+        # TODO: reordering of encoder_out["encoder_states"]
 
-        encoder_states = encoder_out["encoder_states"]
-        if len(encoder_states) > 0:
-            for idx, state in enumerate(encoder_states):
-                encoder_states[idx] = state.index_select(1, new_order)
         # ctc
-        new_ctc_out = (
-            [] if len(encoder_out["ctc_out"]) == 0
-            else [x.index_select(1, new_order) for x in encoder_out["ctc_out"]]
-        )
-        new_ctc_lengths = (
-            [] if len(encoder_out["ctc_lengths"]) == 0
-            else [x.index_select(1, new_order) for x in encoder_out["ctc_lengths"]]
-        )
+        if self.ctc_flag:
+            new_ctc_out = (
+                [] if len(encoder_out["ctc_out"]) == 0
+                else [x.index_select(1, new_order) for x in encoder_out["ctc_out"]]
+            )
+            new_ctc_lengths = (
+                [] if len(encoder_out["ctc_lengths"]) == 0
+                else [x.index_select(0, new_order) for x in encoder_out["ctc_lengths"]]
+            )
 
         if self.ctc_flag:
             return {
                 "encoder_out": new_encoder_out,  # T x B x C
                 "encoder_padding_mask": new_encoder_padding_mask,  # B x T
                 "encoder_embedding": new_encoder_embedding,  # B x T x C
-                "encoder_states": encoder_states,  # List[T x B x C]
-                "src_tokens": [],  # B x T
-                "src_lengths": [],  # B x 1
+                "encoder_states": None,  # List[T x B x C]
+                "src_tokens": None,  # B x T
+                "src_lengths": None,  # B x 1
                 "ctc_out": new_ctc_out, # T x B x D
                 "ctc_lengths": new_ctc_lengths,
             }
@@ -386,10 +403,11 @@ class S2TTransformerEncoder(FairseqEncoder):
                 "encoder_out": new_encoder_out,  # T x B x C
                 "encoder_padding_mask": new_encoder_padding_mask,  # B x T
                 "encoder_embedding": new_encoder_embedding,  # B x T x C
-                "encoder_states": encoder_states,  # List[T x B x C]
-                "src_tokens": [],  # B x T
-                "src_lengths": [],  # B x 1
+                "encoder_states": None,  # List[T x B x C]
+                "src_tokens": None,  # B x T
+                "src_lengths": None,  # B x 1
             }
+
 
 class CTCCompressStrategy:
     @staticmethod
