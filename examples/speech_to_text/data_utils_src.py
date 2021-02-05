@@ -4,21 +4,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import csv
-import os
 import os.path as op
-import zipfile
-from functools import reduce
-from glob import glob
-from multiprocessing import cpu_count
 from typing import Any, Dict, List
-
-import numpy as np
-import pandas as pd
-import sentencepiece as sp
-from fairseq.data.audio.audio_utils import _get_kaldi_fbank, _get_torchaudio_fbank
-from fairseq.data.audio.feature_transforms.utterance_cmvn import UtteranceCMVN
-from tqdm import tqdm
 
 def gen_config_yaml_with_src(
     data_root,
@@ -30,8 +17,9 @@ def gen_config_yaml_with_src(
     sampling_alpha=1.0,
 ):
     data_root = op.abspath(data_root)
+    audio_root, _ = op.split(data_root)
     writer = S2TDataConfigWriter(op.join(data_root, yaml_filename))
-    writer.set_audio_root(op.abspath(data_root))
+    writer.set_audio_root(op.abspath(audio_root))
     writer.set_vocab_filename(spm_filename.replace(".model", ".txt"))
     writer.set_vocab_filename_src(spm_filename_src.replace(".model", ".txt"))
     writer.set_input_channels(1)
@@ -48,7 +36,6 @@ def gen_config_yaml_with_src(
         {
             "bpe": "sentencepiece",
             "sentencepiece_model": op.join(data_root, spm_filename),
-            "sentencepiece_model_src": op.join(data_root, spm_filename_src),
         }
     )
     writer.set_bpe_tokenizer_src(
