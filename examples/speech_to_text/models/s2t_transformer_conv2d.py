@@ -356,8 +356,6 @@ class S2TTransformerEncoderConv2d(FairseqEncoder):
         if self.ctc_flag:
             new_ctc_out = encoder_out["ctc_out"].index_select(1, new_order)
             new_ctc_lengths = encoder_out["ctc_lengths"].index_select(0, new_order)
-
-        if self.ctc_flag:
             return {
                 "encoder_out": new_encoder_out,  # T x B x C
                 "encoder_padding_mask": new_encoder_padding_mask,  # B x T

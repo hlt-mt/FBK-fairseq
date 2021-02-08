@@ -17,12 +17,13 @@ from itertools import chain
 
 import numpy as np
 import torch
-from fairseq.data import encoders
+from omegaconf import DictConfig
+
 from fairseq import checkpoint_utils, options, scoring, tasks, utils
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from fairseq.logging import progress_bar
 from fairseq.logging.meters import StopwatchMeter, TimeMeter
-from omegaconf import DictConfig
+
 
 def main(cfg: DictConfig):
 
@@ -172,8 +173,8 @@ def _main(cfg: DictConfig, output_file):
     )
 
     # Handle tokenization and BPE
-    tokenizer = encoders.build_tokenizer(cfg.tokenizer)
-    bpe = encoders.build_bpe(cfg.bpe)
+    tokenizer = task.build_tokenizer(cfg.tokenizer)
+    bpe = task.build_bpe(cfg.bpe)
 
     def decode_fn(x):
         if bpe is not None:

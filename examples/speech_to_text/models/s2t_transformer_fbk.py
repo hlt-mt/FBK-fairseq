@@ -294,7 +294,7 @@ class S2TTransformerEncoder(FairseqEncoder):
         x += positions
         x = self.dropout_module(x)
 
-        encoder_states = [] if return_all_hiddens else None
+        encoder_states = []
 
         x_ctc = None
         for l_idx, layer in enumerate(self.transformer_layers):
@@ -378,16 +378,9 @@ class S2TTransformerEncoder(FairseqEncoder):
 
         # ctc
         if self.ctc_flag:
-            new_ctc_out = (
-                [] if len(encoder_out["ctc_out"]) == 0
-                else [x.index_select(1, new_order) for x in encoder_out["ctc_out"]]
-            )
-            new_ctc_lengths = (
-                [] if len(encoder_out["ctc_lengths"]) == 0
-                else [x.index_select(0, new_order) for x in encoder_out["ctc_lengths"]]
-            )
+            new_ctc_out = encoder_out["ctc_out"].index_select(1, new_order)
+            new_ctc_lengths = encoder_out["ctc_lengths"].index_select(0, new_order)
 
-        if self.ctc_flag:
             return {
                 "encoder_out": new_encoder_out,  # T x B x C
                 "encoder_padding_mask": new_encoder_padding_mask,  # B x T
@@ -395,7 +388,7 @@ class S2TTransformerEncoder(FairseqEncoder):
                 "encoder_states": None,  # List[T x B x C]
                 "src_tokens": None,  # B x T
                 "src_lengths": None,  # B x 1
-                "ctc_out": new_ctc_out, # T x B x D
+                "ctc_out": new_ctc_out,   # T x B x D
                 "ctc_lengths": new_ctc_lengths,
             }
         else:
