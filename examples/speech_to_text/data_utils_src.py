@@ -50,6 +50,41 @@ def gen_config_yaml_with_src(
     writer.set_feature_transforms("_train", ["specaugment"])
     writer.flush()
 
+def gen_config_yaml_asr(
+    data_root,
+    spm_filename,
+    yaml_filename="config.yaml",
+    specaugment_policy="lb",
+    prepend_tgt_lang_tag=False,
+    sampling_alpha=1.0,
+    n_mel_bins=80,
+):
+    data_root = op.abspath(data_root)
+    writer = S2TDataConfigWriter(op.join(data_root, yaml_filename))
+    writer.set_audio_root(op.abspath(data_root))
+    writer.set_vocab_filename(spm_filename.replace(".model", ".txt"))
+    writer.set_input_channels(1)
+    writer.set_input_feat_per_channel(n_mel_bins)
+    specaugment_setters = {
+        "lb": writer.set_specaugment_lb_policy,
+        "ld": writer.set_specaugment_ld_policy,
+        "sm": writer.set_specaugment_sm_policy,
+        "ss": writer.set_specaugment_ss_policy,
+    }
+    assert specaugment_policy in specaugment_setters
+    specaugment_setters[specaugment_policy]()
+    writer.set_bpe_tokenizer(
+        {
+            "bpe": "sentencepiece",
+            "sentencepiece_model": op.join(data_root, spm_filename),
+        }
+    )
+    if prepend_tgt_lang_tag:
+        writer.set_prepend_tgt_lang_tag(True)
+    writer.set_sampling_alpha(sampling_alpha)
+    writer.set_feature_transforms("_train", ["specaugment"])
+    writer.flush()
+
 
 class S2TDataConfigWriter(object):
     DEFAULT_VOCAB_FILENAME = "dict.txt"

@@ -29,7 +29,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from examples.speech_to_text.data_utils_src import gen_config_yaml_with_src
+from examples.speech_to_text.data_utils_src import gen_config_yaml_with_src, gen_config_yaml_asr
 
 log = logging.getLogger(__name__)
 
@@ -107,11 +107,11 @@ def process(args):
             continue
         # Extract features
         if args.task == "st":
-            zip_filename = "fbank80.zip"
-            feature_root = op.join(cur_root, "fbank80")
+            zip_filename = "fbank"+str(args.n_mel_bins)+".zip"
+            feature_root = op.join(cur_root, "fbank"+str(args.n_mel_bins))
         else:
-            zip_filename = "fbank80_asr.zip"
-            feature_root = op.join(cur_root, "fbank80_asr")
+            zip_filename = "fbank"+str(args.n_mel_bins)+"_asr.zip"
+            feature_root = op.join(cur_root, "fbank"+str(args.n_mel_bins)+"_asr")
         zip_path = op.join(cur_root, zip_filename)
         if not os.path.exists(zip_path):
             os.makedirs(feature_root, exist_ok=True)
@@ -121,7 +121,7 @@ def process(args):
                 print("Extracting log mel filter bank features...")
                 for waveform, sample_rate, _, _, _, utt_id in tqdm(dataset):
                     extract_fbank_features(
-                        waveform, sample_rate, op.join(feature_root, f"{utt_id}.npy")
+                        waveform, sample_rate, op.join(feature_root, f"{utt_id}.npy"), args.n_mel_bins
                     )
             # Pack features into ZIP
             print("ZIPing features...")
@@ -157,7 +157,10 @@ def process(args):
             save_df_to_tsv(df, op.join(cur_root, f"{split}_{args.task}_src.tsv"))
         # Generate vocab (target)
         v_size_str = "" if args.vocab_type == "char" else str(args.vocab_size)
-        spm_filename_prefix = f"spm_{args.vocab_type}{v_size_str}_{args.task}_translation_src"
+        if args.task == "st":
+            spm_filename_prefix = f"spm_{args.vocab_type}{v_size_str}_{args.task}_translation_src"
+        else:
+            spm_filename_prefix = f"spm_{args.vocab_type}{v_size_str}_{args.task}_transcription_src"
         with NamedTemporaryFile(mode="w") as f:
             for t in train_text:
                 f.write(t + "\n")
@@ -167,26 +170,35 @@ def process(args):
                 args.vocab_type,
                 args.vocab_size,
             )
-        # Generate vocab (source) using the same size of target vocab
-        spm_filename_prefix_src = f"spm_{args.vocab_type}{v_size_str}_{args.task}_transcription_src"
-        with NamedTemporaryFile(mode="w") as f:
-            for t in train_text_src:
-                f.write(t + "\n")
-            gen_vocab(
-                f.name,
-                op.join(cur_root, spm_filename_prefix_src),
-                args.vocab_type,
-                args.vocab_size,
+        if args.task == "st":
+            # Generate vocab (source) using the same size of target vocab
+            spm_filename_prefix_src = f"spm_{args.vocab_type}{v_size_str}_{args.task}_transcription_src"
+            with NamedTemporaryFile(mode="w") as f:
+                for t in train_text_src:
+                    f.write(t + "\n")
+                gen_vocab(
+                    f.name,
+                    op.join(cur_root, spm_filename_prefix_src),
+                    args.vocab_type,
+                    args.vocab_size,
+                )
+            # Generate config YAML with transcription and translation
+            gen_config_yaml_with_src(
+                cur_root,
+                spm_filename_prefix + ".model",
+                spm_filename_prefix_src + ".model",
+                yaml_filename=f"config_{args.task}_src.yaml",
+                specaugment_policy="lb",
             )
-        # Generate config YAML
-        gen_config_yaml_with_src(
-            cur_root,
-            spm_filename_prefix + ".model",
-            spm_filename_prefix_src + ".model",
-            yaml_filename=f"config_{args.task}_src.yaml",
-            specaugment_policy="lb",
-        )
-
+        else:
+            # Generate config YAML with transcription only (ASR)
+            gen_config_yaml_asr(
+                cur_root,
+                spm_filename_prefix + ".model",
+                yaml_filename=f"config_{args.task}.yaml",
+                specaugment_policy="lb",
+                n_mel_bins=args.n_mel_bins,
+            )
 def process_joint(args):
     # TODO: modify for transcripts
     assert all(
@@ -238,6 +250,7 @@ def main():
     parser.add_argument("--vocab-size", default=8000, type=int)
     parser.add_argument("--task", type=str, choices=["asr", "st"])
     parser.add_argument("--joint", action="store_true", help="")
+    parser.add_argument("--n-mel-bins", default=80, type=int)
     args = parser.parse_args()
 
     if args.joint:
