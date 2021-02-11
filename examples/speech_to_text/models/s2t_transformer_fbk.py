@@ -322,7 +322,9 @@ class S2TTransformerEncoder(FairseqEncoder):
                 "encoder_embedding": [],
                 "encoder_states": encoder_states,  # List[T x B x C]
                 "ctc_out": x_ctc,  # T x B x D
-                "ctc_lengths": input_lengths
+                "ctc_lengths": input_lengths,
+                "src_tokens": [],
+                "src_lengths": [],
             }
         else:
             return {
@@ -330,8 +332,8 @@ class S2TTransformerEncoder(FairseqEncoder):
                 "encoder_padding_mask": [encoder_padding_mask],
                 "encoder_embedding": [],
                 "encoder_states": encoder_states,
-                "src_tokens": None,
-                "src_lengths": None,
+                "src_tokens": [],
+                "src_lengths": [],
             }
 
     def average_same_ctc_features(self, x_ctc, x, src_lengths):
@@ -374,7 +376,11 @@ class S2TTransformerEncoder(FairseqEncoder):
             [] if len(encoder_out["encoder_embedding"]) == 0
             else [x.index_select(0, new_order) for x in encoder_out["encoder_embedding"]]
         )
-        # TODO: reordering of encoder_out["encoder_states"]
+
+        encoder_states = encoder_out["encoder_states"]
+        if len(encoder_states) > 0:
+            for idx, state in enumerate(encoder_states):
+                encoder_states[idx] = state.index_select(1, new_order)
 
         # ctc
         if self.ctc_flag:
@@ -385,9 +391,9 @@ class S2TTransformerEncoder(FairseqEncoder):
                 "encoder_out": new_encoder_out,  # T x B x C
                 "encoder_padding_mask": new_encoder_padding_mask,  # B x T
                 "encoder_embedding": new_encoder_embedding,  # B x T x C
-                "encoder_states": None,  # List[T x B x C]
-                "src_tokens": None,  # B x T
-                "src_lengths": None,  # B x 1
+                "encoder_states": encoder_states,  # List[T x B x C]
+                "src_tokens": [],  # B x T
+                "src_lengths": [],  # B x 1
                 "ctc_out": new_ctc_out,   # T x B x D
                 "ctc_lengths": new_ctc_lengths,
             }
