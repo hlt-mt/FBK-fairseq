@@ -297,6 +297,7 @@ class S2TTransformerEncoder(FairseqEncoder):
         encoder_states = []
 
         x_ctc = None
+        ctc_lengths = input_lengths
         for l_idx, layer in enumerate(self.transformer_layers):
             x = layer(x, encoder_padding_mask)
             # ctc
@@ -322,7 +323,7 @@ class S2TTransformerEncoder(FairseqEncoder):
                 "encoder_embedding": [],
                 "encoder_states": encoder_states,  # List[T x B x C]
                 "ctc_out": x_ctc,  # T x B x D
-                "ctc_lengths": input_lengths,
+                "ctc_lengths": ctc_lengths,
                 "src_tokens": [],
                 "src_lengths": [],
             }
