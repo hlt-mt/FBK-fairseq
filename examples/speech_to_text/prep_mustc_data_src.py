@@ -189,6 +189,7 @@ def process(args):
                 spm_filename_prefix_src + ".model",
                 yaml_filename=f"config_{args.task}_src.yaml",
                 specaugment_policy="lb",
+                n_mel_bins=args.n_mel_bins,
             )
         else:
             # Generate config YAML with transcription only (ASR)

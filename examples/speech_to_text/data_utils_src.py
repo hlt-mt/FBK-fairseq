@@ -15,6 +15,7 @@ def gen_config_yaml_with_src(
     specaugment_policy="lb",
     prepend_tgt_lang_tag=False,
     sampling_alpha=1.0,
+    n_mel_bins=80,
 ):
     data_root = op.abspath(data_root)
     audio_root, _ = op.split(data_root)
@@ -23,7 +24,7 @@ def gen_config_yaml_with_src(
     writer.set_vocab_filename(spm_filename.replace(".model", ".txt"))
     writer.set_vocab_filename_src(spm_filename_src.replace(".model", ".txt"))
     writer.set_input_channels(1)
-    writer.set_input_feat_per_channel(80)
+    writer.set_input_feat_per_channel(n_mel_bins)
     specaugment_setters = {
         "lb": writer.set_specaugment_lb_policy,
         "ld": writer.set_specaugment_ld_policy,
