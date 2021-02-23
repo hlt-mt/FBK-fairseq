@@ -188,7 +188,7 @@ def process(args):
                 spm_filename_prefix + ".model",
                 spm_filename_prefix_src + ".model",
                 yaml_filename=f"config_{args.task}_src.yaml",
-                specaugment_policy="lb",
+                specaugment_policy="ld",
                 n_mel_bins=args.n_mel_bins,
             )
         else:
