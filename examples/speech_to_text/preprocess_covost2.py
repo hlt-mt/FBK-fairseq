@@ -21,7 +21,7 @@ from examples.speech_to_text.data_utils_new import (
     gen_vocab,
     get_zip_manifest,
     load_df_from_tsv,
-    save_df_to_tsv,
+    save_df_to_tsv, asr_normalize,
 )
 from torch import Tensor
 from torch.utils.data import Dataset
@@ -194,7 +194,7 @@ def process(args):
     if not root.is_dir():
         raise NotADirectoryError(f"{root} does not exist")
     # Extract features
-    feature_root = root / "fbank80"
+    feature_root = root / "fbank"
     feature_root.mkdir(exist_ok=True)
     for split in CoVoST.SPLITS:
         print(f"Fetching split {split}...")
@@ -205,10 +205,10 @@ def process(args):
                 waveform, sample_rate, feature_root / f"{utt_id}.npy", args.n_mel_bins
             )
     # Pack features into ZIP
-    if args.tgt_lang is not None:
-        zip_path = root / "fbank.zip"
+    if args.task == "st":
+        zip_path = root / "fbank_st.zip"
     else:
-        zip_path = root / "fbank"
+        zip_path = root / "fbank_asr.zip"
     print("ZIPing features...")
     create_zip(feature_root, zip_path)
     print("Fetching ZIP manifest...")
@@ -217,7 +217,7 @@ def process(args):
     print("Generating manifest...")
     train_text = []
     train_text_src = []
-    task = f"asr_{args.src_lang}"
+    task = f"{args.task}_{args.src_lang}"
     if args.tgt_lang is not None:
         task = f"st_{args.src_lang}_{args.tgt_lang}"
     for split in CoVoST.SPLITS:
@@ -228,8 +228,8 @@ def process(args):
             manifest["audio"].append(zip_manifest[utt_id])
             duration_ms = int(wav.size(1) / sr * 1000)
             manifest["n_frames"].append(int(1 + (duration_ms - 25) / 10))
-            manifest["src_text"].append(src_utt)
-            manifest["tgt_text"].append(src_utt if args.tgt_lang is None else tgt_utt)
+            manifest["src_text"].append(asr_normalize(src_utt) if args.task == "asr" or args.asr_src_txt else src_utt)
+            manifest["tgt_text"].append(asr_normalize(src_utt) if args.task == "asr" or args.tgt_lang is None else tgt_utt)
             manifest["speaker"].append(speaker_id)
         is_train_split = split.startswith("train")
         if is_train_split:
@@ -274,7 +274,7 @@ def process(args):
         root,
         spm_filename_prefix,
         spm_filename_prefix_src,
-        yaml_filename=f"config_{task}_src.yaml",
+        yaml_filename=f"config_{args.task}_src.yaml",
         specaugment_policy="ld",
     )
     # Clean up
@@ -298,6 +298,8 @@ def main():
     parser.add_argument("--src-lang", "-s", required=True, type=str)
     parser.add_argument("--tgt-lang", "-t", type=str)
     parser.add_argument("--n-mel-bins", default=80, type=int)
+    parser.add_argument("--task", type=str, choices=["asr", "st"])
+    parser.add_argument("--asr-src-txt", type=bool, default=False)
     parser.add_argument("--vocab-file-tgt", default="none", type=str,
                         help="absolute path to fairseq target vocabulary file [.txt]")
     parser.add_argument("--vocab-file-src", default="none", type=str,
