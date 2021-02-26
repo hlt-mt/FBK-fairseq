@@ -53,7 +53,7 @@ def process(args):
                 wav, sample_rate, feature_root / f"{sample_id}.npy", args.n_mel_bins
             )
     # Pack features into ZIP
-    zip_path = out_root / "fbank_asr.zip"
+    zip_path = out_root / "fbank.zip"
     print("ZIPing features...")
     create_zip(feature_root, zip_path)
     print("Fetching ZIP manifest...")

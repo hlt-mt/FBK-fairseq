@@ -110,7 +110,7 @@ def process(args):
                 waveform, sample_rate, feature_root / f"{utt_id}.npy", args.n_mel_bins
             )
     # Pack features into ZIP
-    zip_path = root / "fbank_asr.zip"
+    zip_path = root / "fbank.zip"
     print("ZIPing features...")
     create_zip(feature_root, zip_path)
     print("Fetching ZIP manifest...")
