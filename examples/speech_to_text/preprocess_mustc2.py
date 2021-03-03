@@ -164,7 +164,7 @@ def process(args):
         if args.vocab_file_src == "none":
             spm_filename_prefix_src = f"spm_{args.vocab_type}{v_size_str}_{args.task}_source"
             with NamedTemporaryFile(mode="w") as f:
-                for t in train_text:
+                for t in train_text_src:
                     f.write(t + "\n")
                 gen_vocab(
                     Path(f.name),
@@ -212,7 +212,7 @@ def process_joint(args):
             special_symbols=special_symbols
         )
     # Generate config YAML
-    gen_config_yaml(
+    gen_config_yaml_with_src(
         cur_root,
         spm_filename_prefix + ".model",
         yaml_filename=f"config_{args.task}.yaml",
@@ -243,9 +243,9 @@ def main():
     parser.add_argument("--joint", action="store_true", help="")
     parser.add_argument("--n-mel-bins", default=80, type=int)
     parser.add_argument("--vocab-file-tgt", default="none", type=str,
-                        help="absolute path to target vocabulary file [.model]")
+                        help="absolute path to fairseq target vocabulary file [.txt]")
     parser.add_argument("--vocab-file-src", default="none", type=str,
-                        help="absolute path to source vocabulary file [.model]")
+                        help="absolute path to fairseq source vocabulary file [.txt]")
     args = parser.parse_args()
 
     if args.joint:
