@@ -169,7 +169,7 @@ class SpeechToTextDatasetKD(SpeechToTextDatasetWithSrc):
             ntokens_transcript = sum(t.size(0) for _, _, _, t, _, _ in samples)
 
         # Add indexes and probabilities of knowledge distillation to the output
-        tgt_len = target.shape[1]
+        tgt_len = max(idx.shape[0] for _, _, _, _, idx, _ in samples)
         pad_idx = self.tgt_dict.pad()
         idxs, probs = [], []
         for _, _, _, _, idx, prob in samples:

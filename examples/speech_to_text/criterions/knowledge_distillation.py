@@ -18,6 +18,7 @@ class CrossEntropyKnowledgeDistillationCriterion(LegacyFairseqCriterion):
         self._lambda = args.kd_lambda
         self.temperature = args.kd_temperature
         self.sentence_avg = args.sentence_avg
+        self.ignore_prefix_size = args.ignore_prefix_size
 
     @staticmethod
     def add_args(parser):
@@ -29,22 +30,30 @@ class CrossEntropyKnowledgeDistillationCriterion(LegacyFairseqCriterion):
                             help='Temperature to be used. Temperature is used to soften the nets '
                                  'output in order to increase the dark knowledge effect. A temperature '
                                  ' of 1 (default), is equivalent not to use the temperature.')
+        parser.add_argument('--ignore-prefix-size', default=0, type=int,
+                            help='Ignore first N tokens')
 
     def forward(self, model, sample, reduce=True):
         net_output = model(**sample['net_input'])
-        target = model.get_targets(sample, net_output).view(-1)
+        target = model.get_targets(sample, net_output)
 
-        # KD from the teacher
+        # KL Divergence
         if self._lambda > 0.0:
             net_output_scaled = (net_output[0] / self.temperature, net_output[1])
             lprobs = model.get_normalized_probs(net_output_scaled, log_probs=True)
+            if self.ignore_prefix_size > 0:
+                if getattr(lprobs, "batch_first", False):
+                    lprobs = lprobs[:, self.ignore_prefix_size:, :].contiguous()
+                    target = target[:, self.ignore_prefix_size:].contiguous().view(-1)
+                else:
+                    lprobs = lprobs[self.ignore_prefix_size:, :, :].contiguous()
+                    target = target[self.ignore_prefix_size:, :].contiguous().view(-1)
             lprobs = lprobs.view(-1, lprobs.size(-1))
             teacher_idxs = sample['teacher_output'][0]
             teacher_outs = sample['teacher_output'][1]
             teacher_probs = F.softmax(teacher_outs / self.temperature, dim=-1)
             teacher_idxs = teacher_idxs.view(-1, teacher_idxs.shape[-1])
             teacher_probs = teacher_probs.view(-1, teacher_probs.shape[-1])
-
             lprobs_selected = lprobs.gather(dim=-1, index=teacher_idxs.long())
             teacher_loss = - (lprobs_selected * teacher_probs).sum(dim=-1)
 
@@ -54,8 +63,16 @@ class CrossEntropyKnowledgeDistillationCriterion(LegacyFairseqCriterion):
         else:
             teacher_loss = 0.0
 
+        # Cross Entropy Loss
         if self._lambda < 1.0:
             lprobs = model.get_normalized_probs(net_output, log_probs=True)
+            if self.ignore_prefix_size > 0:
+                if getattr(lprobs, "batch_first", False):
+                    lprobs = lprobs[:, self.ignore_prefix_size:, :].contiguous()
+                    target = target[:, self.ignore_prefix_size:].contiguous()
+                else:
+                    lprobs = lprobs[self.ignore_prefix_size:, :, :].contiguous()
+                    target = target[self.ignore_prefix_size:, :].contiguous()
             lprobs = lprobs.view(-1, lprobs.size(-1))
             truth_loss = F.nll_loss(
                 lprobs, target, size_average=False, ignore_index=self.padding_idx, reduce=False)
