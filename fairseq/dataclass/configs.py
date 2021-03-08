@@ -514,6 +514,13 @@ class CheckpointConfig(FairseqDataclass):
             "help": "if set, does not load lr scheduler state from the checkpoint"
         },
     )
+    allow_partial_loading: bool = field(
+        default=False,
+        metadata={
+            "help": "if set, the model is restored even if it doesn't match exactly "
+                    "the architecture, ie. some params are missing."
+        },
+    )
     reset_meters: bool = field(
         default=False,
         metadata={"help": "if set, does not load meters from the checkpoint"},

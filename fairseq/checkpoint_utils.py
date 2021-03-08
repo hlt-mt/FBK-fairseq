@@ -144,6 +144,7 @@ def load_checkpoint(cfg: CheckpointConfig, trainer, **passthrough_args):
     optimizer_overrides = ast.literal_eval(cfg.optimizer_overrides)
     reset_meters = cfg.reset_meters
     reset_dataloader = cfg.reset_dataloader
+    allow_partial_loading = cfg.allow_partial_loading
 
     if cfg.finetune_from_model is not None and (
         reset_optimizer or reset_lr_scheduler or reset_meters or reset_dataloader
@@ -195,6 +196,7 @@ def load_checkpoint(cfg: CheckpointConfig, trainer, **passthrough_args):
         reset_lr_scheduler,
         optimizer_overrides,
         reset_meters=reset_meters,
+        allow_partial_loading=allow_partial_loading,
     )
 
     if (
@@ -603,7 +605,8 @@ def prune_state_dict(state_dict, model_cfg: Optional[DictConfig]):
 
 
 def load_pretrained_component_from_model(
-    component: Union[FairseqEncoder, FairseqDecoder], checkpoint: str
+    component: Union[FairseqEncoder, FairseqDecoder], checkpoint: str,
+        allow_partial_encoder_loading: bool,
 ):
     """
     Load a pretrained FairseqEncoder or FairseqDecoder from checkpoint into the
@@ -629,7 +632,12 @@ def load_pretrained_component_from_model(
             # encoder.input_layers.0.0.weight --> input_layers.0.0.weight
             component_subkey = key[len(component_type) + 1 :]
             component_state_dict[component_subkey] = state["model"][key]
-    component.load_state_dict(component_state_dict, strict=True)
+    incompatible_keys = component.load_state_dict(component_state_dict,
+                                                  strict=(not allow_partial_encoder_loading))
+    assert len(incompatible_keys.unexpected_keys) == 0, \
+        "Cannot load the following keys from checkpoint: {}".format(incompatible_keys.unexpected_keys)
+    if len(incompatible_keys.missing_keys) > 0:
+        logger.info("Loaded checkpoint misses the parameters: {}".format(incompatible_keys.missing_keys))
     return component
 
 

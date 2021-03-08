@@ -162,13 +162,17 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
         parser.add_argument('--distance-penalty', type=str, default=False,
                             choices=['log', 'gauss'],
                             help='Add distance penalty to the encoder')
+        parser.add_argument('--allow-partial-encoder-loading', action='store_true', default=False,
+                            help="if set, the model is restored even if it doesn't match exactly"
+                                "the architecture, ie. some params are missing.")
 
     @classmethod
     def build_encoder(cls, args, dictionary):
         encoder = S2TTransformerEncoder(args, dictionary)
         if getattr(args, "load_pretrained_encoder_from", None):
             encoder = checkpoint_utils.load_pretrained_component_from_model(
-                component=encoder, checkpoint=args.load_pretrained_encoder_from
+                component=encoder, checkpoint=args.load_pretrained_encoder_from,
+                allow_partial_encoder_loading=args.allow_partial_encoder_loading,
             )
             logger.info(
                 f"loaded pretrained encoder from: "
@@ -403,9 +407,9 @@ class S2TTransformerEncoder(FairseqEncoder):
                 "encoder_out": new_encoder_out,  # T x B x C
                 "encoder_padding_mask": new_encoder_padding_mask,  # B x T
                 "encoder_embedding": new_encoder_embedding,  # B x T x C
-                "encoder_states": None,  # List[T x B x C]
-                "src_tokens": None,  # B x T
-                "src_lengths": None,  # B x 1
+                "encoder_states": encoder_states,  # List[T x B x C]
+                "src_tokens": [],  # B x T
+                "src_lengths": [],  # B x 1
             }
 
 
@@ -479,7 +483,7 @@ def base_architecture(args):
     args.adaptive_softmax_cutoff = getattr(args, "adaptive_softmax_cutoff", None)
     args.adaptive_softmax_dropout = getattr(args, "adaptive_softmax_dropout", 0)
     args.share_decoder_input_output_embed = getattr(
-        args, "share_decoder_input_output_embed", True
+        args, "share_decoder_input_output_embed", False
     )
     args.no_token_positional_embeddings = getattr(
         args, "no_token_positional_embeddings", False

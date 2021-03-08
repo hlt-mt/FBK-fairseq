@@ -289,6 +289,7 @@ class Trainer(object):
         reset_lr_scheduler=False,
         optimizer_overrides=None,
         reset_meters=False,
+        allow_partial_loading=False,
     ):
         """
         Load all training state from a checkpoint file.
@@ -336,9 +337,13 @@ class Trainer(object):
 
             # load model parameters
             try:
-                self.get_model().load_state_dict(
-                    state["model"], strict=True, model_cfg=self.cfg.model
+                incompatible_keys = self.get_model().load_state_dict(
+                    state["model"], strict=(not allow_partial_loading), model_cfg=self.cfg.model
                 )
+                assert len(incompatible_keys.unexpected_keys) == 0, \
+                    "Cannot load the following keys from checkpoint: {}".format(incompatible_keys.unexpected_keys)
+                if len(incompatible_keys.missing_keys) > 0:
+                    logger.info("Loaded checkpoint misses the parameters: {}".format(incompatible_keys.missing_keys))
                 if utils.has_parameters(self.get_criterion()):
                     self.get_criterion().load_state_dict(
                         state["criterion"], strict=True
