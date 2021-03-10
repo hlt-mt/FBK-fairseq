@@ -83,12 +83,12 @@ class CrossEntropyKnowledgeDistillationCriterion(LegacyFairseqCriterion):
             assert teacher_loss.shape == truth_loss.shape
         loss = (1.0 - self._lambda) * truth_loss + self._lambda * teacher_loss
 
-        sample_size = sample['target'].size(0) if self.sentence_avg else sample['ntokens']
+        sample_size = sample['target'].size(0) if self.sentence_avg else sample['ntokens'] - sample['target'].size(0)
         if reduce:
             loss = loss.sum()
         logging_output = {
             'loss': loss.data,
-            'ntokens': sample['ntokens'],
+            'ntokens': sample['ntokens'] - sample['target'].size(0),
             'nsentences': sample['target'].size(0),
             'sample_size': sample_size,
         }
