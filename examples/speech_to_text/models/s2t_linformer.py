@@ -338,16 +338,13 @@ class S2TLinformerEncoder(FairseqEncoder):
                 assert encoder_states is not None
                 encoder_states.append(x)
 
-        if not encoder_padding_mask.any():
-            encoder_padding_mask = None
-
         if self.layer_norm is not None:
             x = self.layer_norm(x)
 
         if self.ctc_flag:
             return {
                 "encoder_out": [x],  # T x B x C
-                "encoder_padding_mask": [encoder_padding_mask],  # B x T
+                "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],  # B x T
                 "encoder_embedding": [],
                 "encoder_states": encoder_states,  # List[T x B x C]
                 "ctc_out": x_ctc,  # T x B x D
@@ -356,7 +353,7 @@ class S2TLinformerEncoder(FairseqEncoder):
         else:
             return {
                 "encoder_out": [x],
-                "encoder_padding_mask": [encoder_padding_mask],
+                "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],
                 "encoder_embedding": [],
                 "encoder_states": encoder_states,
                 "src_tokens": [],
@@ -411,14 +408,8 @@ class S2TLinformerEncoder(FairseqEncoder):
 
         # ctc
         if self.ctc_flag:
-            new_ctc_out = (
-                [] if len(encoder_out["ctc_out"]) == 0
-                else [x.index_select(1, new_order) for x in encoder_out["ctc_out"]]
-            )
-            new_ctc_lengths = (
-                [] if len(encoder_out["ctc_lengths"]) == 0
-                else [x.index_select(0, new_order) for x in encoder_out["ctc_lengths"]]
-            )
+            new_ctc_out = encoder_out["ctc_out"].index_select(1, new_order)
+            new_ctc_lengths = encoder_out["ctc_lengths"].index_select(0, new_order)
 
             return {
                 "encoder_out": new_encoder_out,  # T x B x C
