@@ -172,7 +172,7 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
         if getattr(args, "load_pretrained_encoder_from", None):
             encoder = checkpoint_utils.load_pretrained_component_from_model(
                 component=encoder, checkpoint=args.load_pretrained_encoder_from,
-                allow_partial_encoder_loading=args.allow_partial_encoder_loading,
+                allow_partial_encoder_loading=getattr(args, "allow_partial_encoder_loading", False),
             )
             logger.info(
                 f"loaded pretrained encoder from: "
@@ -314,16 +314,13 @@ class S2TTransformerEncoder(FairseqEncoder):
                 assert encoder_states is not None
                 encoder_states.append(x)
 
-        if not encoder_padding_mask.any():
-            encoder_padding_mask = None
-
         if self.layer_norm is not None:
             x = self.layer_norm(x)
 
         if self.ctc_flag:
             return {
                 "encoder_out": [x],  # T x B x C
-                "encoder_padding_mask": [encoder_padding_mask],  # B x T
+                "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],  # B x T
                 "encoder_embedding": [],
                 "encoder_states": encoder_states,  # List[T x B x C]
                 "ctc_out": x_ctc,  # T x B x D
@@ -334,7 +331,7 @@ class S2TTransformerEncoder(FairseqEncoder):
         else:
             return {
                 "encoder_out": [x],
-                "encoder_padding_mask": [encoder_padding_mask],
+                "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],
                 "encoder_embedding": [],
                 "encoder_states": encoder_states,
                 "src_tokens": [],
