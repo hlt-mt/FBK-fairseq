@@ -69,10 +69,12 @@ class CrossEntropyKnowledgeDistillationCriterion(LegacyFairseqCriterion):
             if self.ignore_prefix_size > 0:
                 if getattr(lprobs, "batch_first", False):
                     lprobs = lprobs[:, self.ignore_prefix_size:, :].contiguous()
-                    target = target[:, self.ignore_prefix_size:].contiguous()
+                    if not self._lambda > 0.0:
+                        target = target[:, self.ignore_prefix_size:].contiguous()
                 else:
                     lprobs = lprobs[self.ignore_prefix_size:, :, :].contiguous()
-                    target = target[self.ignore_prefix_size:, :].contiguous()
+                    if not self._lambda > 0.0:
+                        target = target[self.ignore_prefix_size:, :].contiguous()
             lprobs = lprobs.view(-1, lprobs.size(-1))
             truth_loss = F.nll_loss(
                 lprobs, target, size_average=False, ignore_index=self.padding_idx, reduce=False)
