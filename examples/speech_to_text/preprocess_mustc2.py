@@ -134,7 +134,7 @@ def process(args):
                 manifest["audio"].append(zip_manifest[utt_id])
                 duration_ms = int(wav.size(1) / sr * 1000)
                 manifest["n_frames"].append(int(1 + (duration_ms - 25) / 10))
-                manifest["src_text"].append(asr_normalize(src_utt) if args.task == "asr" else src_utt)
+                manifest["src_text"].append(asr_normalize(src_utt) if args.task == "asr" or args.asr_source else src_utt)
                 manifest["tgt_text"].append(asr_normalize(src_utt) if args.task == "asr" else tgt_utt)
                 manifest["speaker"].append(speaker_id)
             if is_train_split:
@@ -240,6 +240,8 @@ def main():
     ),
     parser.add_argument("--vocab-size", default=8000, type=int)
     parser.add_argument("--task", type=str, choices=["asr", "st"])
+    parser.add_argument("--asr-source", type=bool, default=False,
+                        help="enable if a lowercased source text without punctuation is desired")
     parser.add_argument("--joint", action="store_true", help="")
     parser.add_argument("--n-mel-bins", default=80, type=int)
     parser.add_argument("--vocab-file-tgt", default="none", type=str,
