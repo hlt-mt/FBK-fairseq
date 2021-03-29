@@ -70,7 +70,7 @@ class MUSTC(Dataset):
         for wav_filename, _seg_group in groupby(segments, lambda x: x["wav"]):
             wav_path = wav_root / wav_filename
             sample_rate = torchaudio.info(wav_path.as_posix())[0].rate
-            seg_group = sorted(_seg_group, key=lambda x: x["offset"])
+            seg_group = sorted(_seg_group, key=lambda x: float(x["offset"]))
             for i, segment in enumerate(seg_group):
                 offset = int(float(segment["offset"]) * sample_rate)
                 n_frames = int(float(segment["duration"]) * sample_rate)
