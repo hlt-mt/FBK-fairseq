@@ -74,7 +74,6 @@ class MultiheadLinearAttention(nn.Module):
         self.q_proj = quant_noise(
             nn.Linear(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size
         )
-
         # used for compress sequence to subsequence
         if shared_compress_layer is None:
             self.compress_seq_len = max_seq_len // compressed
@@ -85,9 +84,10 @@ class MultiheadLinearAttention(nn.Module):
                 )
             self.layerwise_sharing = False
         else:
-            self.compress_k = shared_compress_layer
+            self.shared_compression_among_layers = True
+            self.compress_k = [shared_compress_layer]
             if shared_kv_compressed == 0:
-                self.compress_v = shared_compress_layer
+                self.compress_v = [shared_compress_layer]
             self.layerwise_sharing = True
         self.shared_kv_compressed = shared_kv_compressed
 
@@ -182,6 +182,15 @@ class MultiheadLinearAttention(nn.Module):
         if need_head_weights:
             need_weights = True
 
+        if self.layerwise_sharing:
+            compress_k = self.compress_k[0]
+            if self.shared_kv_compressed == 0:
+                compress_v = self.compress_v[0]
+        else:
+            compress_k = self.compress_k
+            if self.shared_kv_compressed == 0:
+                compress_v = self.compress_v
+
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
@@ -202,7 +211,7 @@ class MultiheadLinearAttention(nn.Module):
 
             k_input = query.permute(1, 2, 0).contiguous()  # B * C * T
             k_input = (
-                F.linear(k_input, self.compress_k.weight[:, 0:tgt_len])
+                F.linear(k_input, compress_k.weight[:, 0:tgt_len])
                 .permute(2, 0, 1)
                 .contiguous()
             )
@@ -211,13 +220,13 @@ class MultiheadLinearAttention(nn.Module):
             v_input = query.permute(1, 2, 0).contiguous()  # B * C * T
             if self.shared_kv_compressed == 0:
                 v_input = (
-                    F.linear(v_input, self.compress_v.weight[:, 0:tgt_len])
+                    F.linear(v_input, compress_v.weight[:, 0:tgt_len])
                     .permute(2, 0, 1)
                     .contiguous()
                 )
             if self.shared_kv_compressed == 1:  # use shared kv compressed linear layer
                 v_input = (
-                    F.linear(v_input, self.compress_k.weight[:, 0:tgt_len])
+                    F.linear(v_input, compress_k.weight[:, 0:tgt_len])
                     .permute(2, 0, 1)
                     .contiguous()
                 )
