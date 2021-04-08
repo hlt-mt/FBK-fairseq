@@ -19,16 +19,44 @@ from fairseq.models import (
     register_model,
     register_model_architecture,
 )
-from fairseq.models.speech_to_text.s2t_transformer import TransformerDecoderScriptable
+from fairseq.models.speech_to_text.s2t_transformer import TransformerDecoderScriptable, Conv1dSubsampler
 from fairseq.models.transformer import Embedding
 from fairseq.modules import (
     FairseqDropout,
     LayerNorm,
-    PositionalEmbedding,
+    PositionalEmbedding, TransformerEncoderLayer,
 )
 
 logger = logging.getLogger(__name__)
 
+class Conv1dSubsamplerLinformer(Conv1dSubsampler):
+    def __init__(
+        self,
+        in_channels: int,
+        mid_channels: int,
+        out_channels: int,
+        stride: int,
+        kernel_sizes: List[int] = (3, 3),
+    ):
+        super(Conv1dSubsampler, self).__init__()
+        self.n_layers = len(kernel_sizes)
+        self.stride = stride
+        self.conv_layers = nn.ModuleList(
+            nn.Conv1d(
+                in_channels if i == 0 else mid_channels // 2,
+                mid_channels if i < self.n_layers - 1 else out_channels * 2,
+                k,
+                stride=self.stride,
+                padding=k // 2,
+            )
+            for i, k in enumerate(kernel_sizes)
+        )
+
+    def get_out_seq_lens_tensor(self, in_seq_lens_tensor):
+        out = in_seq_lens_tensor.clone()
+        for _ in range(self.n_layers):
+            out = ((out.float() - 1) / self.stride + 1).floor().long()
+        return out
 
 @register_model("s2t_linformer")
 class S2TLinformerModel(FairseqEncoderDecoderModel):
@@ -155,22 +183,56 @@ class S2TLinformerModel(FairseqEncoderDecoderModel):
             type=int,
             help="freeze the parameters in compressed layer",
         )
+        parser.add_argument(
+            "--compress-kernel-size",
+            type=int,
+            help="kernel size of the convolution used to compress the sequence length in Linear MHA. "
+                 "Note: it should be higher than (--compressed) parameter",
+        )
+        # Initial convolutional layer (optional)
+        parser.add_argument(
+            "--CNN-first-layer",
+            action="store_true",
+            help="if enabled, substitutes the initial linear layer with a couple of convolutional layers"
+        )
+        parser.add_argument(
+            "--conv-kernel-sizes",
+            type=str,
+            metavar="N",
+            help="kernel sizes of Conv1d subsampling layers",
+        )
+        parser.add_argument(
+            "--conv-channels",
+            type=int,
+            metavar="N",
+            help="# of channels in Conv1d subsampling layers",
+        )
+        parser.add_argument(
+            "--stride",
+            type=int,
+            default=1,
+            help="stride value in Conv1d subsampling layers"
+        )
         # fbk
         parser.add_argument('--ctc-compress-strategy', type=str, default="none",
                             choices=['none', 'avg', 'weighted', 'softmax'],
                             help="Strategy to use when compressing CTC output")
         parser.add_argument('--freeze-pretrained', action='store_true',
-                            help='if set, all params loaded from the pretrained model are freezed')
+                            help='TO BE IMPLEMENTED: if set, all params loaded from the pretrained model are freezed')
         parser.add_argument('--distance-penalty', type=str, default=False,
                             choices=['log', 'gauss'],
-                            help='Add distance penalty to the encoder')
+                            help='TO BE IMPLEMENTED: Add distance penalty to the encoder')
+        parser.add_argument('--transformer-after-compression', default=False, action='store_true',
+                            help='whether or not using classic transformer encoder layers after ctc compression '
+                                 'instead of linformer encoder layers')
 
     @classmethod
     def build_encoder(cls, args, dictionary):
         encoder = S2TLinformerEncoder(args, dictionary)
         if getattr(args, "load_pretrained_encoder_from", None):
             encoder = checkpoint_utils.load_pretrained_component_from_model(
-                component=encoder, checkpoint=args.load_pretrained_encoder_from
+                component=encoder, checkpoint=args.load_pretrained_encoder_from,
+                allow_partial_encoder_loading=getattr(args, "allow_partial_encoder_loading", False),
             )
             logger.info(
                 f"loaded pretrained encoder from: "
@@ -235,6 +297,10 @@ class S2TLinformerEncoder(FairseqEncoder):
     Transformer encoder."""
 
     def __init__(self, args, dictionary):
+        # Initialize linformer parameters
+        self.compress_layer = None
+        self.CNN_first_layer = args.CNN_first_layer
+
         super().__init__(dictionary)
 
         self.dropout_module = FairseqDropout(
@@ -245,30 +311,42 @@ class S2TLinformerEncoder(FairseqEncoder):
             self.embed_scale = 1.0
         self.padding_idx = 1
 
-        # Linear layer which adapts the input dimension to the linformer dimension
-        self.linear_layer = nn.Linear(args.input_feat_per_channel * args.input_channels, args.encoder_embed_dim)
+        if self.CNN_first_layer:
+            # Convolutional layers
+            self.subsample = Conv1dSubsamplerLinformer(
+                args.input_feat_per_channel * args.input_channels,
+                args.conv_channels,
+                args.encoder_embed_dim,
+                args.stride,
+                [int(k) for k in args.conv_kernel_sizes.split(",")],
+            )
+        else:
+            # Linear layer which adapts the input dimension to the linformer dimension
+            self.linear_layer = nn.Linear(args.input_feat_per_channel * args.input_channels, args.encoder_embed_dim)
 
         self.embed_positions = PositionalEmbedding(
             args.max_source_positions, args.encoder_embed_dim, self.padding_idx
         )
 
         # Linformer
-        # Initialize linformer parameters
-        self.compressed = args.compressed
-        self.shared_kv_compressed = args.shared_kv_compressed
-        self.shared_layer_kv_compressed = args.shared_layer_kv_compressed
-        self.compress_layer = None
-        self.freeze_compress = args.freeze_compress
-
-        self.linformer_layers = nn.ModuleList(
-            [self.build_linformer_encoder_layer(args) for _ in range(args.encoder_layers)]
-        )
+        assert args.compress_kernel_size >= args.compressed
+        if args.transformer_after_compression:
+            self.linformer_layers = nn.ModuleList(
+                [self.build_linformer_encoder_layer(args) for _ in range(args.ctc_encoder_layer)]
+            )
+            self.linformer_layers.extend(
+                [TransformerEncoderLayer(args) for _ in range(args.encoder_layers - args.ctc_encoder_layer)]
+            )
+        else:
+            self.linformer_layers = nn.ModuleList(
+                [self.build_linformer_encoder_layer(args) for _ in range(args.encoder_layers)]
+            )
         if args.encoder_normalize_before:
             self.layer_norm = LayerNorm(args.encoder_embed_dim)
         else:
             self.layer_norm = None
 
-        # distance penalty
+        #TODO: distance penalty
         if args.distance_penalty == True:
             args.distance_penalty = 'log'
 
@@ -285,27 +363,21 @@ class S2TLinformerEncoder(FairseqEncoder):
                 self.ctc_compress_method = "none"
 
     def build_linformer_encoder_layer(self, args):
-        self.max_seq_len = args.max_source_positions
-        if self.shared_layer_kv_compressed == 1:
-            compress_layer = nn.Linear(
-                self.max_seq_len, self.max_seq_len // self.compressed
+        if args.shared_layer_kv_compressed == 1 and self.compress_layer is None:
+            compress_layer = nn.Conv1d(
+                args.encoder_embed_dim,
+                args.encoder_embed_dim,
+                args.compress_kernel_size,
+                stride=args.compressed,
+                padding=args.compress_kernel_size // 2,
             )
             # intialize parameters for compressed layer
             nn.init.xavier_uniform_(compress_layer.weight, gain=1 / math.sqrt(2))
-            if self.freeze_compress == 1:
+            if args.freeze_compress == 1:
                 compress_layer.weight.requires_grad = False
             self.compress_layer = compress_layer
 
-        return LinformerEncoderLayer(
-            args,
-            compressed=self.compressed,
-            max_seq_len=self.max_seq_len,
-            shared_kv_compressed=self.shared_kv_compressed,
-            shared_compress_layer=(
-                None if self.shared_layer_kv_compressed == 0 else self.compress_layer
-            ),
-            freeze_compress=self.freeze_compress,
-        )
+        return LinformerEncoderLayer(args, self.compress_layer)
 
     @torch.jit.unused
     def forward_non_torchscript(self, net_input: Dict[str, Tensor]):
@@ -315,25 +387,35 @@ class S2TLinformerEncoder(FairseqEncoder):
         return self.forward(**encoder_input)
 
     def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False, **kwargs):
-        x = self.linear_layer(src_tokens)
+        if self.CNN_first_layer:
+            x, input_lengths = self.subsample(src_tokens, src_lengths)
+        else:
+            x = self.linear_layer(src_tokens)
+            input_lengths = src_lengths
         x = self.embed_scale * x
 
-        encoder_padding_mask = lengths_to_padding_mask(src_lengths)
-        positions = self.embed_positions(encoder_padding_mask)
-        x += positions
-        x = self.dropout_module(x).transpose(0, 1)
+        encoder_padding_mask = lengths_to_padding_mask(input_lengths)
+        if self.CNN_first_layer:
+            positions = self.embed_positions(encoder_padding_mask).transpose(0, 1)
+            x += positions
+            x = self.dropout_module(x)
+        else:
+            positions = self.embed_positions(encoder_padding_mask)
+            x += positions
+            x = self.dropout_module(x).transpose(0, 1)
 
         encoder_states = []
 
         x_ctc = None
+        ctc_lengths = input_lengths
         for l_idx, layer in enumerate(self.linformer_layers):
             x = layer(x, encoder_padding_mask)
             # ctc
             if self.ctc_flag and self.ctc_layer == l_idx + 1:
                 x_ctc = self.ctc_fc(x)
                 if self.ctc_compress_method != "none":
-                    x, src_lengths = self.average_same_ctc_features(x_ctc, x, src_lengths)
-                encoder_padding_mask = lengths_to_padding_mask(src_lengths)
+                    x, input_lengths = self.average_same_ctc_features(x_ctc, x, input_lengths)
+                encoder_padding_mask = lengths_to_padding_mask(input_lengths)
             if return_all_hiddens:
                 assert encoder_states is not None
                 encoder_states.append(x)
@@ -348,7 +430,9 @@ class S2TLinformerEncoder(FairseqEncoder):
                 "encoder_embedding": [],
                 "encoder_states": encoder_states,  # List[T x B x C]
                 "ctc_out": x_ctc,  # T x B x D
-                "ctc_lengths": src_lengths
+                "ctc_lengths": ctc_lengths,
+                "src_tokens": [],
+                "src_lengths": [],
             }
         else:
             return {
@@ -500,7 +584,7 @@ def base_architecture(args):
     args.adaptive_softmax_cutoff = getattr(args, "adaptive_softmax_cutoff", None)
     args.adaptive_softmax_dropout = getattr(args, "adaptive_softmax_dropout", 0)
     args.share_decoder_input_output_embed = getattr(
-        args, "share_decoder_input_output_embed", True
+        args, "share_decoder_input_output_embed", False
     )
     args.no_token_positional_embeddings = getattr(
         args, "no_token_positional_embeddings", False
@@ -513,17 +597,25 @@ def base_architecture(args):
     args.decoder_input_dim = getattr(args, "decoder_input_dim", args.decoder_embed_dim)
     args.no_scale_embedding = getattr(args, "no_scale_embedding", False)
     args.quant_noise_pq = getattr(args, "quant_noise_pq", 0)
+    args.quant_noise_pq_block_size = getattr(args, "quant_noise_pq_block_size", 8)
+    args.max_seq_len = getattr(args, "max_seq_len", 4096)
 
     """
     Linformer default parameters, assuming max_seq_len=512, best result was achieved with k=256 which implies a 
     compression factor ("compressed" arg) of 2 and layerwise sharing ("shared_kv_compressed" and 
     "shared_layer_kv_compressed" set to 1).
     """
-    args.compressed = getattr(args, "compressed", 2)
+    args.compressed = getattr(args, "compressed", 16)
     args.shared_kv_compressed = getattr(args, "shared_kv_compressed", 1)
     args.shared_layer_kv_compressed = getattr(args, "shared_layer_kv_compressed", 1)
     args.freeze_compress = getattr(args, "freeze_compress", 0)
+    args.compress_kernel_size = getattr(args, "compress_kernel_size", 16)
 
+    # Optional convolution layers parameters
+    args.conv_kernel_sizes = getattr(args, "conv_kernel_sizes", "5,5")
+    args.conv_channels = getattr(args, "conv_channels", 1024)
+
+    # TODO
     args.distance_penalty = getattr(args, 'distance_penalty', False)
 
 
