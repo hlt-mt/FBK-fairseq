@@ -12,7 +12,8 @@ from tempfile import NamedTemporaryFile
 from typing import Tuple
 
 import pandas as pd
-import torchaudio
+import soundfile as sf
+import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -20,12 +21,12 @@ from tqdm import tqdm
 from examples.speech_to_text.data_utils_new import (
     create_zip,
     extract_fbank_features,
-    filter_manifest_df,
     gen_config_yaml_with_src,
     gen_vocab,
     get_zip_manifest,
-    save_df_to_tsv, asr_normalize,
+    save_df_to_tsv, asr_normalize, filter_train_manifest_df,
 )
+from fairseq.data.audio.audio_utils import get_waveform
 
 log = logging.getLogger(__name__)
 
@@ -56,8 +57,8 @@ class YamlDataset(Dataset):
         self.data = []
         for wav_filename, _seg_group in groupby(segments, lambda x: x["wav"]):
             wav_path = wav_root / wav_filename
-            sample_rate = torchaudio.info(wav_path.as_posix())[0].rate
-            seg_group = sorted(_seg_group, key=lambda x: x["offset"])
+            sample_rate = sf.info(wav_path.as_posix()).samplerate
+            seg_group = sorted(_seg_group, key=lambda x: float(x["offset"]))
             for i, segment in enumerate(seg_group):
                 offset = int(float(segment["offset"]) * sample_rate)
                 n_frames = int(float(segment["duration"]) * sample_rate)
@@ -77,7 +78,8 @@ class YamlDataset(Dataset):
 
     def __getitem__(self, n: int) -> Tuple[Tensor, int, str, str, str, str]:
         wav_path, offset, n_frames, sr, src_utt, tgt_utt, spk_id, utt_id = self.data[n]
-        waveform, _ = torchaudio.load(wav_path, offset=offset, num_frames=n_frames)
+        waveform, _ = get_waveform(wav_path, frames=n_frames, start=offset)
+        waveform = torch.from_numpy(waveform)
         return waveform, sr, src_utt, tgt_utt, spk_id, utt_id
 
     def __len__(self) -> int:
@@ -85,25 +87,28 @@ class YamlDataset(Dataset):
 
 
 def process(args):
-    cur_root = Path(args.data_root).absolute()
-    if not cur_root.is_dir():
-        print(f"{cur_root.as_posix()} does not exist. Skipped.")
+    save_root = Path(args.save_dir).absolute()
+    data_dir = Path(args.data_root).absolute()
+    if not save_root.is_dir():
+        print(f"{data_dir.as_posix()} does not exist. Skipped.")
 
     # Extract features
-    feature_root = cur_root / "fbank"
-    feature_root.mkdir(exist_ok=True)
-    for split in args.splits:
-        print(f"Fetching split {split}...")
-        dataset = YamlDataset(cur_root.as_posix(), args.wav_dir, split, args.src_lang, args.tgt_lang)
-        print("Extracting log mel filter bank features...")
-        for waveform, sample_rate, _, _, _, utt_id in tqdm(dataset):
-            extract_fbank_features(
-                waveform, sample_rate, feature_root / f"{utt_id}.npy", args.n_mel_bins
-            )
+    if not args.no_filterbank_extraction:
+        feature_root = save_root / "fbank"
+        feature_root.mkdir(exist_ok=True)
+        for split in args.splits:
+            print(f"Fetching split {split}...")
+            dataset = YamlDataset(data_dir.as_posix(), args.wav_dir, split, args.src_lang, args.tgt_lang)
+            print("Extracting log mel filter bank features...")
+            for waveform, sample_rate, _, _, _, utt_id in tqdm(dataset):
+                extract_fbank_features(
+                    waveform, sample_rate, feature_root / f"{utt_id}.npy", args.n_mel_bins
+                )
     # Pack features into ZIP
-    zip_path = cur_root / "fbank.zip"
-    print("ZIPing features...")
-    create_zip(feature_root, zip_path)
+    zip_path = save_root / "fbank.zip"
+    if not args.no_filterbank_extraction:
+        print("ZIPing features...")
+        create_zip(feature_root, zip_path)
     print("Fetching ZIP manifest...")
     zip_manifest = get_zip_manifest(zip_path)
     # Generate TSV manifest
@@ -113,7 +118,7 @@ def process(args):
     for split in args.splits:
         is_train_split = split.startswith("train")
         manifest = {c: [] for c in MANIFEST_COLUMNS}
-        dataset = YamlDataset(cur_root.as_posix(), args.wav_dir, split, args.src_lang, args.tgt_lang)
+        dataset = YamlDataset(data_dir.as_posix(), args.wav_dir, split, args.src_lang, args.tgt_lang)
         for wav, sr, src_utt, tgt_utt, speaker_id, utt_id in tqdm(dataset):
             manifest["id"].append(utt_id)
             manifest["audio"].append(zip_manifest[utt_id])
@@ -130,8 +135,9 @@ def process(args):
             train_text.extend(manifest["tgt_text"])
             train_text_src.extend(manifest["src_text"])
         df = pd.DataFrame.from_dict(manifest)
-        df = filter_manifest_df(df, is_train_split=is_train_split)
-        save_df_to_tsv(df, cur_root / f"{split}_{args.task}_src.tsv")
+        if is_train_split:
+            df = filter_train_manifest_df(df)
+        save_df_to_tsv(df, save_root / f"{split}_{args.task}_src.tsv")
     # Generate vocab (target)
     v_size_str = "" if args.vocab_type == "char" else str(args.vocab_size)
     if args.vocab_file_tgt == "none":
@@ -141,7 +147,7 @@ def process(args):
                 f.write(t + "\n")
             gen_vocab(
                 Path(f.name),
-                cur_root / spm_filename_prefix,
+                save_root / spm_filename_prefix,
                 args.vocab_type,
                 args.vocab_size,
             )
@@ -149,24 +155,27 @@ def process(args):
     else:
         spm_filename_prefix = args.vocab_file_tgt
     # Generate vocab (source)
-    v_size_str = "" if args.vocab_type == "char" else str(args.vocab_size)
-    if args.vocab_file_src == "none":
-        spm_filename_prefix_src = f"spm_{args.vocab_type}{v_size_str}_{args.task}_source"
-        with NamedTemporaryFile(mode="w") as f:
-            for t in train_text:
-                f.write(t + "\n")
-            gen_vocab(
-                Path(f.name),
-                cur_root / spm_filename_prefix_src,
-                args.vocab_type,
-                args.vocab_size,
-            )
-        spm_filename_prefix_src = spm_filename_prefix_src + ".model"
+    if args.task == "st":
+        v_size_str = "" if args.vocab_type == "char" else str(args.vocab_size)
+        if args.vocab_file_src == "none":
+            spm_filename_prefix_src = f"spm_{args.vocab_type}{v_size_str}_{args.task}_source"
+            with NamedTemporaryFile(mode="w") as f:
+                for t in train_text:
+                    f.write(t + "\n")
+                gen_vocab(
+                    Path(f.name),
+                    save_root / spm_filename_prefix_src,
+                    args.vocab_type,
+                    args.vocab_size,
+                )
+            spm_filename_prefix_src = spm_filename_prefix_src + ".model"
+        else:
+            spm_filename_prefix_src = args.vocab_file_src
     else:
-        spm_filename_prefix_src = args.vocab_file_src
+        spm_filename_prefix_src = spm_filename_prefix
     # Generate config YAML
     gen_config_yaml_with_src(
-        cur_root,
+        save_root,
         spm_filename_prefix,
         spm_filename_prefix_src,
         yaml_filename=f"config_{args.task}.yaml",
@@ -174,13 +183,15 @@ def process(args):
         n_mel_bins=args.n_mel_bins,
     )
     # Clean up
-    shutil.rmtree(feature_root)
+    if not args.no_filterbank_extraction:
+        shutil.rmtree(feature_root)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-root", "-d", required=True, type=str)
-    parser.add_argument("--wav-dir", "-w", required=True, type=str)
+    parser.add_argument("--data-root", "-data", required=True, type=str)
+    parser.add_argument("--save-dir", "-save", required=True, type=str)
+    parser.add_argument("--wav-dir", "-wav", required=True, type=str)
     parser.add_argument("--splits", "-s", nargs='+', required=True, type=str)
     parser.add_argument("--vocab-type", default="unigram", required=True, type=str,
                         choices=["bpe", "unigram", "char"])
@@ -194,6 +205,8 @@ def main():
                         help="absolute path to fairseq target vocabulary file [.txt]")
     parser.add_argument("--vocab-file-src", default="none", type=str,
                         help="absolute path to fairseq source vocabulary file [.txt]")
+    parser.add_argument("--no-filterbank-extraction", action="store_true",
+                        help="no mel filterbanks feature extraction")
     args = parser.parse_args()
 
     process(args)

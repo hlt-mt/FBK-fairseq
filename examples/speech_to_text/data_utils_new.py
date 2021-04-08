@@ -254,6 +254,27 @@ def filter_manifest_df(
     return df[valid]
 
 
+def filter_train_manifest_df(
+    df, extra_filters=None, min_n_frames=5, max_n_frames=3000
+):
+    filters = {
+        "no speech": df["audio"] == "",
+        f"short speech (<{min_n_frames} frames)": df["n_frames"] < min_n_frames,
+        "empty sentence": df["tgt_text"] == "",
+        f"long speech (>{max_n_frames} frames)": df["n_frames"] > max_n_frames,
+    }
+    if extra_filters is not None:
+        filters.update(extra_filters)
+    invalid = reduce(lambda x, y: x | y, filters.values())
+    valid = ~invalid
+    print(
+        "| "
+        + ", ".join(f"{n}: {f.sum()}" for n, f in filters.items())
+        + f", total {invalid.sum()} filtered, {valid.sum()} remained."
+    )
+    return df[valid]
+
+
 class S2TDataConfigWriter(object):
     DEFAULT_VOCAB_FILENAME = "dict.txt"
     DEFAULT_INPUT_FEAT_PER_CHANNEL = 80
