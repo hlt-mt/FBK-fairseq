@@ -126,7 +126,7 @@ class TriangleTransformerDecoderLayer(TransformerDecoderLayer):
             need_weights=False,
             attn_mask=self_attn_mask,
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.dropout_module(x)
         x = residual + x
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
@@ -159,7 +159,7 @@ class TriangleTransformerDecoderLayer(TransformerDecoderLayer):
                 need_weights=need_attn or (not self.training and self.need_attn),
                 need_head_weights=need_head_weights,
             )
-            x_1 = F.dropout(x_1, p=self.dropout, training=self.training)
+            x_1 = self.dropout_module(x_1)
 
             # Here we compute the cross attention with the output of the auxiliary decoder
             x_2, aux_dec_attn = self.aux_decoder_attn(
@@ -172,7 +172,7 @@ class TriangleTransformerDecoderLayer(TransformerDecoderLayer):
                 need_weights=need_attn or (not self.training and self.need_attn),
                 need_head_weights=need_head_weights,
             )
-            x_2 = F.dropout(x_2, p=self.dropout, training=self.training)
+            x_2 = self.dropout_module(x_2)
 
             x = self.fc_concat(torch.cat((x_1, x_2), dim=-1))
             x = residual + x
@@ -184,9 +184,9 @@ class TriangleTransformerDecoderLayer(TransformerDecoderLayer):
             x = self.final_layer_norm(x)
 
         x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=float(self.activation_dropout), training=self.training)
+        x = self.activation_dropout_module(x)
         x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.dropout_module(x)
         x = residual + x
         if not self.normalize_before:
             x = self.final_layer_norm(x)

@@ -4,9 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 import logging
 
-from examples.speech_recognition.tasks.speech_translation_ctc import SpeechTranslationCTCTask
-from examples.speech_recognition.twophase_sequence_generator import TwoPhaseSequenceGenerator
-from fairseq import search
+from examples.speech_to_text.tasks.speech_to_text_ctc import SpeechToTextCtcTask
+from examples.speech_to_text.twophase_sequence_generator import TwoPhaseSequenceGenerator
 from fairseq.tasks import register_task
 
 
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @register_task("speech_translation_dualdecoding")
-class SpeechTranslationDualDecodingTask(SpeechTranslationCTCTask):
+class SpeechTranslationDualDecodingTask(SpeechToTextCtcTask):
     """
     Task for training dual-decoder models for joint speech translation and recognition.
     """

@@ -1,18 +1,16 @@
 from torch import nn
 import torch
 
-from examples.speech_recognition.models.conv_transformer import ConvolutionalTransformerModel, base_architecture, \
-    speechtransformer_big, speechtransformer_big2, ConvolutionalTransformerEncoder
-from examples.speech_recognition.models.multi_task import MultiTaskModel, ClassifierDecoder
-from examples.speech_recognition.tasks.speech_translation_ctc import SpeechTranslationCTCTask
-from fairseq import utils
+from examples.speech_to_text.models.s2t_transformer_fbk import S2TTransformerModel, base_architecture, \
+    s2t_transformer_m, s2t_transformer_s, S2TTransformerEncoder
+from examples.speech_to_text.models.multi_task import MultiTaskModel
 from fairseq.models import register_model, register_model_architecture
 from fairseq.models.fairseq_encoder import EncoderOut
-from fairseq.models.transformer import TransformerDecoder
+from fairseq.models.speech_to_text import TransformerDecoderScriptable
 
 
-@register_model('conv_transformer_2stage')
-class ConvolutionalTransformer2Stage(MultiTaskModel):
+@register_model('s2t_transformer_2stage')
+class S2TTransformer2Stage(MultiTaskModel):
     """
     This model is an implementation of a multi-task model that predicts both transcripts
     and translations, with the translation being generated from the output representation
@@ -22,7 +20,7 @@ class ConvolutionalTransformer2Stage(MultiTaskModel):
     # For now, we assume NO.
     @staticmethod
     def add_args(parser):
-        ConvolutionalTransformerModel.add_args(parser)
+        S2TTransformerModel.add_args(parser)
         parser.add_argument('--auxiliary-decoder-embed-path', type=str, metavar='STR',
                             help='path to pre-trained decoder embedding')
 
@@ -39,44 +37,36 @@ class ConvolutionalTransformer2Stage(MultiTaskModel):
             args.max_target_positions = 100000
 
         # This model requires a task that provides source dictionary and transcripts
-        assert isinstance(task, SpeechTranslationCTCTask)
+        assert task.source_dictionary is not None and task.target_dictionary is not None
 
         src_dict, tgt_dict = task.source_dictionary, task.target_dictionary
 
-        def build_embedding(dictionary, embed_dim, path=None):
+        def build_embedding(dictionary, embed_dim):
             num_embeddings = len(dictionary)
             padding_idx = dictionary.pad()
-            emb = Embedding(num_embeddings, embed_dim, padding_idx)
-            # if provided, load from preloaded dictionaries
-            if path:
-                embed_dict = utils.parse_embedding(path)
-                utils.load_embedding(embed_dict, dictionary, emb)
-            return emb
+            return Embedding(num_embeddings, embed_dim, padding_idx)
 
-        target_embed_tokens = build_embedding(
-            tgt_dict, args.decoder_embed_dim, args.decoder_embed_path)
-        src_embed_tokens = build_embedding(
-            src_dict, args.decoder_embed_dim, args.auxiliary_decoder_embed_path)
-        encoder = ConvolutionalTransformerEncoder(
-            args, tgt_dict, audio_features=args.input_feat_per_channel)
-        decoder = TransformerDecoder(args, tgt_dict, target_embed_tokens)
-        auxiliary_decoder = TransformerDecoder(args, src_dict, src_embed_tokens)
-        return ConvolutionalTransformer2Stage(encoder, decoder, auxiliary_decoder)
+        target_embed_tokens = build_embedding(tgt_dict, args.decoder_embed_dim)
+        src_embed_tokens = build_embedding(src_dict, args.decoder_embed_dim)
+        encoder = S2TTransformerEncoder(args, tgt_dict)
+        decoder = TransformerDecoderScriptable(args, tgt_dict, target_embed_tokens)
+        auxiliary_decoder = TransformerDecoderScriptable(args, src_dict, src_embed_tokens)
+        return S2TTransformer2Stage(encoder, decoder, auxiliary_decoder)
 
     # In "speech_translation_with_transcription" the transcripts are read into
     # "transcript_target". Not the most elegant solution, but it allows
     # compatibility with existing code.
     def get_auxiliary_target(self, sample, auxiliary_output):
-        return sample["transcript_target"]
+        return sample["transcript"]
 
     def get_auxiliary_token_lens(self, sample):
-        return sample["transcript_target_lengths"]
+        return sample["transcript_lengths"]
 
-    def forward(self, src_tokens, src_lengths, prev_output_tokens, transcript_prev_output_tokens, **kwargs):
+    def forward(self, src_tokens, src_lengths, prev_output_tokens, prev_transcript_tokens, **kwargs):
         encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
         auxiliary_out = self.auxiliary_decoder(
-            transcript_prev_output_tokens, encoder_out=encoder_out, features_only=True)
-        auxiliary_padding_mask = transcript_prev_output_tokens.eq(
+            prev_transcript_tokens, encoder_out=encoder_out, features_only=True)
+        auxiliary_padding_mask = prev_transcript_tokens.eq(
             self.auxiliary_decoder.padding_idx)
         decoder_out = self.decoder(
             prev_output_tokens,
@@ -116,19 +106,18 @@ def Embedding(num_embeddings, embedding_dim, padding_idx):
     return m
 
 
-@register_model_architecture('conv_transformer_2stage', 'conv_transformer_2stage')
+@register_model_architecture('s2t_transformer_2stage', 's2t_transformer_2stage')
 def base_multilingual_architecture(args):
     base_architecture(args)
-    args.auxiliary_decoder_embed_path = getattr(args, "auxiliary_decoder_embed_path", None)
 
 
-@register_model_architecture('conv_transformer_2stage', 'conv_transformer_2stage_big')
-def speechtransformer_multilingual_big(args):
-    speechtransformer_big(args)
-    args.auxiliary_decoder_embed_path = getattr(args, "auxiliary_decoder_embed_path", None)
+@register_model_architecture('s2t_transformer_2stage', 's2t_transformer_2stage_s')
+def s2t_transformer_2stage_m(args):
+    s2t_transformer_s(args)
 
 
-@register_model_architecture('conv_transformer_2stage', 'conv_transformer_2stage_big2')
-def speechtransformer_multilingual_big2(args):
-    speechtransformer_big2(args)
-    args.auxiliary_decoder_embed_path = getattr(args, "auxiliary_decoder_embed_path", None)
+@register_model_architecture('s2t_transformer_2stage', 's2t_transformer_2stage_m')
+def s2t_transformer_2stage_m(args):
+    s2t_transformer_m(args)
+
+

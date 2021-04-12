@@ -11,7 +11,7 @@ from fairseq import search
 from fairseq.models.fairseq_encoder import EncoderOut
 from torch import Tensor
 
-from fairseq.sequence_generator import SequenceGenerator, EnsembleModel, BeamContainer
+from fairseq.sequence_generator import SequenceGenerator, EnsembleModel
 
 
 class HierarchicalBeamSearch(search.BeamSearch):
@@ -462,14 +462,13 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
 
         # sort by score descending
         for sent in range(len(finalized)):
-            # make into beam container
-            BCList = [
-                BeamContainer(elem["score"].item(), elem) for elem in finalized[sent]
-            ]
-            BCList.sort()
-            BCList.reverse()
+            scores = torch.tensor(
+                [float(elem["score"].item()) for elem in finalized[sent]]
+            )
+            _, sorted_scores_indices = torch.sort(scores, descending=True)
+            finalized[sent] = [finalized[sent][ssi] for ssi in sorted_scores_indices]
             finalized[sent] = torch.jit.annotate(
-                List[Dict[str, Tensor]], [x.elem for x in BCList]
+                List[Dict[str, Tensor]], finalized[sent]
             )
 
         return finalized
