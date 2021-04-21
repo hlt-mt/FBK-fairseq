@@ -62,7 +62,6 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
         normalize_scores=True,
         len_penalty=1.0,
         unk_penalty=0.0,
-        retain_dropout=False,
         temperature=1.0,
         match_source_len=False,
         no_repeat_ngram_size=0,
@@ -102,7 +101,6 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             normalize_scores=normalize_scores,
             len_penalty=len_penalty,
             unk_penalty=unk_penalty,
-            retain_dropout=retain_dropout,
             temperature=temperature,
             match_source_len=match_source_len,
             no_repeat_ngram_size=no_repeat_ngram_size,
@@ -128,6 +126,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             self,
             sample: Dict[str, Dict[str, Tensor]],
             prefix_tokens: Optional[Tensor] = None,
+            constraints: Optional[Tensor] = None,
             bos_token: Optional[int] = None,
     ):
         net_input = sample["net_input"]
@@ -175,6 +174,13 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
         prefix_tokens: Optional[Tensor] = None,
         bos_token: Optional[int] = None,
     ):
+        incremental_states = torch.jit.annotate(
+            List[Dict[str, Dict[str, Optional[Tensor]]]],
+            [
+                torch.jit.annotate(Dict[str, Dict[str, Optional[Tensor]]], {})
+                for i in range(self.model.models_size)
+            ],
+        )
         # bsz: total number of sentences in beam
         bsz = len(aux_nbest)
         beam_size = self.beam_size
@@ -275,7 +281,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                     reorder_state.view(-1, beam_size).add_(
                         corr.unsqueeze(-1) * beam_size
                     )
-                self.model.reorder_incremental_state(reorder_state)
+                self.model.reorder_incremental_state(incremental_states, reorder_state)
                 encoder_outs = self.model.reorder_encoder_out(
                     encoder_outs, reorder_state
                 )
@@ -284,7 +290,12 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                 auxiliary_outputs = auxiliary_outputs.index_select(0, reorder_state)
 
             lprobs, avg_attn_scores = self.model.forward_decoder(
-                tokens[:, : step + 1], encoder_outs, src_tokens, auxiliary_outputs, self.temperature
+                tokens[:, : step + 1],
+                encoder_outs,
+                incremental_states,
+                src_tokens,
+                auxiliary_outputs,
+                self.temperature
             )
             lprobs[lprobs != lprobs] = torch.tensor(-math.inf).to(lprobs)
 
@@ -480,6 +491,13 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
         prefix_tokens: Optional[Tensor] = None,
         bos_token: Optional[int] = None,
     ):
+        auxiliary_incremental_states = torch.jit.annotate(
+            List[Dict[str, Dict[str, Optional[Tensor]]]],
+            [
+                torch.jit.annotate(Dict[str, Dict[str, Optional[Tensor]]], {})
+                for _ in range(self.model.models_size)
+            ],
+        )
         net_input = sample["net_input"]
         # TODO: should not use audio features...
         src_tokens = net_input["src_tokens"]
@@ -554,14 +572,14 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                     reorder_state.view(-1, beam_size).add_(
                         corr.unsqueeze(-1) * beam_size
                     )
-                self.model.reorder_auxiliary_incremental_state(reorder_state)
+                self.model.reorder_auxiliary_incremental_state(auxiliary_incremental_states, reorder_state)
                 encoder_outs = self.model.reorder_encoder_out(
                     encoder_outs, reorder_state
                 )
                 aux_outputs = aux_outputs.index_select(1, reorder_state)
 
             lprobs, aux_out, avg_attn_scores = self.model.forward_auxiliary_decoder(
-                aux_tokens[:, : step + 1], encoder_outs, self.temperature
+                aux_tokens[:, : step + 1], encoder_outs, auxiliary_incremental_states, self.temperature
             )
             if step == 0:
                 # We need to initialize this here as we don't know the last dimension (C)
@@ -996,33 +1014,11 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
 class EnsembleTwoPhaseModel(EnsembleModel):
     """A wrapper around an ensemble of models."""
 
-    auxiliary_incremental_states: List[Dict[str, Dict[str, Optional[Tensor]]]]
-
-    def __init__(self, models):
-        super().__init__(models)
-        self.auxiliary_incremental_states = torch.jit.annotate(
-            List[Dict[str, Dict[str, Optional[Tensor]]]],
-            [
-                torch.jit.annotate(Dict[str, Dict[str, Optional[Tensor]]], {})
-                for _ in range(self.models_size)
-            ],
-        )
-
-    def reset_incremental_state(self):
-        super().reset_incremental_state()
-        self.auxiliary_incremental_states = torch.jit.annotate(
-            List[Dict[str, Dict[str, Optional[Tensor]]]],
-            [
-                torch.jit.annotate(Dict[str, Dict[str, Optional[Tensor]]], {})
-                for _ in range(self.models_size)
-            ],
-        )
-        return
-
     @torch.jit.export
     def forward_decoder(
             self, tokens,
             encoder_outs: List[EncoderOut],
+            incremental_states,
             aux_tokens: Tensor,
             aux_decoder_out: Tensor,
             temperature: float = 1.0
@@ -1040,7 +1036,7 @@ class EnsembleTwoPhaseModel(EnsembleModel):
                     auxiliary_out=aux_decoder_out,
                     auxiliary_tokens=aux_tokens,
                     encoder_out=encoder_out,
-                    incremental_state=self.incremental_states[i],
+                    incremental_state=incremental_states[i],
                 )
             else:
                 decoder_out = model.forward_decoder(
@@ -1089,17 +1085,17 @@ class EnsembleTwoPhaseModel(EnsembleModel):
         return avg_probs, avg_attn
 
     @torch.jit.export
-    def reorder_auxiliary_incremental_state(self, new_order):
+    def reorder_auxiliary_incremental_state(self, auxiliary_incremental_states, new_order):
         if not self.has_incremental_states():
             return
         for i, model in enumerate(self.models):
-            model.auxiliary_decoder.reorder_incremental_state(
-                self.auxiliary_incremental_states[i], new_order
+            model.auxiliary_decoder.reorder_incremental_state_scripting(
+                auxiliary_incremental_states[i], new_order
             )
 
     @torch.jit.export
     def forward_auxiliary_decoder(
-        self, tokens, encoder_outs: List[EncoderOut], temperature: float = 1.0
+        self, tokens, encoder_outs: List[EncoderOut], auxiliary_incremental_states, temperature: float = 1.0
     ):
         log_probs = []
         outs = []
@@ -1113,7 +1109,7 @@ class EnsembleTwoPhaseModel(EnsembleModel):
                 decoder_out = model.auxiliary_decoder.forward(
                     tokens,
                     encoder_out=encoder_out,
-                    incremental_state=self.auxiliary_incremental_states[i],
+                    incremental_state=auxiliary_incremental_states[i],
                     features_only=True,
                 )
             else:

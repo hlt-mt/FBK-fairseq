@@ -2,7 +2,6 @@ from typing import Optional, Dict, Any, List
 
 from torch import nn, Tensor
 import torch
-from torch.nn import functional as F
 
 from examples.speech_to_text.models.s2t_transformer_fbk import S2TTransformerModel, base_architecture, \
     s2t_transformer_m, s2t_transformer_s, S2TTransformerEncoder

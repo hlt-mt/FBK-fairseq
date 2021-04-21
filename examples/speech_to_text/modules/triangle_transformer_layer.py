@@ -7,11 +7,9 @@ from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from fairseq import utils
 from fairseq.modules import LayerNorm, MultiheadAttention, TransformerDecoderLayer
-from fairseq.modules.quant_noise import quant_noise
 from torch import Tensor
+
 
 class TriangleTransformerDecoderLayer(TransformerDecoderLayer):
     """Decoder layer block.
@@ -207,16 +205,3 @@ class TriangleTransformerDecoderLayer(TransformerDecoderLayer):
                 self_attn_state = [saved_state["prev_key"], saved_state["prev_value"]]
             return x, attn_to_ret, self_attn_state
         return x, attn_to_ret, None
-
-    @torch.jit.export
-    def reorder_incremental_state(
-        self,
-        incremental_state: Dict[str, Dict[str, Optional[Tensor]]],
-        new_order: Tensor,
-    ):
-        """Scriptable reorder incremental state in transformer layers."""
-        self.self_attn.reorder_incremental_state(incremental_state, new_order)
-
-        if self.encoder_attn is not None:
-            self.encoder_attn.reorder_incremental_state(incremental_state, new_order)
-        self.aux_decoder_attn.reorder_incremental_state(incremental_state, new_order)
