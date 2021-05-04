@@ -17,6 +17,7 @@ import sentencepiece as sp
 from fairseq.data.audio.audio_utils import _get_kaldi_fbank, _get_torchaudio_fbank
 from tqdm import tqdm
 import regex as re
+import string
 
 
 UNK_TOKEN, UNK_TOKEN_ID = "<unk>", 3
@@ -385,4 +386,4 @@ class S2TDataConfigWriter(object):
 
 
 def asr_normalize(text):
-    return " ".join(re.sub('[^A-Za-z0-9]+', ' ', text).lower().split())
+    return " ".join(re.sub(r'\([^ ]*\)', '', text).translate(str.maketrans('', '', string.punctuation)).lower().split())

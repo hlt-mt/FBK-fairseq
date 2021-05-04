@@ -89,7 +89,7 @@ class YamlDataset(Dataset):
 def process(args):
     save_root = Path(args.save_dir).absolute()
     data_dir = Path(args.data_root).absolute()
-    if not save_root.is_dir():
+    if not data_dir.is_dir():
         print(f"{data_dir.as_posix()} does not exist. Skipped.")
 
     # Extract features
@@ -160,7 +160,7 @@ def process(args):
         if args.vocab_file_src == "none":
             spm_filename_prefix_src = f"spm_{args.vocab_type}{v_size_str}_{args.task}_source"
             with NamedTemporaryFile(mode="w") as f:
-                for t in train_text:
+                for t in train_text_src:
                     f.write(t + "\n")
                 gen_vocab(
                     Path(f.name),
