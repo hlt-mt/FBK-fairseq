@@ -225,6 +225,9 @@ class S2TLinformerModel(FairseqEncoderDecoderModel):
         parser.add_argument('--transformer-after-compression', default=False, action='store_true',
                             help='whether or not using classic transformer encoder layers after ctc compression '
                                  'instead of linformer encoder layers')
+        parser.add_argument('--allow-partial-encoder-loading', action='store_true', default=False,
+                            help="if set, the model is restored even if it doesn't match exactly"
+                                 "the architecture, ie. some params are missing.")
 
     @classmethod
     def build_encoder(cls, args, dictionary):
@@ -415,7 +418,7 @@ class S2TLinformerEncoder(FairseqEncoder):
                 x_ctc = self.ctc_fc(x)
                 if self.ctc_compress_method != "none":
                     x, input_lengths = self.average_same_ctc_features(x_ctc, x, input_lengths)
-                encoder_padding_mask = lengths_to_padding_mask(input_lengths)
+                    encoder_padding_mask = lengths_to_padding_mask(input_lengths)
             if return_all_hiddens:
                 assert encoder_states is not None
                 encoder_states.append(x)
