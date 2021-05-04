@@ -217,6 +217,8 @@ class S2TLinformerModel(FairseqEncoderDecoderModel):
         parser.add_argument('--ctc-compress-strategy', type=str, default="none",
                             choices=['none', 'avg', 'weighted', 'softmax'],
                             help="Strategy to use when compressing CTC output")
+        parser.add_argument('--add-position-to-ctc', action='store_true',
+                            help="Add positional embedding after CTC compression")
         parser.add_argument('--freeze-pretrained', action='store_true',
                             help='TO BE IMPLEMENTED: if set, all params loaded from the pretrained model are freezed')
         parser.add_argument('--distance-penalty', type=str, default=False,
@@ -364,6 +366,7 @@ class S2TLinformerEncoder(FairseqEncoder):
                 self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
             else:
                 self.ctc_compress_method = "none"
+            self.ctc_compress_add_pos = args.add_position_to_ctc
 
     def build_linformer_encoder_layer(self, args):
         if args.shared_layer_kv_compressed == 1 and self.compress_layer is None:
@@ -419,6 +422,9 @@ class S2TLinformerEncoder(FairseqEncoder):
                 if self.ctc_compress_method != "none":
                     x, input_lengths = self.average_same_ctc_features(x_ctc, x, input_lengths)
                     encoder_padding_mask = lengths_to_padding_mask(input_lengths)
+                    if self.ctc_compress_add_pos:
+                        positions = self.embed_positions(encoder_padding_mask).transpose(0, 1)
+                        x += positions
             if return_all_hiddens:
                 assert encoder_states is not None
                 encoder_states.append(x)
