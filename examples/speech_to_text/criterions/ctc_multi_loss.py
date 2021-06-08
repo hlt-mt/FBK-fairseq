@@ -165,6 +165,7 @@ class CTCMultiLoss(LegacyFairseqCriterion):
 
         logging_output = {
             "loss": utils.item(loss.data) if reduce else loss.data,
+            "real_loss": real_logging_output['loss'],
             "ctc_loss": ctc_logging_output['loss'],
             "ntokens": real_logging_output['ntokens'],
             "nsentences": real_logging_output['nsentences'],
@@ -182,6 +183,7 @@ class CTCMultiLoss(LegacyFairseqCriterion):
     def reduce_metrics(logging_outputs):
         """Aggregate logging outputs from data parallel training."""
         loss_sum = utils.item(sum(log.get('loss', 0) for log in logging_outputs))
+        real_loss_sum = utils.item(sum(log.get('real_loss', 0) for log in logging_outputs))
         ctc_loss_sum = utils.item(sum(log.get('ctc_loss', 0) for log in logging_outputs))
         if logging_outputs and 'nll_loss' in logging_outputs[0]:
             nll_loss_sum = utils.item(sum(log.get('nll_loss', 0) for log in logging_outputs))
@@ -193,4 +195,5 @@ class CTCMultiLoss(LegacyFairseqCriterion):
         metrics.log_scalar('loss', loss_sum / sample_size / math.log(2), sample_size, round=3)
         metrics.log_scalar('nll_loss', nll_loss_sum / ntokens / math.log(2), ntokens, round=3)
         metrics.log_derived('ppl', lambda meters: utils.get_perplexity(meters['nll_loss'].avg))
+        metrics.log_scalar('real_loss', real_loss_sum / sample_size / math.log(2), sample_size, round=3)
         metrics.log_scalar('ctc_loss', ctc_loss_sum / sample_size / math.log(2), sample_size, round=3)

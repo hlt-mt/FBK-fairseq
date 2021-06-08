@@ -192,7 +192,8 @@ class SpeechToTextDatasetKD(SpeechToTextDatasetWithSrc):
             "ntokens_transcript": ntokens_transcript,
             "nsentences": len(samples),
             # correct reordering with new batch order
-            "teacher_output": [torch.stack(idxs).index_select(0, order), torch.stack(probs).index_select(0, order)],
+            "teacher_output": [torch.stack(idxs).index_select(0, order),
+                               torch.stack(probs).index_select(0, order)],
         }
         return out
 
