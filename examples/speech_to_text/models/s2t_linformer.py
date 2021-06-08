@@ -624,6 +624,8 @@ def base_architecture(args):
     args.conv_kernel_sizes = getattr(args, "conv_kernel_sizes", "5,5")
     args.conv_channels = getattr(args, "conv_channels", 1024)
 
+    args.add_position_to_ctc = getattr(args, "add_poistion_to_ctc", False)
+
     # TODO
     args.distance_penalty = getattr(args, 'distance_penalty', False)
 
