@@ -4,7 +4,7 @@ from torch import nn, Tensor
 import torch
 
 from examples.speech_to_text.models.s2t_transformer_fbk import S2TTransformerModel, base_architecture, \
-    s2t_transformer_m, s2t_transformer_s, S2TTransformerEncoder
+    s2t_transformer_m, s2t_transformer_s
 from examples.speech_to_text.models.multi_task import MultiTaskModel
 from examples.speech_to_text.modules.triangle_transformer_layer import TriangleTransformerDecoderLayer
 from fairseq.models import register_model, register_model_architecture
@@ -51,7 +51,7 @@ class S2TTransformerTriangle(MultiTaskModel):
 
         target_embed_tokens = build_embedding(tgt_dict, args.decoder_embed_dim)
         src_embed_tokens = build_embedding(src_dict, args.decoder_embed_dim)
-        encoder = S2TTransformerEncoder(args, tgt_dict)
+        encoder = S2TTransformerModel.build_encoder(args, src_dict if src_dict is not None else tgt_dict)
         decoder = TriangleTransformerDecoder(args, tgt_dict, target_embed_tokens)
         auxiliary_decoder = TransformerDecoderScriptable(args, src_dict, src_embed_tokens)
         return S2TTransformerTriangle(encoder, decoder, auxiliary_decoder)
