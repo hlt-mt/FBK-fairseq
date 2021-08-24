@@ -173,8 +173,8 @@ def gen_config_yaml_with_src(
 ):
     manifest_root = manifest_root.absolute()
     writer = S2TDataConfigWriter(manifest_root / yaml_filename)
-    writer.set_vocab_filename(spm_filename.replace(".model", ".txt"))
-    writer.set_vocab_filename_src(spm_filename_src.replace(".model", ".txt"))
+    writer.set_vocab_filename((manifest_root / spm_filename.replace(".model", ".txt")).as_posix())
+    writer.set_vocab_filename_src((manifest_root / spm_filename_src.replace(".model", ".txt")).as_posix())
     writer.set_input_channels(1)
     writer.set_input_feat_per_channel(n_mel_bins)
     specaugment_setters = {
