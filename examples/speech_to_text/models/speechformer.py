@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 
+# Copyright 2021 FBK
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License
+
 import logging
 import math
 from itertools import groupby
@@ -10,8 +24,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from examples.speech_to_text.modules.linformer_encoder_layer import LinformerEncoderLayer
-from fairseq import checkpoint_utils, utils
+from examples.speech_to_text.modules.speechformer_encoder_layer import SpeechformerEncoderLayer
+from fairseq import checkpoint_utils
 from fairseq.data.data_utils import lengths_to_padding_mask
 from fairseq.models import (
     FairseqEncoder,
@@ -19,7 +33,8 @@ from fairseq.models import (
     register_model,
     register_model_architecture,
 )
-from fairseq.models.speech_to_text.s2t_transformer import TransformerDecoderScriptable, Conv1dSubsampler
+from fairseq.models.speech_to_text.s2t_transformer import TransformerDecoderScriptable, Conv1dSubsampler, \
+    S2TTransformerModel
 from fairseq.models.transformer import Embedding
 from fairseq.modules import (
     FairseqDropout,
@@ -29,7 +44,7 @@ from fairseq.modules import (
 
 logger = logging.getLogger(__name__)
 
-class Conv1dSubsamplerLinformer(Conv1dSubsampler):
+class InitialConv1dBlock(Conv1dSubsampler):
     def __init__(
         self,
         in_channels: int,
@@ -58,182 +73,76 @@ class Conv1dSubsamplerLinformer(Conv1dSubsampler):
             out = ((out.float() - 1) / self.stride + 1).floor().long()
         return out
 
-@register_model("s2t_linformer")
-class S2TLinformerModel(FairseqEncoderDecoderModel):
+@register_model("speechformer")
+class SpeechformerModel(FairseqEncoderDecoderModel):
 
     def __init__(self, encoder, decoder):
         super().__init__(encoder, decoder)
 
     @staticmethod
     def add_args(parser):
+        S2TTransformerModel.add_args(parser)
         """Add model-specific arguments to the parser."""
-        # Transformer
         parser.add_argument(
-            "--activation-fn",
-            type=str,
-            default="relu",
-            choices=utils.get_available_activation_fns(),
-            help="activation function to use",
-        )
-        parser.add_argument(
-            "--dropout", type=float, metavar="D", help="dropout probability"
-        )
-        parser.add_argument(
-            "--attention-dropout",
-            type=float,
-            metavar="D",
-            help="dropout probability for attention weights",
-        )
-        parser.add_argument(
-            "--activation-dropout",
-            "--relu-dropout",
-            type=float,
-            metavar="D",
-            help="dropout probability after activation in FFN.",
-        )
-        parser.add_argument(
-            "--encoder-embed-dim",
-            type=int,
-            metavar="N",
-            help="encoder embedding dimension",
-        )
-        parser.add_argument(
-            "--encoder-ffn-embed-dim",
-            type=int,
-            metavar="N",
-            help="encoder embedding dimension for FFN",
-        )
-        parser.add_argument(
-            "--encoder-layers", type=int, metavar="N", help="num encoder layers"
-        )
-        parser.add_argument(
-            "--encoder-attention-heads",
-            type=int,
-            metavar="N",
-            help="num encoder attention heads",
-        )
-        parser.add_argument(
-            "--encoder-normalize-before",
-            action="store_true",
-            help="apply layernorm before each encoder block",
-        )
-        parser.add_argument(
-            "--decoder-embed-dim",
-            type=int,
-            metavar="N",
-            help="decoder embedding dimension",
-        )
-        parser.add_argument(
-            "--decoder-ffn-embed-dim",
-            type=int,
-            metavar="N",
-            help="decoder embedding dimension for FFN",
-        )
-        parser.add_argument(
-            "--decoder-layers", type=int, metavar="N", help="num decoder layers"
-        )
-        parser.add_argument(
-            "--decoder-attention-heads",
-            type=int,
-            metavar="N",
-            help="num decoder attention heads",
-        )
-        parser.add_argument(
-            "--decoder-normalize-before",
-            action="store_true",
-            help="apply layernorm before each decoder block",
-        )
-        parser.add_argument(
-            "--share-decoder-input-output-embed",
-            action="store_true",
-            help="share decoder input and output embeddings",
-        )
-        parser.add_argument(
-            "--layernorm-embedding",
-            action="store_true",
-            help="add layernorm to embedding",
-        )
-        parser.add_argument(
-            "--no-scale-embedding",
-            action="store_true",
-            help="if True, dont scale embeddings",
-        )
-        parser.add_argument(
-            "--load-pretrained-encoder-from",
-            type=str,
-            metavar="STR",
-            help="model to take encoder weights from (for initialization)",
-        )
-        # Linformer
-        parser.add_argument(
-            "--compressed", type=int, help="compressed ratio of sequence length"
+            "--compressed", type=int, default=4,
+            help="compression factor"
         )
         parser.add_argument(
             "--shared-kv-compressed",
-            type=int,
+            default=True, action='store_true',
             help="share compressed matrix between k and v, in each layer",
         )
         parser.add_argument(
             "--shared-layer-kv-compressed",
-            type=int,
+            default=True, action='store_true',
             help="share compressed matrix between k and v and across all layers",
         )
         parser.add_argument(
             "--freeze-compress",
-            type=int,
+            default=False, action='store_true',
             help="freeze the parameters in compressed layer",
         )
         parser.add_argument(
             "--compress-kernel-size",
             type=int,
-            help="kernel size of the convolution used to compress the sequence length in Linear MHA. "
+            help="kernel size of the convolution used to compress the sequence length in the ConvAttn. "
                  "Note: it should be higher than (--compressed) parameter",
+        )
+        parser.add_argument(
+            '--ctc-compress-strategy', type=str, default="none",
+            choices=['none', 'avg', 'weighted', 'softmax'],
+            help="strategy to use when compressing the CTC output"
+        )
+        parser.add_argument(
+            '--add-position-to-ctc', action='store_true',
+            help="Add positional embedding after CTC compression"
+        )
+        parser.add_argument(
+            '--transformer-after-compression', default=False, action='store_true',
+            help='whether or not using standard TransformerEncoder layers after CTC compression '
+            'instead of ConvAttention Encoder layers')
+        parser.add_argument(
+            '--allow-partial-encoder-loading', action='store_true', default=False,
+            help="if set, the model is restored even if it doesn't match exactly"
+            "the architecture, ie. some params are missing."
         )
         # Initial convolutional layer (optional)
         parser.add_argument(
             "--CNN-first-layer",
-            action="store_true",
-            help="if enabled, substitutes the initial linear layer with a couple of convolutional layers"
-        )
-        parser.add_argument(
-            "--conv-kernel-sizes",
-            type=str,
-            metavar="N",
-            help="kernel sizes of Conv1d subsampling layers",
-        )
-        parser.add_argument(
-            "--conv-channels",
-            type=int,
-            metavar="N",
-            help="# of channels in Conv1d subsampling layers",
+            default=True, action="store_true",
+            help="if enabled, substitutes the initial linear layer with a couple of 1D "
+                 "Convolutional layers"
         )
         parser.add_argument(
             "--stride",
             type=int,
             default=1,
-            help="stride value in Conv1d subsampling layers"
+            help="stride value in the initial Conv1d block"
         )
-        # fbk
-        parser.add_argument('--ctc-compress-strategy', type=str, default="none",
-                            choices=['none', 'avg', 'weighted', 'softmax'],
-                            help="Strategy to use when compressing CTC output")
-        parser.add_argument('--add-position-to-ctc', action='store_true',
-                            help="Add positional embedding after CTC compression")
-        parser.add_argument('--freeze-pretrained', action='store_true',
-                            help='TO BE IMPLEMENTED: if set, all params loaded from the pretrained model are freezed')
-        parser.add_argument('--distance-penalty', type=str, default=False,
-                            choices=['log', 'gauss'],
-                            help='TO BE IMPLEMENTED: Add distance penalty to the encoder')
-        parser.add_argument('--transformer-after-compression', default=False, action='store_true',
-                            help='whether or not using classic transformer encoder layers after ctc compression '
-                                 'instead of linformer encoder layers')
-        parser.add_argument('--allow-partial-encoder-loading', action='store_true', default=False,
-                            help="if set, the model is restored even if it doesn't match exactly"
-                                 "the architecture, ie. some params are missing.")
 
     @classmethod
     def build_encoder(cls, args, dictionary):
-        encoder = S2TLinformerEncoder(args, dictionary)
+        encoder = SpeechformerEncoder(args, dictionary)
         if getattr(args, "load_pretrained_encoder_from", None):
             encoder = checkpoint_utils.load_pretrained_component_from_model(
                 component=encoder, checkpoint=args.load_pretrained_encoder_from,
@@ -251,9 +160,6 @@ class S2TLinformerModel(FairseqEncoderDecoderModel):
 
     @classmethod
     def build_model(cls, args, task):
-        """Build a new model instance."""
-
-        # make sure all arguments are present in older models
         base_architecture(args)
 
         src_dict, tgt_dict = task.source_dictionary, task.target_dictionary
@@ -282,11 +188,6 @@ class S2TLinformerModel(FairseqEncoderDecoderModel):
         return lprobs
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
-        """
-        The forward method inherited from the base class has a **kwargs
-        argument in its input, which is not supported in torchscript. This
-        method overrites the forward method definition without **kwargs.
-        """
         encoder_out = self.encoder(src_tokens=src_tokens, src_lengths=src_lengths, return_all_hiddens=True)
         decoder_out = self.decoder(
             prev_output_tokens=prev_output_tokens, encoder_out=encoder_out
@@ -297,12 +198,23 @@ class S2TLinformerModel(FairseqEncoderDecoderModel):
             return decoder_out
 
 
-class S2TLinformerEncoder(FairseqEncoder):
-    """Speech-to-text Transformer encoder that consists of input subsampler and
-    Transformer encoder."""
+class SpeechformerEncoder(FairseqEncoder):
+    """Speechformer encoder
+    It consists of:
+        - if --CNN-first-layer parameter is enabled, a block of 2 1D Convolutional layers is
+        inserted, otherwise a Linear layer is used to adapt the input dimension to the
+        Speechformer embedding dimension
+        - if --transformer-after-compression is set the standard TransformerEncoder layers are
+        inserted after the CTC compression layer, otherwise the PlainConvattention architecture
+        is obtained
+
+    To use the Speechformer architecture of the paper "Speechformer: Reducing Information
+    Loss in Direct Speech Translation", both --CNN-first-layer and --transformer-after-compression
+    have to be enabled. To use the PlainConvattention architecture, only --CNN-first-layer has
+    to be set.
+    """
 
     def __init__(self, args, dictionary):
-        # Initialize linformer parameters
         self.compress_layer = None
         self.CNN_first_layer = args.CNN_first_layer
 
@@ -317,8 +229,7 @@ class S2TLinformerEncoder(FairseqEncoder):
         self.padding_idx = 1
 
         if self.CNN_first_layer:
-            # Convolutional layers
-            self.subsample = Conv1dSubsamplerLinformer(
+            self.CNNblock = InitialConv1dBlock(
                 args.input_feat_per_channel * args.input_channels,
                 args.conv_channels,
                 args.encoder_embed_dim,
@@ -326,34 +237,28 @@ class S2TLinformerEncoder(FairseqEncoder):
                 [int(k) for k in args.conv_kernel_sizes.split(",")],
             )
         else:
-            # Linear layer which adapts the input dimension to the linformer dimension
             self.linear_layer = nn.Linear(args.input_feat_per_channel * args.input_channels, args.encoder_embed_dim)
 
         self.embed_positions = PositionalEmbedding(
             args.max_source_positions, args.encoder_embed_dim, self.padding_idx
         )
 
-        # Linformer
         assert args.compress_kernel_size >= args.compressed
         if args.transformer_after_compression:
-            self.linformer_layers = nn.ModuleList(
-                [self.build_linformer_encoder_layer(args) for _ in range(args.ctc_encoder_layer)]
+            self.speechformer_layers = nn.ModuleList(
+                [self.build_speechformer_encoder_layer(args) for _ in range(args.ctc_encoder_layer)]
             )
-            self.linformer_layers.extend(
+            self.speechformer_layers.extend(
                 [TransformerEncoderLayer(args) for _ in range(args.encoder_layers - args.ctc_encoder_layer)]
             )
         else:
-            self.linformer_layers = nn.ModuleList(
-                [self.build_linformer_encoder_layer(args) for _ in range(args.encoder_layers)]
+            self.speechformer_layers = nn.ModuleList(
+                [self.build_speechformer_encoder_layer(args) for _ in range(args.encoder_layers)]
             )
         if args.encoder_normalize_before:
             self.layer_norm = LayerNorm(args.encoder_embed_dim)
         else:
             self.layer_norm = None
-
-        #TODO: distance penalty
-        if args.distance_penalty == True:
-            args.distance_penalty = 'log'
 
         # ctc
         self.ctc_flag = False
@@ -368,7 +273,7 @@ class S2TLinformerEncoder(FairseqEncoder):
                 self.ctc_compress_method = "none"
             self.ctc_compress_add_pos = args.add_position_to_ctc
 
-    def build_linformer_encoder_layer(self, args):
+    def build_speechformer_encoder_layer(self, args):
         if args.shared_layer_kv_compressed == 1 and self.compress_layer is None:
             compress_layer = nn.Conv1d(
                 args.encoder_embed_dim,
@@ -383,7 +288,7 @@ class S2TLinformerEncoder(FairseqEncoder):
                 compress_layer.weight.requires_grad = False
             self.compress_layer = compress_layer
 
-        return LinformerEncoderLayer(args, self.compress_layer)
+        return SpeechformerEncoderLayer(args, self.compress_layer)
 
     @torch.jit.unused
     def forward_non_torchscript(self, net_input: Dict[str, Tensor]):
@@ -394,7 +299,7 @@ class S2TLinformerEncoder(FairseqEncoder):
 
     def forward(self, src_tokens, src_lengths, return_all_hiddens: bool = False, **kwargs):
         if self.CNN_first_layer:
-            x, input_lengths = self.subsample(src_tokens, src_lengths)
+            x, input_lengths = self.CNNblock(src_tokens, src_lengths)
         else:
             x = self.linear_layer(src_tokens)
             input_lengths = src_lengths
@@ -414,7 +319,7 @@ class S2TLinformerEncoder(FairseqEncoder):
 
         x_ctc = None
         ctc_lengths = input_lengths
-        for l_idx, layer in enumerate(self.linformer_layers):
+        for l_idx, layer in enumerate(self.speechformer_layers):
             x = layer(x, encoder_padding_mask)
             # ctc
             if self.ctc_flag and self.ctc_layer == l_idx + 1:
@@ -467,18 +372,6 @@ class S2TLinformerEncoder(FairseqEncoder):
         return compressed_output.permute(2, 0, 1), src_lengths.new(new_lengths)
 
     def reorder_encoder_out(self, encoder_out, new_order):
-        """
-            Reorder encoder output according to *new_order*.
-
-            Args:
-                encoder_out: output from the ``forward()`` method
-                new_order (LongTensor): desired order
-
-            Returns:
-                *encoder_out* rearranged according to *new_order*
-
-            The other things reordered a.t.m. are not mandatory
-        """
         new_encoder_out = (
             [] if len(encoder_out["encoder_out"]) == 0
             else [x.index_select(1, new_order) for x in encoder_out["encoder_out"]]
@@ -569,10 +462,8 @@ class CTCCompressStrategy:
         return weights_matrix
 
 
-@register_model_architecture(model_name="s2t_linformer", arch_name="s2t_linformer")
+@register_model_architecture(model_name="speechformer", arch_name="speechformer")
 def base_architecture(args):
-    # Transformer
-    # TODO: transformer parms
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 2048)
     args.encoder_layers = getattr(args, "encoder_layers", 12)
@@ -608,30 +499,26 @@ def base_architecture(args):
     args.quant_noise_pq = getattr(args, "quant_noise_pq", 0)
     args.quant_noise_pq_block_size = getattr(args, "quant_noise_pq_block_size", 8)
     args.max_seq_len = getattr(args, "max_seq_len", 4096)
+    args.add_position_to_ctc = getattr(args, "add_position_to_ctc", False)
 
-    """
-    Linformer default parameters, assuming max_seq_len=512, best result was achieved with k=256 which implies a 
-    compression factor ("compressed" arg) of 2 and layerwise sharing ("shared_kv_compressed" and 
-    "shared_layer_kv_compressed" set to 1).
-    """
-    args.compressed = getattr(args, "compressed", 16)
-    args.shared_kv_compressed = getattr(args, "shared_kv_compressed", 1)
-    args.shared_layer_kv_compressed = getattr(args, "shared_layer_kv_compressed", 1)
-    args.freeze_compress = getattr(args, "freeze_compress", 0)
-    args.compress_kernel_size = getattr(args, "compress_kernel_size", 16)
+    # Compression parameters
+    args.compressed = getattr(args, "compressed", 4)
+    args.shared_kv_compressed = getattr(args, "shared_kv_compressed", True)
+    args.shared_layer_kv_compressed = getattr(args, "shared_layer_kv_compressed", True)
+    args.freeze_compress = getattr(args, "freeze_compress", False)
+    args.compress_kernel_size = getattr(args, "compress_kernel_size", 8)
+    args.CNN_first_layer = getattr(args, "CNN_first_layer", True)
 
     # Optional convolution layers parameters
     args.conv_kernel_sizes = getattr(args, "conv_kernel_sizes", "5,5")
     args.conv_channels = getattr(args, "conv_channels", 1024)
-
-    args.add_position_to_ctc = getattr(args, "add_position_to_ctc", False)
-
-    # TODO
-    args.distance_penalty = getattr(args, 'distance_penalty', False)
+    args.stride = getattr(args, "stride", 1)
 
 
-@register_model_architecture("s2t_linformer", "s2t_linformer_s")
-def s2t_transformer_s(args):
+
+
+@register_model_architecture("speechformer", "speechformer_s")
+def speechformer_s(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 256)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 256 * 8)
     args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 4)
@@ -640,8 +527,8 @@ def s2t_transformer_s(args):
     base_architecture(args)
 
 
-@register_model_architecture("s2t_linformer", "s2t_linformer_m")
-def s2t_transformer_m(args):
+@register_model_architecture("speechformer", "speechformer_m")
+def speechformer_m(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 512 * 4)
     args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 8)
@@ -650,8 +537,8 @@ def s2t_transformer_m(args):
     base_architecture(args)
 
 
-@register_model_architecture("s2t_linformer", "s2t_linformer_l")
-def s2t_transformer_l(args):
+@register_model_architecture("speechformer", "speechformer_l")
+def speechformer_l(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 1024)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 1024 * 4)
     args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 16)
