@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # Copyright 2021 FBK
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -81,8 +79,8 @@ class SpeechformerModel(FairseqEncoderDecoderModel):
 
     @staticmethod
     def add_args(parser):
-        S2TTransformerModel.add_args(parser)
         """Add model-specific arguments to the parser."""
+        S2TTransformerModel.add_args(parser)
         parser.add_argument(
             "--compressed", type=int, default=4,
             help="compression factor"
@@ -114,7 +112,7 @@ class SpeechformerModel(FairseqEncoderDecoderModel):
             help="strategy to use when compressing the CTC output"
         )
         parser.add_argument(
-            '--add-position-to-ctc', action='store_true',
+            '--add-position-after-ctc', action='store_true',
             help="Add positional embedding after CTC compression"
         )
         parser.add_argument(
@@ -188,6 +186,11 @@ class SpeechformerModel(FairseqEncoderDecoderModel):
         return lprobs
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
+        """
+        The forward method inherited from the base class has a **kwargs
+        argument in its input, which is not supported in torchscript. This
+        method overrites the forward method definition without **kwargs.
+        """
         encoder_out = self.encoder(src_tokens=src_tokens, src_lengths=src_lengths, return_all_hiddens=True)
         decoder_out = self.decoder(
             prev_output_tokens=prev_output_tokens, encoder_out=encoder_out
@@ -271,7 +274,7 @@ class SpeechformerEncoder(FairseqEncoder):
                 self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
             else:
                 self.ctc_compress_method = "none"
-            self.ctc_compress_add_pos = args.add_position_to_ctc
+            self.ctc_compress_add_pos = args.add_position_after_ctc
 
     def build_speechformer_encoder_layer(self, args):
         if args.shared_layer_kv_compressed == 1 and self.compress_layer is None:
@@ -372,6 +375,17 @@ class SpeechformerEncoder(FairseqEncoder):
         return compressed_output.permute(2, 0, 1), src_lengths.new(new_lengths)
 
     def reorder_encoder_out(self, encoder_out, new_order):
+        """Reorder encoder output according to *new_order*.
+
+            Args:
+                encoder_out: output from the ``forward()`` method
+                new_order (LongTensor): desired order
+
+            Returns:
+                *encoder_out* rearranged according to *new_order*
+
+            The other things reordered a.t.m. are not mandatory
+        """
         new_encoder_out = (
             [] if len(encoder_out["encoder_out"]) == 0
             else [x.index_select(1, new_order) for x in encoder_out["encoder_out"]]
@@ -499,7 +513,7 @@ def base_architecture(args):
     args.quant_noise_pq = getattr(args, "quant_noise_pq", 0)
     args.quant_noise_pq_block_size = getattr(args, "quant_noise_pq_block_size", 8)
     args.max_seq_len = getattr(args, "max_seq_len", 4096)
-    args.add_position_to_ctc = getattr(args, "add_position_to_ctc", False)
+    args.add_position_after_ctc = getattr(args, "add_position_after_ctc", False)
 
     # Compression parameters
     args.compressed = getattr(args, "compressed", 4)
