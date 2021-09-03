@@ -124,11 +124,10 @@ def process(args):
             manifest["audio"].append(zip_manifest[utt_id])
             duration_ms = int(wav.size(1) / sr * 1000)
             manifest["n_frames"].append(int(1 + (duration_ms - 25) / 10))
+            manifest["src_text"].append(asr_normalize(src_utt) if args.src_normalize else src_utt)
             if args.task == "asr":
-                manifest["src_text"].append(asr_normalize(src_utt) if args.src_normalize else src_utt)
                 manifest["tgt_text"].append(asr_normalize(src_utt) if args.src_normalize else src_utt)
             else:
-                manifest["src_text"].append(asr_normalize(src_utt) if args.src_normalize else src_utt)
                 manifest["tgt_text"].append(tgt_utt)
             manifest["speaker"].append(speaker_id)
         if is_train_split:
