@@ -157,6 +157,19 @@ Click on the corresponding language pair to download the model:
 
 Remember that the results in our paper are the average BLEU score of 3 runs, here you can download the checkpoint a of a single run.
 
+# Citation
+
+Please cite as:
+
+``` bibtex
+@inproceedings{papi2021speechformer,
+  title = {{Speechformer: Reducing Information Loss in Direct Speech Translation}},
+  author = {Papi, Sara and Gaido, Marco and Negri, Matteo and Turchi, Marco},
+  booktitle = {Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (EMNLP)},
+  year = {2021},
+}
+```
+
 
 Below, there is the original Fairseq README file.
 
