@@ -136,7 +136,7 @@ fariseq-generate ${MUSTC_SAVE_DIR} \
 ```
 Note that we set `--max-tokens 25000` since we used a K80 GPU with 12 GB of RAM to generate the output.
 
-##⭐️**PRETRAINED MODELS**
+## ⭐️PRETRAINED MODELS
 
 Download our vocabulary and yaml files if you want to use our pretrained models:
 - [Generic yaml](https://drive.google.com/file/d/1n7yKpoFgixf7XdiJEy2lsJLbkHVzKluf/view?usp=sharing)
