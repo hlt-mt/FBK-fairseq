@@ -152,8 +152,8 @@ Click on the corresponding language pair to download the model:
 |---|---|---|---|---|---|
 | Baseline | s2t_transformer_m_fbk |77M| [22.87](https://drive.google.com/file/d/1PMQsu3sIdjjBFYTqYE0JneRCqhiy3CcR/view?usp=sharing) | [27.21](https://drive.google.com/file/d/1Qij9foYi7Vfa0c1pql6eqtLAZnqoo8Zw/view?usp=sharing) | [28.09](https://drive.google.com/file/d/1abd0cwCBz419_IxPLSruEplyuqhNY-0e/view?usp=sharing) |
 | Baseline+compress. | s2t_transformer_m_fbk |77M| [22.89](https://drive.google.com/file/d/1W6CsYxOAxkTADLZK3EIHzwMYBat_0VCW/view?usp=sharing) | [26.93](https://drive.google.com/file/d/1o04QxQKhciSNpswoQPublFSQO-71VzaL/view?usp=sharing) | [28.09](https://drive.google.com/file/d/13LS-VItrXeZtRbgfQGl3puxkTxCoD-fD/view?usp=sharing) |
-| PlainConvattn | speechformer_m |79M|[23.29](https://drive.google.com/file/d/1TiOCkbuAHrFYn7iocGxAqrO6Of7mbK_2/view?usp=sharing) | [27.18](https://drive.google.com/file/d/1SygowBQIKbpiEgkTEeUqa9JOTAuQkR6M/view?usp=sharing) | [28.01](https://drive.google.com/file/d/1iIQr8LeA4MVKbnuLf74zJQf85AwHsofD/view?usp=sharing) |
-| Speechformer | speechformer_m |79M| [23.84](https://drive.google.com/file/d/1eoUueH_ZQu6LW4VWUp-hI0IqIY5AXQf2/view?usp=sharing) | [27.85](https://drive.google.com/file/d/1VaVoM8zJSRnsHNNEVYBcbj-ZpHmk7m7h/view?usp=sharing) | [28.56](https://drive.google.com/file/d/1Is9ffeZIufNfpsdnHAWEbaIdIRM1rkRA/view?usp=sharing) |
+| PlainConvattn | speechformer_m |79M|[23.29](https://drive.google.com/file/d/18qNNbOgPtoEUbyasNNi2ESzCGBzdjLs3/view?usp=sharing) | [27.18](https://drive.google.com/file/d/1cNQaS70TELzkUXTyZ35NU-4pTUMWW60n/view?usp=sharing) | [28.01](https://drive.google.com/file/d/1WBGzQW9nh2eCoVYVNUn7u-j70lAn0VDC/view?usp=sharing) |
+| Speechformer | speechformer_m |79M| [23.84](https://drive.google.com/file/d/11oOIwHm16917JC5seH9QyxPtvcvmogEX/view?usp=sharing) | [27.85](https://drive.google.com/file/d/1QYlCj4w_uGXFZBmej2_eoXUtYgtqhrd5/view?usp=sharing) | [28.56](https://drive.google.com/file/d/1fLaU1sS_NLKKrRHGYPh5YmSIDHjzun68/view?usp=sharing) |
 
 Remember that the results in our paper are the average BLEU score of 3 runs, here you can download the checkpoint a of a single run.
 
