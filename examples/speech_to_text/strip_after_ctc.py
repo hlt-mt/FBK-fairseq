@@ -35,8 +35,7 @@ def main(args):
     utils.import_user_module(args)
     model_state = load_checkpoint_to_cpu(args.model_path)
     print("Loaded model {}".format(args.model_path))
-    strip_what = [f'encoder.linformer_layers.{num}' for num in range(args.ctc_encoder_layer,args.num_encoder_layers)]
-    #strip_what.extend(['ctc_fc'])
+    strip_what = [f'encoder.speechformer_layers.{num}' for num in range(args.ctc_encoder_layer, args.num_encoder_layers)]
     model_state = _strip_params(model_state, strip_what=tuple(strip_what))
     print("Stripped {}".format(strip_what))
     save_state(model_state, args.new_model_path)
