@@ -112,6 +112,15 @@ class SpeechformerModel(FairseqEncoderDecoderModel):
             help="strategy to use when compressing the CTC output"
         )
         parser.add_argument(
+            '--ctc-compress-max-out-size', type=int, default=-1,
+            help="if CTC compression is enabled and this argument is set to a positive number, "
+                 "every input is forced to be at most as long as the value set for this parameter, "
+                 "even though the CTC would not compress it enough. Intuitively, this parameter "
+                 "should be set to 1/4 of the max input length to ensure that the maximum sequence "
+                 "length of the Transformer self-attention input is the same as in the case of "
+                 "of models having 2 initial convolutions with stride 2."
+        )
+        parser.add_argument(
             '--add-position-after-ctc', action='store_true',
             help="Add positional embedding after CTC compression"
         )
@@ -272,6 +281,7 @@ class SpeechformerEncoder(FairseqEncoder):
             self.ctc_layer = args.ctc_encoder_layer
             if args.ctc_compress_strategy != "none":
                 self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
+                self.ctc_compress_max_out_size = args.ctc_compress_max_out_size
             else:
                 self.ctc_compress_method = "none"
             self.ctc_compress_add_pos = args.add_position_after_ctc
@@ -361,6 +371,52 @@ class SpeechformerEncoder(FairseqEncoder):
                 "src_lengths": [],
             }
 
+    def ensure_max_ctc_out_len(self, batch_predicted):
+        """
+        Ensures that the output of the CTC compression is not longer than the ctc_compress_max_out_size.
+        If there are samples violating this constraints, consecutive predictions are merged
+        so to shorten the sentence.
+        E.g. if the ctc_compress_max_out_size is set to 3, and the output of the CTC compression would be
+        long 5, the first and second predictions are merged, as well as the third and the fourth. So, the
+        corresponding vectors will be merged according to the CTC compression strategy.
+        """
+        if self.ctc_compress_max_out_size > 0:
+
+            def merge_sublist(elements):
+                """
+                Takes a list of Tuples (predicted_element, num_corresponding_vectors) and returns
+                a single tuple with the predicted_element having the highest number of corresponding_vectors
+                (in case of a tie, the first is returned) and the total sum of the num_corresponding_vectors
+                E.g. if the input is [(a, 3), (b, 5), (c, 6), (a, 4)], the output will be (a, 18).
+                """
+                sum_num_vectors = 0
+                max_element = None
+                max_element_cnt = 0
+                temp_dict = {}
+                for predicted_element, num_corresponding_vectors in elements:
+                    if predicted_element in temp_dict:
+                        temp_dict[predicted_element] += num_corresponding_vectors
+                    else:
+                        temp_dict[predicted_element] = num_corresponding_vectors
+                    if temp_dict[predicted_element] > max_element_cnt:
+                        max_element_cnt = temp_dict[predicted_element]
+                        max_element = predicted_element
+                    sum_num_vectors += num_corresponding_vectors
+                return max_element, sum_num_vectors
+
+            for b_idx, p in enumerate(batch_predicted):
+                pred_len = len(p)
+                if pred_len > self.ctc_compress_max_out_size:
+                    reduction_factor = math.ceil(pred_len / self.ctc_compress_max_out_size)
+                    i = 0
+                    new_p = []
+                    while i < pred_len:
+                        new_p.append(merge_sublist(p[i:i+reduction_factor]))
+                        i += reduction_factor
+                    batch_predicted[b_idx] = new_p
+
+        return batch_predicted
+
     def average_same_ctc_features(self, x_ctc, x, src_lengths):
         with torch.no_grad():
             batch_predicted = []
@@ -368,6 +424,7 @@ class SpeechformerEncoder(FairseqEncoder):
             for b in range(prob_ctc.shape[0]):
                 predicted = prob_ctc[b][: src_lengths[b]].argmax(-1).tolist()
                 batch_predicted.append([(p[0], len(list(p[1]))) for p in groupby(predicted)])
+            batch_predicted = self.ensure_max_ctc_out_len(batch_predicted)
             new_lengths = [len(p) for p in batch_predicted]
             weights_matrix = self.ctc_compress_method(prob_ctc, batch_predicted, new_lengths, x.dtype, x.device)
         # x is T x B x C -> B x C x T; weights_matrix is B x T x T'
