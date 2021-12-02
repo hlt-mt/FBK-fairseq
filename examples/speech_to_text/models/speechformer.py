@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from examples.linformer.linformer_src.modules.conv1d_compress import Conv1dCompressLayer
 from torch import Tensor
 
 from examples.speech_to_text.modules.speechformer_encoder_layer import SpeechformerEncoderLayer
@@ -105,6 +106,11 @@ class SpeechformerModel(FairseqEncoderDecoderModel):
             type=int,
             help="kernel size of the convolution used to compress the sequence length in the ConvAttn. "
                  "Note: it should be higher than (--compressed) parameter",
+        )
+        parser.add_argument(
+            "--compress-n-layers",
+            type=int, default=1,
+            help="Number of layers used for the K and V projection in the ConvAttention layer",
         )
         parser.add_argument(
             '--ctc-compress-strategy', type=str, default="none",
@@ -227,6 +233,8 @@ class SpeechformerEncoder(FairseqEncoder):
     """
 
     def __init__(self, args, dictionary):
+        self.compress_n_layers = args.compress_n_layers
+        self.freeze_compress = args.freeze_compress
         self.compress_layer = None
         self.CNN_first_layer = args.CNN_first_layer
 
@@ -288,17 +296,14 @@ class SpeechformerEncoder(FairseqEncoder):
 
     def build_speechformer_encoder_layer(self, args):
         if args.shared_layer_kv_compressed == 1 and self.compress_layer is None:
-            compress_layer = nn.Conv1d(
-                args.encoder_embed_dim,
+            compress_layer = Conv1dCompressLayer(
                 args.encoder_embed_dim,
                 args.compress_kernel_size,
                 stride=args.compressed,
                 padding=args.compress_kernel_size // 2,
+                n_layers=self.compress_n_layers,
+                freeze_compress=self.freeze_compress,
             )
-            # intialize parameters for compressed layer
-            nn.init.xavier_uniform_(compress_layer.weight, gain=1 / math.sqrt(2))
-            if args.freeze_compress == 1:
-                compress_layer.weight.requires_grad = False
             self.compress_layer = compress_layer
 
         return SpeechformerEncoderLayer(args, self.compress_layer)
@@ -576,6 +581,7 @@ def base_architecture(args):
     args.compressed = getattr(args, "compressed", 4)
     args.shared_kv_compressed = getattr(args, "shared_kv_compressed", True)
     args.shared_layer_kv_compressed = getattr(args, "shared_layer_kv_compressed", True)
+    args.compress_n_layers = getattr(args, "compress_n_layers", 1)
     args.freeze_compress = getattr(args, "freeze_compress", False)
     args.compress_kernel_size = getattr(args, "compress_kernel_size", 8)
     args.CNN_first_layer = getattr(args, "CNN_first_layer", True)

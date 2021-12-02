@@ -35,4 +35,5 @@ class SpeechformerEncoderLayer(TransformerEncoderLayer):
             shared_compress_layer=self.shared_compress_layer[0],
             freeze_compress=args.freeze_compress,
             compress_kernel_size=args.compress_kernel_size,
+            compress_n_layers=args.compress_n_layers,
         )

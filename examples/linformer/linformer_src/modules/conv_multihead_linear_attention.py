@@ -17,6 +17,8 @@ from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
+from examples.linformer.linformer_src.modules.conv1d_compress import Conv1dCompressLayer
+
 from fairseq import utils
 from fairseq.incremental_decoding_utils import with_incremental_state
 from fairseq.modules.quant_noise import quant_noise
@@ -54,6 +56,7 @@ class ConvAttention(nn.Module):
         shared_compress_layer=None,
         freeze_compress=False,
         compress_kernel_size=1,
+        compress_n_layers=1,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -87,20 +90,22 @@ class ConvAttention(nn.Module):
         )
         # used for compress sequence to subsequence
         if shared_compress_layer is None:
-            self.compress_k = nn.Conv1d(
-                embed_dim,
+            self.compress_k = Conv1dCompressLayer(
                 embed_dim,
                 compress_kernel_size,
                 stride=compressed,
                 padding=compress_kernel_size // 2,
+                freeze_compress=freeze_compress,
+                n_layers=compress_n_layers,
             )
             if not shared_kv_compressed:
-                self.compress_v = nn.Conv1d(
-                embed_dim,
+                self.compress_v = Conv1dCompressLayer(
                 embed_dim,
                 compress_kernel_size,
                 stride=compressed,
                 padding=compress_kernel_size // 2,
+                freeze_compress=freeze_compress,
+                n_layers=compress_n_layers,
             )
             self.layerwise_sharing = False
         else:
