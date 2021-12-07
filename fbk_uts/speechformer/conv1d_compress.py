@@ -13,8 +13,12 @@
 # limitations under the License
 
 import unittest
+from argparse import Namespace
+
+from examples.speech_to_text.models.speechformer import SpeechformerEncoder, speechformer_s
 
 from examples.linformer.linformer_src.modules.conv1d_compress import Conv1dCompressLayer
+from fairseq.data import Dictionary
 
 
 class TestConvLayers(unittest.TestCase):
@@ -56,6 +60,33 @@ class TestConvLayers(unittest.TestCase):
 
         self.assertEqual(len(compress_layer.conv_layers), 1)
         self.assertEqual(compress_layer.conv_layers[0].stride[0], 4)
+
+    @classmethod
+    def setUpClass(cls):
+        cls.base_args = Namespace()
+        speechformer_s(cls.base_args)
+        cls.base_args.input_feat_per_channel = 5
+        cls.base_args.input_channels = 1
+        cls.base_args.max_source_positions = 10
+        cls.base_args.transformer_after_compression = True
+        cls.base_args.ctc_encoder_layer = 4
+        cls.base_args.ctc_compress_strategy = "none"
+        cls.base_args.criterion = "ctc_multi_loss"
+        cls.base_args.encoder_embed_dim = 512
+        cls.base_args.compressed = 4
+        cls.base_args.compress_kernel_size = 8
+        cls.base_args.compress_n_layers = 2
+        cls.base_args.freeze_compress = False
+        cls.fake_dict = Dictionary()
+
+    def test_speechformer_compression(self):
+        encoder = SpeechformerEncoder(self.base_args, self.fake_dict)
+
+        compress_layer = encoder.build_speechformer_encoder_layer(self.base_args)
+
+        self.assertEqual(len(compress_layer.shared_compress_layer[0].conv_layers), 2)
+        self.assertEqual(compress_layer.shared_compress_layer[0].conv_layers[0].stride[0], 2)
+        self.assertEqual(compress_layer.shared_compress_layer[0].conv_layers[1].stride[0], 2)
 
     def test_assertion(self):
         """

@@ -233,8 +233,6 @@ class SpeechformerEncoder(FairseqEncoder):
     """
 
     def __init__(self, args, dictionary):
-        self.compress_n_layers = args.compress_n_layers
-        self.freeze_compress = args.freeze_compress
         self.compress_layer = None
         self.CNN_first_layer = args.CNN_first_layer
 
@@ -299,10 +297,10 @@ class SpeechformerEncoder(FairseqEncoder):
             compress_layer = Conv1dCompressLayer(
                 args.encoder_embed_dim,
                 args.compress_kernel_size,
-                stride=args.compressed,
+                compression_factor=args.compressed,
                 padding=args.compress_kernel_size // 2,
-                n_layers=self.compress_n_layers,
-                freeze_compress=self.freeze_compress,
+                n_layers=args.compress_n_layers,
+                freeze_compress=args.freeze_compress,
             )
             self.compress_layer = compress_layer
 
