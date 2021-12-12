@@ -40,6 +40,9 @@ if user_check != "yes":
     print("Aborting.")
     sys.exit(1)
 
+assert mr["pipeline"] is not None and "status" in mr["pipeline"] and mr["pipeline"]["status"] == "success", \
+    "MR cannot be merged as CI was not successful"
+
 # Ensure everything is up-to-date
 subprocess.run(["git", "fetch"])
 subprocess.run(["git", "checkout", mr['source_branch']])
