@@ -14,17 +14,17 @@
 
 import logging
 import math
-from itertools import groupby
 from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from examples.linformer.linformer_src.modules.conv1d_compress import Conv1dCompressLayer
 from torch import Tensor
 
+from examples.linformer.linformer_src.modules.conv1d_compress import Conv1dCompressLayer
+from examples.speech_to_text.models.s2t_transformer_fbk import S2TTransformerModel
+from examples.speech_to_text.modules.ctc_support import CtcSupport
+from examples.speech_to_text.modules.encoder_pretraining_support import EncoderPretrainingSupport
 from examples.speech_to_text.modules.speechformer_encoder_layer import SpeechformerEncoderLayer
-from fairseq import checkpoint_utils
 from fairseq.data.data_utils import lengths_to_padding_mask
 from fairseq.models import (
     FairseqEncoder,
@@ -32,8 +32,7 @@ from fairseq.models import (
     register_model,
     register_model_architecture,
 )
-from fairseq.models.speech_to_text.s2t_transformer import TransformerDecoderScriptable, Conv1dSubsampler, \
-    S2TTransformerModel
+from fairseq.models.speech_to_text.s2t_transformer import TransformerDecoderScriptable, Conv1dSubsampler
 from fairseq.models.transformer import Embedding
 from fairseq.modules import (
     FairseqDropout,
@@ -42,6 +41,7 @@ from fairseq.modules import (
 )
 
 logger = logging.getLogger(__name__)
+
 
 class InitialConv1dBlock(Conv1dSubsampler):
     def __init__(
@@ -71,6 +71,7 @@ class InitialConv1dBlock(Conv1dSubsampler):
         for _ in range(self.n_layers):
             out = ((out.float() - 1) / self.stride + 1).floor().long()
         return out
+
 
 @register_model("speechformer")
 class SpeechformerModel(FairseqEncoderDecoderModel):
@@ -113,32 +114,9 @@ class SpeechformerModel(FairseqEncoderDecoderModel):
             help="Number of layers used for the K and V projection in the ConvAttention layer",
         )
         parser.add_argument(
-            '--ctc-compress-strategy', type=str, default="none",
-            choices=['none', 'avg', 'weighted', 'softmax'],
-            help="strategy to use when compressing the CTC output"
-        )
-        parser.add_argument(
-            '--ctc-compress-max-out-size', type=int, default=-1,
-            help="if CTC compression is enabled and this argument is set to a positive number, "
-                 "every input is forced to be at most as long as the value set for this parameter, "
-                 "even though the CTC would not compress it enough. Intuitively, this parameter "
-                 "should be set to 1/4 of the max input length to ensure that the maximum sequence "
-                 "length of the Transformer self-attention input is the same as in the case of "
-                 "of models having 2 initial convolutions with stride 2."
-        )
-        parser.add_argument(
-            '--add-position-after-ctc', action='store_true',
-            help="Add positional embedding after CTC compression"
-        )
-        parser.add_argument(
             '--transformer-after-compression', default=False, action='store_true',
             help='whether or not using standard TransformerEncoder layers after CTC compression '
             'instead of ConvAttention Encoder layers')
-        parser.add_argument(
-            '--allow-partial-encoder-loading', action='store_true', default=False,
-            help="if set, the model is restored even if it doesn't match exactly"
-            "the architecture, ie. some params are missing."
-        )
         # Initial convolutional layer (optional)
         parser.add_argument(
             "--CNN-first-layer",
@@ -156,15 +134,7 @@ class SpeechformerModel(FairseqEncoderDecoderModel):
     @classmethod
     def build_encoder(cls, args, dictionary):
         encoder = SpeechformerEncoder(args, dictionary)
-        if getattr(args, "load_pretrained_encoder_from", None):
-            encoder = checkpoint_utils.load_pretrained_component_from_model(
-                component=encoder, checkpoint=args.load_pretrained_encoder_from,
-                allow_partial_encoder_loading=getattr(args, "allow_partial_encoder_loading", False),
-            )
-            logger.info(
-                f"loaded pretrained encoder from: "
-                f"{args.load_pretrained_encoder_from}"
-            )
+        encoder = EncoderPretrainingSupport.load_pretrained(args, encoder)
         return encoder
 
     @classmethod
@@ -216,7 +186,7 @@ class SpeechformerModel(FairseqEncoderDecoderModel):
             return decoder_out
 
 
-class SpeechformerEncoder(FairseqEncoder):
+class SpeechformerEncoder(FairseqEncoder, CtcSupport):
     """Speechformer encoder
     It consists of:
         - if --CNN-first-layer parameter is enabled, a block of 2 1D Convolutional layers is
@@ -278,19 +248,7 @@ class SpeechformerEncoder(FairseqEncoder):
         else:
             self.layer_norm = None
 
-        # ctc
-        self.ctc_flag = False
-        if args.criterion == "ctc_multi_loss" or args.ctc_compress_strategy != "none":
-            self.ctc_flag = True
-        if self.ctc_flag:
-            self.ctc_fc = nn.Linear(args.encoder_embed_dim, len(dictionary))
-            self.ctc_layer = args.ctc_encoder_layer
-            if args.ctc_compress_strategy != "none":
-                self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
-                self.ctc_compress_max_out_size = args.ctc_compress_max_out_size
-            else:
-                self.ctc_compress_method = "none"
-            self.ctc_compress_add_pos = args.add_position_after_ctc
+        self.ctc_init(args, dictionary)
 
     def build_speechformer_encoder_layer(self, args):
         if args.shared_layer_kv_compressed == 1 and self.compress_layer is None:
@@ -339,13 +297,7 @@ class SpeechformerEncoder(FairseqEncoder):
             x = layer(x, encoder_padding_mask)
             # ctc
             if self.ctc_flag and self.ctc_layer == l_idx + 1:
-                x_ctc = self.ctc_fc(x)
-                if self.ctc_compress_method != "none":
-                    x, input_lengths = self.average_same_ctc_features(x_ctc, x, input_lengths)
-                    encoder_padding_mask = lengths_to_padding_mask(input_lengths)
-                    if self.ctc_compress_add_pos:
-                        positions = self.embed_positions(encoder_padding_mask).transpose(0, 1)
-                        x += positions
+                x, x_ctc, encoder_padding_mask = self.apply_ctc(x, input_lengths)
             if return_all_hiddens:
                 assert encoder_states is not None
                 encoder_states.append(x)
@@ -353,86 +305,15 @@ class SpeechformerEncoder(FairseqEncoder):
         if self.layer_norm is not None:
             x = self.layer_norm(x)
 
-        if self.ctc_flag:
-            return {
-                "encoder_out": [x],  # T x B x C
-                "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],  # B x T
-                "encoder_embedding": [],
-                "encoder_states": encoder_states,  # List[T x B x C]
-                "ctc_out": x_ctc,  # T x B x D
-                "ctc_lengths": ctc_lengths,
-                "src_tokens": [],
-                "src_lengths": [],
-            }
-        else:
-            return {
-                "encoder_out": [x],
-                "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],
-                "encoder_embedding": [],
-                "encoder_states": encoder_states,
-                "src_tokens": [],
-                "src_lengths": [],
-            }
-
-    def ensure_max_ctc_out_len(self, batch_predicted):
-        """
-        Ensures that the output of the CTC compression is not longer than the ctc_compress_max_out_size.
-        If there are samples violating this constraints, consecutive predictions are merged
-        so to shorten the sentence.
-        E.g. if the ctc_compress_max_out_size is set to 3, and the output of the CTC compression would be
-        long 5, the first and second predictions are merged, as well as the third and the fourth. So, the
-        corresponding vectors will be merged according to the CTC compression strategy.
-        """
-        if self.ctc_compress_max_out_size > 0:
-
-            def merge_sublist(elements):
-                """
-                Takes a list of Tuples (predicted_element, num_corresponding_vectors) and returns
-                a single tuple with the predicted_element having the highest number of corresponding_vectors
-                (in case of a tie, the first is returned) and the total sum of the num_corresponding_vectors
-                E.g. if the input is [(a, 3), (b, 5), (c, 6), (a, 4)], the output will be (a, 18).
-                """
-                sum_num_vectors = 0
-                max_element = None
-                max_element_cnt = 0
-                temp_dict = {}
-                for predicted_element, num_corresponding_vectors in elements:
-                    if predicted_element in temp_dict:
-                        temp_dict[predicted_element] += num_corresponding_vectors
-                    else:
-                        temp_dict[predicted_element] = num_corresponding_vectors
-                    if temp_dict[predicted_element] > max_element_cnt:
-                        max_element_cnt = temp_dict[predicted_element]
-                        max_element = predicted_element
-                    sum_num_vectors += num_corresponding_vectors
-                return max_element, sum_num_vectors
-
-            for b_idx, p in enumerate(batch_predicted):
-                pred_len = len(p)
-                if pred_len > self.ctc_compress_max_out_size:
-                    reduction_factor = math.ceil(pred_len / self.ctc_compress_max_out_size)
-                    i = 0
-                    new_p = []
-                    while i < pred_len:
-                        new_p.append(merge_sublist(p[i:i+reduction_factor]))
-                        i += reduction_factor
-                    batch_predicted[b_idx] = new_p
-
-        return batch_predicted
-
-    def average_same_ctc_features(self, x_ctc, x, src_lengths):
-        with torch.no_grad():
-            batch_predicted = []
-            prob_ctc = F.softmax(x_ctc, dim=-1).transpose(0, 1)  # from T x B x D to B x T x D
-            for b in range(prob_ctc.shape[0]):
-                predicted = prob_ctc[b][: src_lengths[b]].argmax(-1).tolist()
-                batch_predicted.append([(p[0], len(list(p[1]))) for p in groupby(predicted)])
-            batch_predicted = self.ensure_max_ctc_out_len(batch_predicted)
-            new_lengths = [len(p) for p in batch_predicted]
-            weights_matrix = self.ctc_compress_method(prob_ctc, batch_predicted, new_lengths, x.dtype, x.device)
-        # x is T x B x C -> B x C x T; weights_matrix is B x T x T'
-        compressed_output = x.permute(1, 2, 0).bmm(weights_matrix)  # B x C x T'
-        return compressed_output.permute(2, 0, 1), src_lengths.new(new_lengths)
+        encoder_out_dict = {
+            "encoder_out": [x],
+            "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],
+            "encoder_embedding": [],
+            "encoder_states": encoder_states,
+            "src_tokens": [],
+            "src_lengths": [],
+        }
+        return self.ctc_encoder_out(encoder_out_dict, x_ctc, ctc_lengths)
 
     def reorder_encoder_out(self, encoder_out, new_order):
         """Reorder encoder output according to *new_order*.
@@ -442,7 +323,7 @@ class SpeechformerEncoder(FairseqEncoder):
                 new_order (LongTensor): desired order
 
             Returns:
-                *encoder_out* rearranged according to *new_order*
+                **encoder_out**: rearranged according to *new_order*
 
             The other things reordered a.t.m. are not mandatory
         """
@@ -466,74 +347,15 @@ class SpeechformerEncoder(FairseqEncoder):
             for idx, state in enumerate(encoder_states):
                 encoder_states[idx] = state.index_select(1, new_order)
 
-        # ctc
-        if self.ctc_flag:
-            new_ctc_out = encoder_out["ctc_out"].index_select(1, new_order)
-            new_ctc_lengths = encoder_out["ctc_lengths"].index_select(0, new_order)
-
-            return {
-                "encoder_out": new_encoder_out,  # T x B x C
-                "encoder_padding_mask": new_encoder_padding_mask,  # B x T
-                "encoder_embedding": new_encoder_embedding,  # B x T x C
-                "encoder_states": encoder_states,  # List[T x B x C]
-                "src_tokens": [],  # B x T
-                "src_lengths": [],  # B x 1
-                "ctc_out": new_ctc_out,  # T x B x D
-                "ctc_lengths": new_ctc_lengths,
-            }
-        else:
-            return {
-                "encoder_out": new_encoder_out,  # T x B x C
-                "encoder_padding_mask": new_encoder_padding_mask,  # B x T
-                "encoder_embedding": new_encoder_embedding,  # B x T x C
-                "encoder_states": encoder_states,  # List[T x B x C]
-                "src_tokens": [],  # B x T
-                "src_lengths": [],  # B x 1
-            }
-
-
-class CTCCompressStrategy:
-    @staticmethod
-    def avg(prob_ctc, predicted, new_lengths, dtype, device):
-        new_maxlen = max(new_lengths)
-        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype)
-        for b_idx, pred in enumerate(predicted):
-            processed_inputs_cnt = 0
-            for t_idx, same in enumerate(pred):
-                new_processed_inputs_cnt = processed_inputs_cnt + same[1]
-                weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = 1.0 / same[1]
-                processed_inputs_cnt = new_processed_inputs_cnt
-        return weights_matrix.to(device)
-
-    @staticmethod
-    def weighted(prob_ctc, predicted, new_lengths, dtype, device):
-        new_maxlen = max(new_lengths)
-        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype, device=device)
-        for b_idx, pred in enumerate(predicted):
-            processed_inputs_cnt = 0
-            for t_idx, same in enumerate(pred):
-                new_processed_inputs_cnt = processed_inputs_cnt + same[1]
-                # Get the probabilities of the prediction for the different time steps as weight
-                weights = prob_ctc[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, same[0]]
-                weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = \
-                    weights / weights.sum()
-                processed_inputs_cnt = new_processed_inputs_cnt
-        return weights_matrix
-
-    @staticmethod
-    def softmax(prob_ctc, predicted, new_lengths, dtype, device):
-        new_maxlen = max(new_lengths)
-        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype, device=device)
-        for b_idx, pred in enumerate(predicted):
-            processed_inputs_cnt = 0
-            for t_idx, same in enumerate(pred):
-                new_processed_inputs_cnt = processed_inputs_cnt + same[1]
-                # Get the probabilities of the prediction for the different time steps as weight
-                weights = F.softmax(prob_ctc[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, same[0]])
-                weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = \
-                    weights / weights.sum()
-                processed_inputs_cnt = new_processed_inputs_cnt
-        return weights_matrix
+        reordered_dict = {
+            "encoder_out": new_encoder_out,  # T x B x C
+            "encoder_padding_mask": new_encoder_padding_mask,  # B x T
+            "encoder_embedding": new_encoder_embedding,  # B x T x C
+            "encoder_states": encoder_states,  # List[T x B x C]
+            "src_tokens": [],  # B x T
+            "src_lengths": [],  # B x 1
+        }
+        return self.reorder_ctc(reordered_dict, encoder_out, new_order)
 
 
 @register_model_architecture(model_name="speechformer", arch_name="speechformer")
@@ -590,8 +412,6 @@ def base_architecture(args):
     args.stride = getattr(args, "stride", 1)
 
 
-
-
 @register_model_architecture("speechformer", "speechformer_s")
 def speechformer_s(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 256)
@@ -620,4 +440,3 @@ def speechformer_l(args):
     args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 16)
     args.dropout = getattr(args, "dropout", 0.2)
     base_architecture(args)
-

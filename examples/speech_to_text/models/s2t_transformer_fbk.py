@@ -1,17 +1,28 @@
-#!/usr/bin/env python3
+# Copyright 2021 FBK
 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License
 import logging
 import math
-from itertools import groupby
 from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 
+from examples.speech_to_text.modules.ctc_support import CtcSupport
+from examples.speech_to_text.modules.encoder_pretraining_support import EncoderPretrainingSupport
 from examples.speech_to_text.modules.transformer_layer_penalty import TransformerEncoderLayerPenalty
-from fairseq import checkpoint_utils, utils
+from fairseq import utils
 from fairseq.data.data_utils import lengths_to_padding_mask
 from fairseq.models import (
     FairseqEncoder,
@@ -44,6 +55,8 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
     @staticmethod
     def add_args(parser):
         """Add model-specific arguments to the parser."""
+        EncoderPretrainingSupport.add_args(parser)
+        CtcSupport.add_args(parser)
         # input
         parser.add_argument(
             "--conv-kernel-sizes",
@@ -148,36 +161,16 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
             action="store_true",
             help="if True, dont scale embeddings",
         )
-        parser.add_argument(
-            "--load-pretrained-encoder-from",
-            type=str,
-            metavar="STR",
-            help="model to take encoder weights from (for initialization)",
-        )
-        parser.add_argument('--ctc-compress-strategy', type=str, default="none",
-                            choices=['none', 'avg', 'weighted', 'softmax'],
-                            help="Strategy to use when compressing CTC output")
         parser.add_argument('--freeze-pretrained', action='store_true',
                             help='if set, all params loaded from the pretrained model are freezed')
         parser.add_argument('--distance-penalty', type=str, default=False,
                             choices=['log', 'gauss'],
                             help='Add distance penalty to the encoder')
-        parser.add_argument('--allow-partial-encoder-loading', action='store_true', default=False,
-                            help="if set, the model is restored even if it doesn't match exactly"
-                                "the architecture, ie. some params are missing.")
 
     @classmethod
     def build_encoder(cls, args, dictionary):
         encoder = S2TTransformerEncoder(args, dictionary)
-        if getattr(args, "load_pretrained_encoder_from", None):
-            encoder = checkpoint_utils.load_pretrained_component_from_model(
-                component=encoder, checkpoint=args.load_pretrained_encoder_from,
-                allow_partial_encoder_loading=getattr(args, "allow_partial_encoder_loading", False),
-            )
-            logger.info(
-                f"loaded pretrained encoder from: "
-                f"{args.load_pretrained_encoder_from}"
-            )
+        encoder = EncoderPretrainingSupport.load_pretrained(args, encoder)
         return encoder
 
     @classmethod
@@ -232,7 +225,7 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
             return decoder_out
 
 
-class S2TTransformerEncoder(FairseqEncoder):
+class S2TTransformerEncoder(FairseqEncoder, CtcSupport):
     """Speech-to-text Transformer encoder that consists of input subsampler and
     Transformer encoder."""
 
@@ -270,17 +263,7 @@ class S2TTransformerEncoder(FairseqEncoder):
         if args.distance_penalty == True:
             args.distance_penalty = 'log'
 
-        # ctc
-        self.ctc_flag = False
-        if args.criterion == "ctc_multi_loss" or args.ctc_compress_strategy != "none":
-            self.ctc_flag = True
-        if self.ctc_flag:
-            self.ctc_fc = nn.Linear(args.encoder_embed_dim, len(dictionary))
-            self.ctc_layer = args.ctc_encoder_layer
-            if args.ctc_compress_strategy != "none":
-                self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
-            else:
-                self.ctc_compress_method = "none"
+        self.ctc_init(args, dictionary)
 
     @torch.jit.unused
     def forward_non_torchscript(self, net_input: Dict[str, Tensor]):
@@ -306,10 +289,7 @@ class S2TTransformerEncoder(FairseqEncoder):
             x = layer(x, encoder_padding_mask)
             # ctc
             if self.ctc_flag and self.ctc_layer == l_idx + 1:
-                x_ctc = self.ctc_fc(x)
-                if self.ctc_compress_method != "none":
-                    x, input_lengths = self.average_same_ctc_features(x_ctc, x, input_lengths)
-                encoder_padding_mask = lengths_to_padding_mask(input_lengths)
+                x, x_ctc, encoder_padding_mask = self.apply_ctc(x, input_lengths)
             if return_all_hiddens:
                 assert encoder_states is not None
                 encoder_states.append(x)
@@ -317,39 +297,15 @@ class S2TTransformerEncoder(FairseqEncoder):
         if self.layer_norm is not None:
             x = self.layer_norm(x)
 
-        if self.ctc_flag:
-            return {
-                "encoder_out": [x],  # T x B x C
-                "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],  # B x T
-                "encoder_embedding": [],
-                "encoder_states": encoder_states,  # List[T x B x C]
-                "ctc_out": x_ctc,  # T x B x D
-                "ctc_lengths": ctc_lengths,
-                "src_tokens": [],
-                "src_lengths": [],
-            }
-        else:
-            return {
-                "encoder_out": [x],
-                "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],
-                "encoder_embedding": [],
-                "encoder_states": encoder_states,
-                "src_tokens": [],
-                "src_lengths": [],
-            }
-
-    def average_same_ctc_features(self, x_ctc, x, src_lengths):
-        with torch.no_grad():
-            batch_predicted = []
-            prob_ctc = F.softmax(x_ctc, dim=-1).transpose(0, 1)  # from T x B x D to B x T x D
-            for b in range(prob_ctc.shape[0]):
-                predicted = prob_ctc[b][: src_lengths[b]].argmax(-1).tolist()
-                batch_predicted.append([(p[0], len(list(p[1]))) for p in groupby(predicted)])
-            new_lengths = [len(p) for p in batch_predicted]
-            weights_matrix = self.ctc_compress_method(prob_ctc, batch_predicted, new_lengths, x.dtype, x.device)
-        # x is T x B x C -> B x C x T; weights_matrix is B x T x T'
-        compressed_output = x.permute(1, 2, 0).bmm(weights_matrix)  # B x C x T'
-        return compressed_output.permute(2, 0, 1), src_lengths.new(new_lengths)
+        encoder_out_dict = {
+            "encoder_out": [x],
+            "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],
+            "encoder_embedding": [],
+            "encoder_states": encoder_states,
+            "src_tokens": [],
+            "src_lengths": [],
+        }
+        return self.ctc_encoder_out(encoder_out_dict, x_ctc, ctc_lengths)
 
     def reorder_encoder_out(self, encoder_out, new_order):
         """
@@ -360,7 +316,7 @@ class S2TTransformerEncoder(FairseqEncoder):
                 new_order (LongTensor): desired order
 
             Returns:
-                *encoder_out* rearranged according to *new_order*
+                **encoder_out**: rearranged according to *new_order*
 
             The other things reordered a.t.m. are not mandatory
         """
@@ -384,74 +340,15 @@ class S2TTransformerEncoder(FairseqEncoder):
             for idx, state in enumerate(encoder_states):
                 encoder_states[idx] = state.index_select(1, new_order)
 
-        # ctc
-        if self.ctc_flag:
-            new_ctc_out = encoder_out["ctc_out"].index_select(1, new_order)
-            new_ctc_lengths = encoder_out["ctc_lengths"].index_select(0, new_order)
-
-            return {
-                "encoder_out": new_encoder_out,  # T x B x C
-                "encoder_padding_mask": new_encoder_padding_mask,  # B x T
-                "encoder_embedding": new_encoder_embedding,  # B x T x C
-                "encoder_states": encoder_states,  # List[T x B x C]
-                "src_tokens": [],  # B x T
-                "src_lengths": [],  # B x 1
-                "ctc_out": new_ctc_out,   # T x B x D
-                "ctc_lengths": new_ctc_lengths,
-            }
-        else:
-            return {
-                "encoder_out": new_encoder_out,  # T x B x C
-                "encoder_padding_mask": new_encoder_padding_mask,  # B x T
-                "encoder_embedding": new_encoder_embedding,  # B x T x C
-                "encoder_states": encoder_states,  # List[T x B x C]
-                "src_tokens": [],  # B x T
-                "src_lengths": [],  # B x 1
-            }
-
-
-class CTCCompressStrategy:
-    @staticmethod
-    def avg(prob_ctc, predicted, new_lengths, dtype, device):
-        new_maxlen = max(new_lengths)
-        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype)
-        for b_idx, pred in enumerate(predicted):
-            processed_inputs_cnt = 0
-            for t_idx, same in enumerate(pred):
-                new_processed_inputs_cnt = processed_inputs_cnt + same[1]
-                weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = 1.0 / same[1]
-                processed_inputs_cnt = new_processed_inputs_cnt
-        return weights_matrix.to(device)
-
-    @staticmethod
-    def weighted(prob_ctc, predicted, new_lengths, dtype, device):
-        new_maxlen = max(new_lengths)
-        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype, device=device)
-        for b_idx, pred in enumerate(predicted):
-            processed_inputs_cnt = 0
-            for t_idx, same in enumerate(pred):
-                new_processed_inputs_cnt = processed_inputs_cnt + same[1]
-                # Get the probabilities of the prediction for the different time steps as weight
-                weights = prob_ctc[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, same[0]]
-                weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = \
-                    weights / weights.sum()
-                processed_inputs_cnt = new_processed_inputs_cnt
-        return weights_matrix
-
-    @staticmethod
-    def softmax(prob_ctc, predicted, new_lengths, dtype, device):
-        new_maxlen = max(new_lengths)
-        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype, device=device)
-        for b_idx, pred in enumerate(predicted):
-            processed_inputs_cnt = 0
-            for t_idx, same in enumerate(pred):
-                new_processed_inputs_cnt = processed_inputs_cnt + same[1]
-                # Get the probabilities of the prediction for the different time steps as weight
-                weights = F.softmax(prob_ctc[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, same[0]])
-                weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = \
-                    weights / weights.sum()
-                processed_inputs_cnt = new_processed_inputs_cnt
-        return weights_matrix
+        reordered_dict = {
+            "encoder_out": new_encoder_out,  # T x B x C
+            "encoder_padding_mask": new_encoder_padding_mask,  # B x T
+            "encoder_embedding": new_encoder_embedding,  # B x T x C
+            "encoder_states": encoder_states,  # List[T x B x C]
+            "src_tokens": [],  # B x T
+            "src_lengths": [],  # B x 1
+        }
+        return self.reorder_ctc(reordered_dict, encoder_out, new_order)
 
 
 @register_model_architecture(model_name="s2t_transformer_fbk", arch_name="s2t_transformer_fbk")
