@@ -59,6 +59,17 @@ class FakeDecoderModel(nn.Module):
     def decoder(self):
         return self.model.decoder
 
+    # To support dualdecoder models with CTC, we include the following methods
+    @property
+    def auxiliary_decoder(self):
+        return self.model.auxiliary_decoder
+
+    def get_auxiliary_target(self, sample, auxiliary_output):
+        return sample["transcript"]
+
+    def get_auxiliary_token_lens(self, sample):
+        return sample["transcript_lengths"]
+
 
 class BaseCTCLoss(CtcCriterion):
     def __init__(self, args, task):
@@ -100,6 +111,7 @@ class BaseCTCLoss(CtcCriterion):
 
         self.zero_infinity = self.args.zero_infinity
         self.sentence_avg = self.args.sentence_avg
+
 
 @register_criterion("ctc_multi_loss")
 class CTCMultiLoss(LegacyFairseqCriterion):

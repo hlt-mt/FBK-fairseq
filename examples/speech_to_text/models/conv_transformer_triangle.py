@@ -78,7 +78,11 @@ class S2TTransformerTriangle(MultiTaskModel):
             aux_decoder_padding_mask=auxiliary_padding_mask,
             **kwargs
         )
-        return decoder_out, (self.auxiliary_decoder.output_layer(auxiliary_out[0]), auxiliary_out[1])
+        if self.encoder.ctc_flag:
+            return (decoder_out, (self.auxiliary_decoder.output_layer(auxiliary_out[0]), auxiliary_out[1])), \
+                   {"ctc_out": encoder_out["ctc_out"], "ctc_lengths": encoder_out["ctc_lengths"]}
+        else:
+            return decoder_out, (self.auxiliary_decoder.output_layer(auxiliary_out[0]), auxiliary_out[1])
 
     def forward_decoder(self, prev_output_tokens, encoder_out, auxiliary_out, auxiliary_tokens, **kwargs):
         auxiliary_padding_mask = auxiliary_tokens.eq(
@@ -268,15 +272,15 @@ def Embedding(num_embeddings, embedding_dim, padding_idx):
 
 
 @register_model_architecture('s2t_transformer_triangle', 's2t_transformer_triangle')
-def base_multilingual_architecture(args):
+def base_s2t_transformer_triangle_architecture(args):
     base_architecture(args)
 
 
 @register_model_architecture('s2t_transformer_triangle', 's2t_transformer_triangle_s')
-def s2t_transformer_2stage_m(args):
+def s2t_transformer_triangle_s(args):
     s2t_transformer_s(args)
 
 
 @register_model_architecture('s2t_transformer_triangle', 's2t_transformer_triangle_m')
-def s2t_transformer_2stage_m(args):
+def s2t_transformer_triangle_m(args):
     s2t_transformer_m(args)
