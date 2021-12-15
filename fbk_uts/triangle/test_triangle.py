@@ -16,11 +16,15 @@ from argparse import Namespace
 from unittest.mock import patch
 
 import numpy as np
+import torch
 
 import tests.utils
 from examples.speech_to_text.criterions.ctc_multi_loss import CTCMultiLoss
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import SpeechToTextDatasetWithSrc, S2TDataConfigSrc
-from examples.speech_to_text.models.conv_transformer_triangle import s2t_transformer_triangle_s, S2TTransformerTriangle
+from examples.speech_to_text.models.conformer import ConformerEncoder
+from examples.speech_to_text.models.conformer_triangle import ConformerTriangle
+from examples.speech_to_text.models.s2t_transformer_fbk_triangle import s2t_transformer_triangle_s,\
+    S2TTransformerTriangle
 from fairseq.data import Dictionary
 
 
@@ -85,6 +89,20 @@ class TriangleTestCase(unittest.TestCase):
         criterion = CTCMultiLoss(self.args, task)
         loss, _, logging_out = criterion.forward(model, samples)
         self.assertTrue(loss > 0)
+
+    @patch('fairseq.data.audio.speech_to_text_dataset.get_features_or_waveform')
+    def test_conformer(self, mock_get_features_or_waveform):
+        mock_get_features_or_waveform.return_value = np.array([[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]])
+        task = tests.utils.TestTranslationTask.setup_task(
+            self.args, self.src_dict, self.tgt_dict
+        )
+        samples = self.ds.collater([self.ds[0], self.ds[1], self.ds[2]])
+        model = ConformerTriangle.build_model(self.args, task)
+        criterion = CTCMultiLoss(self.args, task)
+        with patch.object(torch.nn.modules.SyncBatchNorm, "forward", side_effect=lambda x: x):
+            loss, _, logging_out = criterion.forward(model, samples)
+            self.assertTrue(loss > 0)
+        self.assertIsInstance(model.encoder, ConformerEncoder)
 
 
 if __name__ == '__main__':

@@ -1,19 +1,28 @@
+# Copyright 2021 FBK
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License
 from typing import Optional, Dict, Any, List
 
 from torch import nn, Tensor
 import torch
 
-from examples.speech_to_text.models.s2t_transformer_fbk import S2TTransformerModel, base_architecture, \
-    s2t_transformer_m, s2t_transformer_s
 from examples.speech_to_text.models.multi_task import MultiTaskModel
 from examples.speech_to_text.modules.triangle_transformer_layer import TriangleTransformerDecoderLayer
-from fairseq.models import register_model, register_model_architecture
 from fairseq.models.fairseq_encoder import EncoderOut
-from fairseq.models.speech_to_text import TransformerDecoderScriptable
+from fairseq.models.speech_to_text import TransformerDecoderScriptable, FairseqEncoderDecoderModel
 
 
-@register_model('s2t_transformer_triangle')
-class S2TTransformerTriangle(MultiTaskModel):
+class BaseTriangle(MultiTaskModel):
     """
     This model is an implementation of a multi-task model that predicts both transcripts
     and translations, with the translation being generated from the output representation
@@ -21,9 +30,15 @@ class S2TTransformerTriangle(MultiTaskModel):
     """
     # TODO: do we need different settings/configs for the two decoders?
     # For now, we assume NO.
+
+    encoder_parent_model: FairseqEncoderDecoderModel
+
+    @staticmethod
+    def add_base_args(args):
+        pass
+
     @staticmethod
     def add_args(parser):
-        S2TTransformerModel.add_args(parser)
         parser.add_argument('--auxiliary-decoder-embed-path', type=str, metavar='STR',
                             help='path to pre-trained decoder embedding')
 
@@ -32,7 +47,7 @@ class S2TTransformerTriangle(MultiTaskModel):
         """Build a new model instance."""
 
         # make sure all arguments are present in older models
-        base_architecture(args)
+        cls.add_base_args(args)
 
         if not hasattr(args, 'max_source_positions'):
             args.max_source_positions = 100000
@@ -51,10 +66,10 @@ class S2TTransformerTriangle(MultiTaskModel):
 
         target_embed_tokens = build_embedding(tgt_dict, args.decoder_embed_dim)
         src_embed_tokens = build_embedding(src_dict, args.decoder_embed_dim)
-        encoder = S2TTransformerModel.build_encoder(args, src_dict if src_dict is not None else tgt_dict)
+        encoder = cls.encoder_parent_model.build_encoder(args, src_dict if src_dict is not None else tgt_dict)
         decoder = TriangleTransformerDecoder(args, tgt_dict, target_embed_tokens)
         auxiliary_decoder = TransformerDecoderScriptable(args, src_dict, src_embed_tokens)
-        return S2TTransformerTriangle(encoder, decoder, auxiliary_decoder)
+        return cls(encoder, decoder, auxiliary_decoder)
 
     # In "speech_translation_with_transcription" the transcripts are read into
     # "transcript_target". Not the most elegant solution, but it allows
@@ -269,18 +284,3 @@ def Embedding(num_embeddings, embedding_dim, padding_idx):
     nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
     nn.init.constant_(m.weight[padding_idx], 0)
     return m
-
-
-@register_model_architecture('s2t_transformer_triangle', 's2t_transformer_triangle')
-def base_s2t_transformer_triangle_architecture(args):
-    base_architecture(args)
-
-
-@register_model_architecture('s2t_transformer_triangle', 's2t_transformer_triangle_s')
-def s2t_transformer_triangle_s(args):
-    s2t_transformer_s(args)
-
-
-@register_model_architecture('s2t_transformer_triangle', 's2t_transformer_triangle_m')
-def s2t_transformer_triangle_m(args):
-    s2t_transformer_m(args)
