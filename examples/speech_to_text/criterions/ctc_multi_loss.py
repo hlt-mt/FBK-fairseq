@@ -120,6 +120,7 @@ class CTCMultiLoss(LegacyFairseqCriterion):
         assert task.source_dictionary is not None
         self.ctc_criterion = BaseCTCLoss(args, task)
         self.real_criterion = CTCMultiLoss.build_real_criterion(args, task)
+        self.__class__.real_criterion_class = self.real_criterion.__class__
         self.ctc_weight = args.ctc_weight
 
     @staticmethod
@@ -175,37 +176,23 @@ class CTCMultiLoss(LegacyFairseqCriterion):
             decoder_fake_model, sample, reduce=reduce)
         loss = self.ctc_weight * ctc_loss + real_loss
 
-        logging_output = {
-            "loss": utils.item(loss.data) if reduce else loss.data,
-            "real_loss": real_logging_output['loss'],
-            "ctc_loss": ctc_logging_output['loss'],
-            "ntokens": real_logging_output['ntokens'],
-            "nsentences": real_logging_output['nsentences'],
-            "sample_size": real_logging_output['sample_size'],
-        }
-        if 'nll_loss' in real_logging_output:
-            logging_output['nll_loss'] = real_logging_output['nll_loss']
+        logging_output = {k: v for k, v in real_logging_output.items() if k != "loss"}
+        logging_output["ctc_loss"] = utils.item(ctc_logging_output['loss'])
+        logging_output["real_loss"] = utils.item(real_logging_output['loss'])
+        logging_output["loss"] = utils.item(loss.data) if reduce else loss.data
         return loss, ctc_sample_size, logging_output
 
     @staticmethod
     def logging_outputs_can_be_summed():
         return True
 
-    @staticmethod
-    def reduce_metrics(logging_outputs):
+    @classmethod
+    def reduce_metrics(cls, logging_outputs):
         """Aggregate logging outputs from data parallel training."""
-        loss_sum = utils.item(sum(log.get('loss', 0) for log in logging_outputs))
+        cls.real_criterion_class.reduce_metrics(logging_outputs)
         real_loss_sum = utils.item(sum(log.get('real_loss', 0) for log in logging_outputs))
         ctc_loss_sum = utils.item(sum(log.get('ctc_loss', 0) for log in logging_outputs))
-        if logging_outputs and 'nll_loss' in logging_outputs[0]:
-            nll_loss_sum = utils.item(sum(log.get('nll_loss', 0) for log in logging_outputs))
-        else:
-            nll_loss_sum = loss_sum - ctc_loss_sum  # NLL computed on the real loss, not on the auxiliary CTC
-        ntokens = utils.item(sum(log.get('ntokens', 0) for log in logging_outputs))
         sample_size = utils.item(sum(log.get('sample_size', 0) for log in logging_outputs))
 
-        metrics.log_scalar('loss', loss_sum / sample_size / math.log(2), sample_size, round=3)
-        metrics.log_scalar('nll_loss', nll_loss_sum / ntokens / math.log(2), ntokens, round=3)
-        metrics.log_derived('ppl', lambda meters: utils.get_perplexity(meters['nll_loss'].avg))
         metrics.log_scalar('real_loss', real_loss_sum / sample_size / math.log(2), sample_size, round=3)
         metrics.log_scalar('ctc_loss', ctc_loss_sum / sample_size / math.log(2), sample_size, round=3)

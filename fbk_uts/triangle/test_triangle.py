@@ -25,7 +25,9 @@ from examples.speech_to_text.models.conformer import ConformerEncoder
 from examples.speech_to_text.models.conformer_triangle import ConformerTriangle
 from examples.speech_to_text.models.s2t_transformer_fbk_triangle import s2t_transformer_triangle_s,\
     S2TTransformerTriangle
+from fairseq import utils
 from fairseq.data import Dictionary
+from fairseq.logging.meters import MetersDict
 
 
 class MockS2TDataConfigSrc(S2TDataConfigSrc):
@@ -34,7 +36,9 @@ class MockS2TDataConfigSrc(S2TDataConfigSrc):
 
 
 class TriangleTestCase(unittest.TestCase):
-    def setUp(self) -> None:
+    @patch('fairseq.data.audio.speech_to_text_dataset.get_features_or_waveform')
+    def setUp(self, mock_get_features_or_waveform) -> None:
+        mock_get_features_or_waveform.return_value = np.random.random((200, 4))
         self.src_dict = Dictionary()
         src_lines = ["I like quokkas", "I like tortoises", "I like elephants"]
         for l in src_lines:
@@ -64,11 +68,11 @@ class TriangleTestCase(unittest.TestCase):
         args.ctc_post_process = "letter"
         args.wer_args = None
         args.wer_kenlm_model = None
-        args.zero_infinity = True
+        args.zero_infinity = False
         args.sentence_avg = True
         args.label_smoothing = 0.1
-        args.auxiliary_loss_weight = 0.5
-        args.primary_loss_weight = 0.5
+        args.auxiliary_loss_weight = 0.8
+        args.primary_loss_weight = 0.2
         args.ctc_weight = 0.5
         s2t_transformer_triangle_s(args)
         args.encoder_layers = 2
@@ -77,30 +81,58 @@ class TriangleTestCase(unittest.TestCase):
         args.input_channels = 1
         args.max_source_positions = 10
         self.args = args
-
-    @patch('fairseq.data.audio.speech_to_text_dataset.get_features_or_waveform')
-    def test_ctc(self, mock_get_features_or_waveform):
-        mock_get_features_or_waveform.return_value = np.array([[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]])
-        task = tests.utils.TestTranslationTask.setup_task(
+        self.task = tests.utils.TestTranslationTask.setup_task(
             self.args, self.src_dict, self.tgt_dict
         )
-        samples = self.ds.collater([self.ds[0], self.ds[1], self.ds[2]])
-        model = S2TTransformerTriangle.build_model(self.args, task)
-        criterion = CTCMultiLoss(self.args, task)
-        loss, _, logging_out = criterion.forward(model, samples)
+        self.samples = self.ds.collater([self.ds[0], self.ds[1], self.ds[2]])
+
+    def test_ctc(self):
+        model = S2TTransformerTriangle.build_model(self.args, self.task)
+        criterion = CTCMultiLoss(self.args, self.task)
+        loss, _, _ = criterion.forward(model, self.samples)
         self.assertTrue(loss > 0)
 
-    @patch('fairseq.data.audio.speech_to_text_dataset.get_features_or_waveform')
-    def test_conformer(self, mock_get_features_or_waveform):
-        mock_get_features_or_waveform.return_value = np.array([[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]])
-        task = tests.utils.TestTranslationTask.setup_task(
-            self.args, self.src_dict, self.tgt_dict
-        )
-        samples = self.ds.collater([self.ds[0], self.ds[1], self.ds[2]])
-        model = ConformerTriangle.build_model(self.args, task)
-        criterion = CTCMultiLoss(self.args, task)
+    @patch("fairseq.logging.metrics.get_active_aggregators")
+    def test_ctc_logging_out(self, mock_get_active_aggregators):
+        metrics_logged = MetersDict()
+        mock_get_active_aggregators.return_value = [metrics_logged]
+        model = S2TTransformerTriangle.build_model(self.args, self.task)
+        criterion = CTCMultiLoss(self.args, self.task)
+        _, _, logging_out = criterion.forward(model, self.samples)
+        self.assertIn("auxiliary_loss", logging_out)
+        self.assertIn("primary_loss", logging_out)
+        self.assertIn("real_loss", logging_out)
+        self.assertIn("ctc_loss", logging_out)
+        self.assertAlmostEqual(
+            logging_out["real_loss"],
+            self.args.primary_loss_weight * logging_out["primary_loss"] +
+            self.args.auxiliary_loss_weight * logging_out["auxiliary_loss"],
+            places=4)
+        self.assertAlmostEqual(
+            logging_out["loss"],
+            logging_out["real_loss"] + self.args.ctc_weight * logging_out["ctc_loss"],
+            places=4)
+        CTCMultiLoss.reduce_metrics([logging_out])
+        self.assertIn("auxiliary_loss", metrics_logged)
+        self.assertIn("primary_loss", metrics_logged)
+        self.assertIn("real_loss", metrics_logged)
+        self.assertIn("ctc_loss", metrics_logged)
+        self.assertAlmostEqual(
+            metrics_logged["real_loss"].avg,
+            self.args.primary_loss_weight * utils.item(metrics_logged["primary_loss"].avg) +
+            self.args.auxiliary_loss_weight * utils.item(metrics_logged["auxiliary_loss"].avg),
+            places=4)
+        self.assertAlmostEqual(
+            metrics_logged["loss"].avg,
+            metrics_logged["real_loss"].avg +
+            self.args.ctc_weight * metrics_logged["ctc_loss"].avg,
+            places=4)
+
+    def test_conformer(self):
+        model = ConformerTriangle.build_model(self.args, self.task)
+        criterion = CTCMultiLoss(self.args, self.task)
         with patch.object(torch.nn.modules.SyncBatchNorm, "forward", side_effect=lambda x: x):
-            loss, _, logging_out = criterion.forward(model, samples)
+            loss, _, logging_out = criterion.forward(model, self.samples)
             self.assertTrue(loss > 0)
         self.assertIsInstance(model.encoder, ConformerEncoder)
 
