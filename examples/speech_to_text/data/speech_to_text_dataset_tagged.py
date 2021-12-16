@@ -114,7 +114,7 @@ class SpeechToTextDatasetTagged(SpeechToTextDatasetWithSrc):
         clean_target, tags_target = self.strip_tags_from_text(
             target, self.tgt_initial_tags_idxs, self.tgt_end_tags_idxs)
         clean_transcript, tags_transcript = self.strip_tags_from_text(
-            target, self.src_initial_tags_idxs, self.src_end_tags_idxs)
+            transcript, self.src_initial_tags_idxs, self.src_end_tags_idxs)
 
         return index, source, clean_target, clean_transcript, tags_target, tags_transcript
 

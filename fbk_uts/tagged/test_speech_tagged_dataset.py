@@ -39,7 +39,8 @@ class SpeechTaggedDatasetTestCase(unittest.TestCase):
             self.src_dict.encode_line(l)
         self.tgt_dict = Dictionary(extra_special_symbols=[
             "<A>", "</A>", "<B>", "</B>", "<C>", "</C>"])
-        tgt_lines = ["Mi piacciono <A> quokka </A>", "Mi piacciono <B> tartarughe </B>", "Mi piacciono elefanti"]
+        tgt_lines = [
+            "Mi piacciono i <A> quokka </A>", "Mi piacciono le <B> tartarughe </B>", "Mi piacciono gli elefanti"]
         for l in tgt_lines:
             self.tgt_dict.encode_line(l)
         self.ds = SpeechToTextDatasetTagged(
@@ -59,14 +60,16 @@ class SpeechTaggedDatasetTestCase(unittest.TestCase):
     def test_basic_usage(self, mock_get_features_or_waveform):
         mock_get_features_or_waveform.return_value = np.array([])
         for i in range(3):
-            self.assertEqual(4, self.ds[i][2].shape[0])
+            self.assertEqual(5, self.ds[i][2].shape[0])
             self.assertEqual(4, self.ds[i][3].shape[0])
         first = self.ds[0]
-        self.assertEqual(first[4].tolist(), [0, 0, 1, 0])
+        self.assertEqual(first[4].tolist(), [0, 0, 0, 1, 0])
         self.assertEqual(first[5].tolist(), [0, 0, 1, 0])
         last = self.ds[2]
-        self.assertEqual(last[4].tolist(), [0, 0, 0, 0])
+        self.assertEqual(last[4].tolist(), [0, 0, 0, 0, 0])
         self.assertEqual(last[5].tolist(), [0, 0, 0, 0])
+        self.assertEqual(self.tgt_dict.string(first[2]), "Mi piacciono i quokka")
+        self.assertEqual(self.src_dict.string(first[3]), "I like quokkas")
 
     @patch('fairseq.data.audio.speech_to_text_dataset.get_features_or_waveform')
     def test_collater(self, mock_get_features_or_waveform):
@@ -77,9 +80,15 @@ class SpeechTaggedDatasetTestCase(unittest.TestCase):
             [0, 0, 2, 0],
             [0, 0, 0, 0]], samples["transcript_tags"].tolist())
         self.assertEqual([
-            [0, 0, 1, 0],
-            [0, 0, 2, 0],
-            [0, 0, 0, 0]], samples["target_tags"].tolist())
+            [0, 0, 0, 1, 0],
+            [0, 0, 0, 2, 0],
+            [0, 0, 0, 0, 0]], samples["target_tags"].tolist())
+        expected_strings = ["Mi piacciono i quokka", "Mi piacciono le tartarughe", "Mi piacciono gli elefanti"]
+        for i in range(3):
+            self.assertEqual(expected_strings[i], self.tgt_dict.string(samples["target"][i]))
+        expected_strings = ["I like quokkas", "I like tortoises", "I like elephants"]
+        for i in range(3):
+            self.assertEqual(expected_strings[i], self.src_dict.string(samples["transcript"][i]))
 
 
 if __name__ == '__main__':
