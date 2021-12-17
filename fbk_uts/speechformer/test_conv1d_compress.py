@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-
+import copy
 import unittest
 from argparse import Namespace
 
@@ -87,6 +87,36 @@ class TestConvLayers(unittest.TestCase):
         self.assertEqual(len(compress_layer.shared_compress_layer[0].conv_layers), 2)
         self.assertEqual(compress_layer.shared_compress_layer[0].conv_layers[0].stride[0], 2)
         self.assertEqual(compress_layer.shared_compress_layer[0].conv_layers[1].stride[0], 2)
+
+    def test_speechformer_non_shared_compression(self):
+        new_args = copy.deepcopy(self.base_args)
+        # test non-shared compression layer initialization
+        new_args.shared_layer_kv_compressed = 0
+        # test Conv1D compression with n_layers > 1
+        new_args.compress_n_layers = 2
+        encoder = SpeechformerEncoder(new_args, self.fake_dict)
+        compress_layer = encoder.build_speechformer_encoder_layer(new_args)
+        self.assertEqual(compress_layer.shared_compress_layer[0], None)
+        compress_list = []
+        for module_i in range(4):
+            compress_list.append(encoder._modules["speechformer_layers"]._modules[f"{module_i}"].self_attn.compress_k
+                                 .conv_layers)
+        for compress_ in compress_list:
+            self.assertEqual(len(compress_), 2)
+            self.assertEqual(compress_[0].stride[0], 2)
+            self.assertEqual(compress_[1].stride[0], 2)
+        # test Conv1D compression with n_layers > 1
+        new_args.compress_n_layers = 1
+        encoder = SpeechformerEncoder(new_args, self.fake_dict)
+        compress_layer = encoder.build_speechformer_encoder_layer(new_args)
+        self.assertEqual(compress_layer.shared_compress_layer[0], None)
+        compress_list = []
+        for module_i in range(4):
+            compress_list.append(encoder._modules["speechformer_layers"]._modules[f"{module_i}"].self_attn.compress_k
+                                 .conv_layers)
+        for compress_ in compress_list:
+            self.assertEqual(len(compress_), 1)
+            self.assertEqual(compress_[0].stride[0], 4)
 
     def test_assertion(self):
         """

@@ -93,7 +93,7 @@ class ConvAttention(nn.Module):
             self.compress_k = Conv1dCompressLayer(
                 embed_dim,
                 compress_kernel_size,
-                stride=compressed,
+                compression_factor=compressed,
                 padding=compress_kernel_size // 2,
                 freeze_compress=freeze_compress,
                 n_layers=compress_n_layers,
@@ -102,7 +102,7 @@ class ConvAttention(nn.Module):
                 self.compress_v = Conv1dCompressLayer(
                 embed_dim,
                 compress_kernel_size,
-                stride=compressed,
+                compression_factor=compressed,
                 padding=compress_kernel_size // 2,
                 freeze_compress=freeze_compress,
                 n_layers=compress_n_layers,
@@ -140,6 +140,12 @@ class ConvAttention(nn.Module):
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
 
+    @staticmethod
+    def init_compression_params(compress_layers):
+        for cl in compress_layers.conv_layers:
+            # intialize parameters for compressed layer
+            nn.init.xavier_uniform_(cl.weight, gain=1 / math.sqrt(2))
+
     def reset_parameters(self):
         if self.qkv_same_dim:
             # Empirically observed the convergence to be much better with
@@ -150,11 +156,9 @@ class ConvAttention(nn.Module):
             if (
                 not self.layerwise_sharing
             ):  # otherwise, we already initialize the parameters
-                nn.init.xavier_uniform_(self.compress_k.weight, gain=1 / math.sqrt(2))
+                self.init_compression_params(self.compress_k)
                 if not self.shared_kv_compressed:
-                    nn.init.xavier_uniform_(
-                        self.compress_v.weight, gain=1 / math.sqrt(2)
-                    )
+                    self.init_compression_params(self.compress_v)
         else:
             nn.init.xavier_uniform_(self.k_proj.weight)
             nn.init.xavier_uniform_(self.v_proj.weight)
@@ -162,9 +166,9 @@ class ConvAttention(nn.Module):
             if (
                 not self.layerwise_sharing
             ):  # otherwise, we already initialize the parameters
-                nn.init.xavier_uniform_(self.compress_k.weight)
+                self.init_compression_params(self.compress_k)
                 if not self.shared_kv_compressed:
-                    nn.init.xavier_uniform_(self.compress_v.weight)
+                    self.init_compression_params(self.compress_v)
 
         nn.init.xavier_uniform_(self.out_proj.weight)
         if self.out_proj.bias is not None:
