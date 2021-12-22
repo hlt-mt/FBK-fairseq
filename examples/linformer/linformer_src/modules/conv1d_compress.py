@@ -29,6 +29,9 @@ class Conv1dCompressLayer(nn.Module):
             freeze_compress: False,
     ):
         super(Conv1dCompressLayer, self).__init__()
+        self.compression_factor = compression_factor
+        self.padding = padding
+        self.kernel_size = kernel_size
         # compute the stride for each layer to obtain the compression factor at the output of the Conv1d stack
         stride_per_layer = compression_factor // n_layers
         self.conv_layers = nn.ModuleList(

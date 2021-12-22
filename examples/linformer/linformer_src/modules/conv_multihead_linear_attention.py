@@ -376,6 +376,20 @@ class ConvAttention(nn.Module):
                 attn_mask = attn_mask.repeat(attn_weights.size(0), 1, 1)
             attn_weights += attn_mask
 
+        if key_padding_mask is not None:
+            # don't attend to padding symbols
+            compressed_key_padding_mask = (- F.max_pool1d(
+                - key_padding_mask.float().unsqueeze(0),
+                kernel_size=compress_k.kernel_size,
+                stride=compress_k.compression_factor,
+                padding=compress_k.padding)).squeeze(0).bool()
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.masked_fill(
+                compressed_key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
+                float("-inf"),
+            )
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
         if before_softmax:
             return attn_weights, v
 
