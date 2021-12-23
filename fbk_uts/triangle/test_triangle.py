@@ -11,12 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
+import copy
 import unittest
 from argparse import Namespace
 from unittest.mock import patch
 
 import numpy as np
 import torch
+from examples.speech_to_text.models.speechformer import SpeechformerEncoder
 
 import tests.utils
 from examples.speech_to_text.criterions.ctc_multi_loss import CTCMultiLoss
@@ -25,6 +27,7 @@ from examples.speech_to_text.models.conformer import ConformerEncoder
 from examples.speech_to_text.models.conformer_triangle import ConformerTriangle
 from examples.speech_to_text.models.s2t_transformer_fbk_triangle import s2t_transformer_triangle_s,\
     S2TTransformerTriangle
+from examples.speech_to_text.models.speechformer_triangle import SpeechformerTriangle
 from fairseq import utils
 from fairseq.data import Dictionary
 from fairseq.logging.meters import MetersDict
@@ -135,6 +138,15 @@ class TriangleTestCase(unittest.TestCase):
             loss, _, logging_out = criterion.forward(model, self.samples)
             self.assertTrue(loss > 0)
         self.assertIsInstance(model.encoder, ConformerEncoder)
+
+    def test_speechformer(self):
+        speechformer_args = copy.deepcopy(self.args)
+        speechformer_args.transformer_after_compression = True
+        model = SpeechformerTriangle.build_model(speechformer_args, self.task)
+        criterion = CTCMultiLoss(speechformer_args, self.task)
+        loss, _, logging_out = criterion.forward(model, self.samples)
+        self.assertTrue(loss > 0)
+        self.assertIsInstance(model.encoder, SpeechformerEncoder)
 
 
 if __name__ == '__main__':
