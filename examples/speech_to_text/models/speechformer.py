@@ -21,7 +21,9 @@ import torch.nn as nn
 from torch import Tensor
 
 from examples.linformer.linformer_src.modules.conv1d_compress import Conv1dCompressLayer
+from examples.speech_to_text.models.conformer import conformer_base_architecture, conformer_s
 from examples.speech_to_text.models.s2t_transformer_fbk import S2TTransformerModel
+from examples.speech_to_text.modules.conformer_encoder_layer import ConformerEncoderLayer
 from examples.speech_to_text.modules.ctc_support import CtcSupport
 from examples.speech_to_text.modules.encoder_pretraining_support import EncoderPretrainingSupport
 from examples.speech_to_text.modules.speechformer_encoder_layer import SpeechformerEncoderLayer
@@ -117,6 +119,10 @@ class SpeechformerModel(FairseqEncoderDecoderModel):
             '--transformer-after-compression', default=False, action='store_true',
             help='whether or not using standard TransformerEncoder layers after CTC compression '
             'instead of ConvAttention Encoder layers')
+        parser.add_argument(
+            '--conformer-after-compression', default=False, action='store_true',
+            help='whether or not using ConformerEncoder layers after CTC compression '
+                 'instead of ConvAttention Encoder layers')
         # Initial convolutional layer (optional)
         parser.add_argument(
             "--CNN-first-layer",
@@ -232,12 +238,17 @@ class SpeechformerEncoder(FairseqEncoder, CtcSupport):
         )
 
         assert args.compress_kernel_size >= args.compressed
-        if args.transformer_after_compression:
+        transformer_after_compression = getattr(args, "transformer_after_compression", False)
+        conformer_after_compression = getattr(args, "conformer_after_compression", False)
+        assert not (transformer_after_compression and conformer_after_compression), \
+            "Cannot enable both transformer_after_compression and conformer_after_compression"
+        if transformer_after_compression or conformer_after_compression:
             self.speechformer_layers = nn.ModuleList(
                 [self.build_speechformer_encoder_layer(args) for _ in range(args.ctc_encoder_layer)]
             )
+            layer_class = TransformerEncoderLayer if transformer_after_compression else ConformerEncoderLayer
             self.speechformer_layers.extend(
-                [TransformerEncoderLayer(args) for _ in range(args.encoder_layers - args.ctc_encoder_layer)]
+                [layer_class(args) for _ in range(args.encoder_layers - args.ctc_encoder_layer)]
             )
         else:
             self.speechformer_layers = nn.ModuleList(
@@ -440,3 +451,15 @@ def speechformer_l(args):
     args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 16)
     args.dropout = getattr(args, "dropout", 0.2)
     base_architecture(args)
+
+
+@register_model_architecture("speechformer", "speechconformer_s")
+def speechconformer_s(args):
+    speechformer_s(args)
+    conformer_s(args)
+
+
+@register_model_architecture("speechformer", "speechconformer_m")
+def speechconformer_m(args):
+    speechformer_m(args)
+    conformer_base_architecture(args)
