@@ -18,6 +18,7 @@ from argparse import Namespace
 import torch
 
 from examples.speech_to_text.models.speechformer import speechformer_s, SpeechformerEncoder
+from examples.speech_to_text.modules.ctc_support import CtcSupport
 from fairseq.data import Dictionary
 
 
@@ -59,6 +60,7 @@ class SpeechformerCompressionTestCase(unittest.TestCase):
         cls.base_args.ctc_compress_strategy = "avg"
         cls.base_args.criterion = "ctc_multi_loss"
         cls.base_args.ctc_compress_max_out_size = -1
+        cls.base_args.ctc_compress_fixed_ratio = 4
         cls.fake_dict = Dictionary()
 
     def test_base_compression(self):
@@ -107,6 +109,35 @@ class SpeechformerCompressionTestCase(unittest.TestCase):
         out_batch_pred = encoder.ensure_max_ctc_out_len(fake_batch_predicted)
         self.assertEqual([('a', 5), ('b', 4), ('c', 5)], out_batch_pred[0])
         self.assertEqual([('a', 10)], out_batch_pred[1])
+
+    def test_fixed_compression(self):
+        custom_args = copy.deepcopy(self.base_args)
+        custom_args.ctc_compress_strategy = "fixed"
+        encoder = SpeechformerEncoder(custom_args, self.fake_dict)
+
+        out_x, out_lens = encoder.average_same_ctc_features(self.fake_ctc_out, self.fake_x, self.fake_x_lens)
+        self.assertEqual(out_lens[0].item(), 2)
+        self.assertEqual(out_lens[1].item(), 2)
+        self.assertEqual(out_lens[2].item(), 2)
+        self.assertEqual(out_lens[3].item(), 1)
+        for i in range(5):
+            self.assertAlmostEqual(out_x[0][3].tolist()[i], 2.3, places=5)
+        self.assertEqual(out_x[1][3].tolist(), [0.0, 0.0, 0.0, 0.0, 0.0])
+
+    def test_fixed_compression_8(self):
+        custom_args = copy.deepcopy(self.base_args)
+        custom_args.ctc_compress_strategy = "fixed"
+        custom_args.ctc_compress_fixed_ratio = 8
+        encoder = SpeechformerEncoder(custom_args, self.fake_dict)
+        self.assertEqual(CtcSupport.FIXED_RATIO, 8)
+
+        out_x, out_lens = encoder.average_same_ctc_features(self.fake_ctc_out, self.fake_x, self.fake_x_lens)
+        self.assertEqual(out_lens[0].item(), 1)
+        self.assertEqual(out_lens[1].item(), 1)
+        self.assertEqual(out_lens[2].item(), 1)
+        self.assertEqual(out_lens[3].item(), 1)
+        for i in range(5):
+            self.assertAlmostEqual(out_x[0][3].tolist()[i], 2.3, places=5)
 
 
 if __name__ == '__main__':

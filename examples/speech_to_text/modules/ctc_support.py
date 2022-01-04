@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class CtcSupport:
+    FIXED_RATIO = 4
     """
     This class adds the CTC loss computation (enabled by "ctc_multi_loss" criterion) to the model by adding a Linear
     layer on the layer specified by --ctc-encoder-layer. By specifying the CTC compression strategy via
@@ -38,8 +39,15 @@ class CtcSupport:
             "--ctc-compress-strategy",
             type=str,
             default="none",
-            choices=['none', 'avg', 'weighted', 'softmax'],
+            choices=['none', 'avg', 'weighted', 'softmax', 'fixed'],
             help="Strategy to use when compressing CTC output"
+        )
+        parser.add_argument(
+            "--ctc-compress-fixed-ratio",
+            type=int,
+            default=4,
+            help="if --ctc-compress-strategy is set to fixed, this "
+                 "parameter controls how many consecutive steps to merge"
         )
         parser.add_argument(
             '--ctc-compress-max-out-size', type=int, default=-1,
@@ -61,6 +69,7 @@ class CtcSupport:
             if args.ctc_compress_strategy != "none":
                 self.ctc_compress_method = getattr(CTCCompressStrategy, args.ctc_compress_strategy)
                 self.ctc_compress_max_out_size = args.ctc_compress_max_out_size
+                CtcSupport.FIXED_RATIO = args.ctc_compress_fixed_ratio
             else:
                 self.ctc_compress_method = "none"
 
@@ -85,8 +94,8 @@ class CtcSupport:
                 predicted = prob_ctc[b][: src_lengths[b]].argmax(-1).tolist()
                 batch_predicted.append([(p[0], len(list(p[1]))) for p in groupby(predicted)])
             batch_predicted = self.ensure_max_ctc_out_len(batch_predicted)
-            new_lengths = [len(p) for p in batch_predicted]
-            weights_matrix = self.ctc_compress_method(prob_ctc, batch_predicted, new_lengths, x.dtype, x.device)
+            weights_matrix, new_lengths = self.ctc_compress_method(
+                prob_ctc, batch_predicted, x.dtype, x.device)
         # x is T x B x C -> B x C x T; weights_matrix is B x T x T'
         compressed_output = x.permute(1, 2, 0).bmm(weights_matrix)  # B x C x T'
         return compressed_output.permute(2, 0, 1), src_lengths.new(new_lengths)
@@ -148,7 +157,12 @@ class CtcSupport:
 
 class CTCCompressStrategy:
     @staticmethod
-    def avg(prob_ctc, predicted, new_lengths, dtype, device):
+    def new_lengths(batch_predicted):
+        return [len(p) for p in batch_predicted]
+
+    @staticmethod
+    def avg(prob_ctc, predicted, dtype, device):
+        new_lengths = CTCCompressStrategy.new_lengths(predicted)
         new_maxlen = max(new_lengths)
         weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype)
         for b_idx, pred in enumerate(predicted):
@@ -157,10 +171,11 @@ class CTCCompressStrategy:
                 new_processed_inputs_cnt = processed_inputs_cnt + same[1]
                 weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = 1.0 / same[1]
                 processed_inputs_cnt = new_processed_inputs_cnt
-        return weights_matrix.to(device)
+        return weights_matrix.to(device), new_lengths
 
     @staticmethod
-    def weighted(prob_ctc, predicted, new_lengths, dtype, device):
+    def weighted(prob_ctc, predicted, dtype, device):
+        new_lengths = CTCCompressStrategy.new_lengths(predicted)
         new_maxlen = max(new_lengths)
         weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype, device=device)
         for b_idx, pred in enumerate(predicted):
@@ -172,10 +187,11 @@ class CTCCompressStrategy:
                 weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = \
                     weights / weights.sum()
                 processed_inputs_cnt = new_processed_inputs_cnt
-        return weights_matrix
+        return weights_matrix, new_lengths
 
     @staticmethod
-    def softmax(prob_ctc, predicted, new_lengths, dtype, device):
+    def softmax(prob_ctc, predicted, dtype, device):
+        new_lengths = CTCCompressStrategy.new_lengths(predicted)
         new_maxlen = max(new_lengths)
         weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype, device=device)
         for b_idx, pred in enumerate(predicted):
@@ -187,4 +203,25 @@ class CTCCompressStrategy:
                 weights_matrix[b_idx, processed_inputs_cnt:new_processed_inputs_cnt, t_idx] = \
                     weights / weights.sum()
                 processed_inputs_cnt = new_processed_inputs_cnt
-        return weights_matrix
+        return weights_matrix, new_lengths
+
+    @staticmethod
+    def fixed(prob_ctc, predicted, dtype, device):
+        new_maxlen = math.ceil(prob_ctc.shape[1] / CtcSupport.FIXED_RATIO)
+        weights_matrix = torch.zeros((prob_ctc.shape[0], prob_ctc.shape[1], new_maxlen), dtype=dtype)
+        new_lengths = []
+        for b_idx, pred in enumerate(predicted):
+            original_len = sum(x[1] for x in pred)
+            new_len = 0
+            for new_t_idx in range(new_maxlen):
+                processed_inputs_cnt = new_t_idx * CtcSupport.FIXED_RATIO
+                processed_inputs_cnt_end = processed_inputs_cnt + CtcSupport.FIXED_RATIO
+                if processed_inputs_cnt_end > original_len:
+                    processed_inputs_cnt_end = original_len
+                weights_matrix[b_idx, processed_inputs_cnt:processed_inputs_cnt_end, new_t_idx] = \
+                    1.0 / (processed_inputs_cnt_end - processed_inputs_cnt)
+                new_len += 1
+                if processed_inputs_cnt_end == original_len:
+                    break
+            new_lengths.append(new_len)
+        return weights_matrix.to(device), new_lengths
