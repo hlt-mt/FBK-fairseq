@@ -453,13 +453,13 @@ def speechformer_l(args):
     base_architecture(args)
 
 
-@register_model_architecture("speechformer", "speechconformer_s")
-def speechconformer_s(args):
+@register_model_architecture("speechformer", "speechformer_hybrid_s")
+def speechformer_hybrid_s(args):
     speechformer_s(args)
     conformer_s(args)
 
 
-@register_model_architecture("speechformer", "speechconformer_m")
-def speechconformer_m(args):
+@register_model_architecture("speechformer", "speechformer_hybrid_m")
+def speechformer_hybrid_m(args):
     speechformer_m(args)
     conformer_base_architecture(args)

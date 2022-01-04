@@ -15,7 +15,7 @@ import copy
 import unittest
 from argparse import Namespace
 
-from examples.speech_to_text.models.speechformer import speechformer_s, SpeechformerEncoder, speechconformer_s
+from examples.speech_to_text.models.speechformer import speechformer_s, SpeechformerEncoder, speechformer_hybrid_s
 from examples.speech_to_text.modules.conformer_encoder_layer import ConformerEncoderLayer
 from examples.speech_to_text.modules.speechformer_encoder_layer import SpeechformerEncoderLayer
 from fairseq.data import Dictionary
@@ -38,7 +38,7 @@ class SpeechformerTestCase(unittest.TestCase):
         cls.base_args.criterion = "ctc_multi_loss"
         cls.base_args.ctc_compress_max_out_size = -1
         speechformer_s(cls.base_args)
-        speechconformer_s(cls.base_args)
+        speechformer_hybrid_s(cls.base_args)
         cls.fake_dict = Dictionary()
 
     def do_check(self, additional_args, expected_class):
