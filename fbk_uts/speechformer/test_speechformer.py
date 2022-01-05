@@ -37,6 +37,7 @@ class SpeechformerTestCase(unittest.TestCase):
         cls.base_args.ctc_compress_strategy = "avg"
         cls.base_args.criterion = "ctc_multi_loss"
         cls.base_args.ctc_compress_max_out_size = -1
+        cls.base_args.ctc_compress_fixed_ratio = 4
         speechformer_s(cls.base_args)
         speechformer_hybrid_s(cls.base_args)
         cls.fake_dict = Dictionary()
