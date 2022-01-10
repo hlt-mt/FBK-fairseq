@@ -79,6 +79,10 @@ class ConformerModel(S2TTransformerModel):
             '--conformer-half-step-residual', default=True, action='store_true',
             help='Whether to use half step residual or not in Conformer'
         )
+        parser.add_argument(
+            '--no-syncbatchnorm', default=False, action='store_true',
+            help='If enabled, SyncBatchNorm is replaced by BatchNorm1D in the Conformer Convolution Layer.'
+        )
 
     @classmethod
     def build_encoder(cls, args, dictionary):
@@ -206,6 +210,7 @@ def conformer_base_architecture(args):
     args.conformer_conv_dropout = getattr(args, "conformer_conv_dropout", 0.1)
     args.conformer_conv_kernel_size = getattr(args, "conformer_conv_kernel_size", 31)
     args.conformer_half_step_residual = getattr(args, "conformer_half_step_residual", True)
+    args.no_syncbatchnorm = getattr(args, "no_syncbatchnorm", False)
 
 
 @register_model_architecture("conformer", "conformer_s")

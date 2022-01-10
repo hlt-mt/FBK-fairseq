@@ -61,6 +61,7 @@ class ConformerEncoderLayer(nn.Module):
         self.conv_dropout_p = args.conformer_conv_dropout
         self.conv_kernel_size = args.conformer_conv_kernel_size
         self.half_step_residual = args.conformer_half_step_residual
+        self.no_syncbatchnorm = args.no_syncbatchnorm
 
         if self.half_step_residual:
             self.feed_forward_residual_factor = 0.5
@@ -84,6 +85,7 @@ class ConformerEncoderLayer(nn.Module):
             kernel_size=self.conv_kernel_size,
             expansion_factor=self.conv_expansion_factor,
             dropout_p=self.conv_dropout_p,
+            no_syncbatchnorm=self.no_syncbatchnorm,
         )
 
         self.second_feed_forward = FeedForwardModule(

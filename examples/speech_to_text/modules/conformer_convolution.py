@@ -46,12 +46,13 @@ class ConformerConvModule(nn.Module):
             kernel_size: int = 31,
             expansion_factor: int = 2,
             dropout_p: float = 0.1,
+            no_syncbatchnorm = False,
     ) -> None:
         super(ConformerConvModule, self).__init__()
         assert (kernel_size - 1) % 2 == 0, "kernel_size should be a odd number for 'SAME' padding"
         assert expansion_factor == 2, "Currently, only supports expansion_factor 2"
         self.layernorm = nn.LayerNorm(in_channels)
-        self.batchnorm = nn.SyncBatchNorm(in_channels)
+        self.batchnorm = nn.SyncBatchNorm(in_channels) if not no_syncbatchnorm else nn.BatchNorm1d(in_channels)
         self.first_pointwise_conv1d = nn.Conv1d(
             in_channels=in_channels,
             out_channels=in_channels * expansion_factor,
