@@ -19,19 +19,19 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from examples.speech_to_text.data.speech_to_text_dataset_with_src import SpeechToTextDatasetCreatorWithSrc, \
-    SpeechToTextDatasetWithSrc
+from examples.speech_to_text.data.speech_to_text_dataset_with_src import S2TDataConfigSrc, \
+    SpeechToTextDatasetCreatorWithSrc, SpeechToTextDatasetWithSrc
 from fairseq.data import (
     Dictionary,
     data_utils as fairseq_data_utils,
 )
-from fairseq.data.audio.speech_to_text_dataset import S2TDataConfig, _collate_frames
+from fairseq.data.audio.speech_to_text_dataset import _collate_frames
 
 
 logger = logging.getLogger(__name__)
 
 
-class S2TDataConfigTagged(S2TDataConfig):
+class S2TDataConfigTagged(S2TDataConfigSrc):
     """Wrapper class for data config YAML"""
     def __init__(self, yaml_path):
         super().__init__(yaml_path)

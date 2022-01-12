@@ -189,12 +189,22 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             torch.zeros(bsz, beam_size, max_aux_len).long().fill_(self.src_pad).to(
                 aux_nbest[0][0]["tokens"].device)
         )
+        src_tags = (
+            torch.zeros(bsz, beam_size, max_aux_len).long().to(
+                aux_nbest[0][0]["tokens"].device)
+        )
         for i_batch in range(len(aux_nbest)):
             for i_best in range(len(aux_nbest[i_batch])):
                 cand = aux_nbest[i_batch][i_best]
                 src_tokens[i_batch, i_best, :cand["tokens"].shape[0]] = cand["tokens"]
+                if cand["aux_tags"] is not None:
+                    src_tags[i_batch, i_best, :cand["aux_tags"].shape[0]] = cand["aux_tags"]
+                else:
+                    src_tags = None
 
         src_tokens = src_tokens.view(bsz * beam_size, -1)
+        if src_tags is not None:
+            src_tags = src_tags.view(bsz * beam_size, -1)
         # length of the source text being the character length except EndOfSentence and pad
         src_lengths = (
             (src_tokens.ne(self.src_eos) & src_tokens.ne(self.src_pad)).long().sum(dim=1)
@@ -240,6 +250,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
         )  # +2 for eos and pad
         tokens[:, 0] = self.eos if bos_token is None else bos_token
         attn: Optional[Tensor] = None
+        tags: Optional[Tensor] = None
 
         # The blacklist indicates candidates that should be ignored.
         # For example, suppose we're sampling and have already finalized 2/5
@@ -286,10 +297,12 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                     encoder_outs, reorder_state
                 )
                 src_tokens = src_tokens.index_select(0, reorder_state)
+                if src_tags is not None:
+                    src_tags = src_tags.index_select(0, reorder_state)
                 prev_scores = prev_scores.view(-1).index_select(0, reorder_state).view(-1, beam_size, 1)
                 auxiliary_outputs = auxiliary_outputs.index_select(0, reorder_state)
 
-            lprobs, avg_attn_scores = self.model.forward_decoder(
+            lprobs, avg_attn_scores, tags_lprobs = self.model.forward_decoder(
                 tokens[:, : step + 1],
                 encoder_outs,
                 incremental_states,
@@ -327,6 +340,12 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                         bsz * beam_size, avg_attn_scores.size(1), max_len + 2
                     ).to(scores)
                 attn[:, :, step + 1].copy_(avg_attn_scores)
+
+            # Record tags, only support avg_attn_scores is a Tensor
+            if tags_lprobs is not None:
+                if tags is None:
+                    tags = torch.empty(bsz * beam_size, max_len + 2).to(scores)
+                tags[:, step + 1] = torch.argmax(tags_lprobs, dim=-1)
 
             scores = scores.type_as(lprobs)
             eos_bbsz_idx = torch.empty(0).to(
@@ -373,11 +392,13 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                     eos_scores,
                     tokens,
                     src_tokens,
+                    src_tags,
                     scores,
                     finalized,
                     finished,
                     beam_size,
                     attn,
+                    tags,
                     src_lengths,
                     max_len,
                 )
@@ -415,6 +436,10 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                 if attn is not None:
                     attn = attn.view(bsz, -1)[batch_idxs].view(
                         new_bsz * beam_size, attn.size(1), -1
+                    )
+                if tags is not None:
+                    tags = tags.view(bsz, -1)[batch_idxs].view(
+                        new_bsz * beam_size, -1
                     )
                 bsz = new_bsz
             else:
@@ -466,6 +491,10 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             if attn is not None:
                 attn[:, :, : step + 2] = torch.index_select(
                     attn[:, :, : step + 2], dim=0, index=active_bbsz_idx
+                )
+            if tags is not None:
+                tags[:, : step + 2] = torch.index_select(
+                    tags[:, : step + 2], dim=0, index=active_bbsz_idx
                 )
 
             # reorder incremental state in decoder
@@ -530,6 +559,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
         )  # +2 for eos and pad
         aux_tokens[:, 0] = self.src_eos if bos_token is None else bos_token
         attn: Optional[Tensor] = None
+        aux_tags: Optional[Tensor] = None
 
         # The ignorelist indicates candidates that should be ignored.
         # For example, suppose we're sampling and have already finalized 2/5
@@ -578,7 +608,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                 )
                 aux_outputs = aux_outputs.index_select(1, reorder_state)
 
-            lprobs, aux_out, avg_attn_scores = self.model.forward_auxiliary_decoder(
+            lprobs, aux_out, avg_attn_scores, aux_tags_lprobs = self.model.forward_auxiliary_decoder(
                 aux_tokens[:, : step + 1], encoder_outs, auxiliary_incremental_states, self.temperature
             )
             if step == 0:
@@ -619,6 +649,12 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                         bsz * beam_size, avg_attn_scores.size(1), max_len + 2
                     ).to(scores)
                 attn[:, :, step + 1].copy_(avg_attn_scores)
+
+            # Record tags
+            if aux_tags_lprobs is not None:
+                if aux_tags is None:
+                    aux_tags = torch.empty(bsz * beam_size, max_len + 2).to(scores)
+                aux_tags[:, step + 1] = torch.argmax(aux_tags_lprobs, dim=-1)
 
             scores = scores.type_as(lprobs)
             eos_bbsz_idx = torch.empty(0).to(
@@ -670,6 +706,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                     finished,
                     beam_size,
                     attn,
+                    aux_tags,
                     src_lengths,
                     max_len,
                     self.src_eos,
@@ -705,6 +742,10 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
 
                 scores = scores.view(bsz, -1)[batch_idxs].view(new_bsz * beam_size, -1)
                 aux_tokens = aux_tokens.view(bsz, -1)[batch_idxs].view(new_bsz * beam_size, -1)
+                if aux_tags is not None:
+                    aux_tags = aux_tags.view(bsz, -1)[batch_idxs].view(
+                        new_bsz * beam_size, -1
+                    )
                 if attn is not None:
                     attn = attn.view(bsz, -1)[batch_idxs].view(
                         new_bsz * beam_size, attn.size(1), -1
@@ -820,6 +861,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
         finished: List[bool],
         beam_size: int,
         attn: Optional[Tensor],
+        aux_tags: Optional[Tensor],
         src_lengths,
         max_len: int,
         eos,
@@ -844,6 +886,11 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             if attn is not None
             else None
         )
+        aux_tags_clone = (
+            aux_tags.index_select(0, bbsz_idx)[:, 1: step + 2]
+            if aux_tags is not None
+            else None
+        )
 
         # compute scores per token position
         pos_scores = scores.index_select(0, bbsz_idx)[:, : step + 1]
@@ -885,6 +932,10 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                     hypo_attn = attn_clone[i]
                 else:
                     hypo_attn = torch.empty(0)
+                if aux_tags_clone is not None:
+                    aux_hypo_tags = aux_tags_clone[i]
+                else:
+                    aux_hypo_tags = None
                 finalized[sent].append(
                     {
                         "tokens": tokens_clone[i],
@@ -895,6 +946,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                         "attention": hypo_attn,  # src_len x tgt_len
                         "alignment": torch.empty(0),
                         "positional_scores": pos_scores[i],
+                        "aux_tags": aux_hypo_tags,
                     }
                 )
 
@@ -917,11 +969,13 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
         eos_scores,
         tokens,
         src_tokens,
+        src_tags,
         scores,
         finalized: List[List[Dict[str, Tensor]]],
         finished: List[bool],
         beam_size: int,
         attn: Optional[Tensor],
+        tags: Optional[Tensor],
         src_lengths,
         max_len: int,
     ):
@@ -937,11 +991,20 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             :, 1 : step + 2
         ]  # skip the first index, which is EOS
         src_tokens_clone = src_tokens.index_select(0, bbsz_idx)
+        src_tags_clone = None
+        if src_tags is not None:
+            src_tags_clone = src_tags.index_select(0, bbsz_idx)
 
         tokens_clone[:, step] = self.eos
         attn_clone = (
             attn.index_select(0, bbsz_idx)[:, :, 1 : step + 2]
             if attn is not None
+            else None
+        )
+
+        tags_clone = (
+            tags.index_select(0, bbsz_idx)[:, 1: step + 2]
+            if tags is not None
             else None
         )
 
@@ -986,7 +1049,15 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                 else:
                     hypo_attn = torch.empty(0)
 
+                if tags_clone is not None:
+                    hypo_tags = tags_clone[i]
+                else:
+                    hypo_tags = None
+
                 src_mask = src_tokens_clone[i] != self.src_pad
+                aux_tags = None
+                if src_tags_clone is not None:
+                    aux_tags = src_tags_clone[i].masked_select(src_mask)
                 finalized[sent].append(
                     {
                         "tokens": tokens_clone[i],
@@ -995,6 +1066,8 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                         "attention": hypo_attn,  # src_len x tgt_len
                         "alignment": torch.empty(0),
                         "positional_scores": pos_scores[i],
+                        "tags": hypo_tags,
+                        "aux_tags": aux_tags,
                     }
                 )
 
@@ -1024,6 +1097,8 @@ class EnsembleTwoPhaseModel(EnsembleModel):
             temperature: float = 1.0
     ):
         log_probs = []
+        tags_lprobs = []
+        avg_tags_lprobs: Optional[Tensor] = None
         avg_attn: Optional[Tensor] = None
         encoder_out: Optional[EncoderOut] = None
         for i, model in enumerate(self.models):
@@ -1046,7 +1121,13 @@ class EnsembleTwoPhaseModel(EnsembleModel):
                     encoder_out=encoder_out)
 
             attn: Optional[Tensor] = None
+            tags: Optional[Tensor] = None
             decoder_len = len(decoder_out)
+            if decoder_len > 1 and decoder_out[1] is not None \
+                    and isinstance(decoder_out[1], dict) and "tags" in decoder_out[1]:
+                tags = torch.log_softmax(decoder_out[1]["tags"], dim=-1)
+                tags = tags[:, -1, :]
+
             if decoder_len > 1 and decoder_out[1] is not None:
                 if isinstance(decoder_out[1], Tensor):
                     attn = decoder_out[1]
@@ -1069,9 +1150,11 @@ class EnsembleTwoPhaseModel(EnsembleModel):
             )
             probs = probs[:, -1, :]
             if self.models_size == 1:
-                return probs, attn
+                return probs, attn, tags
 
             log_probs.append(probs)
+            if tags is not None:
+                tags_lprobs.append(tags)
             if attn is not None:
                 if avg_attn is None:
                     avg_attn = attn
@@ -1080,9 +1163,13 @@ class EnsembleTwoPhaseModel(EnsembleModel):
         avg_probs = torch.logsumexp(torch.stack(log_probs, dim=0), dim=0) - math.log(
             self.models_size
         )
+        if len(tags_lprobs) > 0:
+            avg_tags_lprobs = torch.logsumexp(torch.stack(tags_lprobs, dim=0), dim=0) - math.log(
+                self.models_size
+            )
         if avg_attn is not None:
             avg_attn.div_(self.models_size)
-        return avg_probs, avg_attn
+        return avg_probs, avg_attn, avg_tags_lprobs
 
     @torch.jit.export
     def reorder_auxiliary_incremental_state(self, auxiliary_incremental_states, new_order):
@@ -1098,6 +1185,8 @@ class EnsembleTwoPhaseModel(EnsembleModel):
         self, tokens, encoder_outs: List[EncoderOut], auxiliary_incremental_states, temperature: float = 1.0
     ):
         log_probs = []
+        aux_tags_lprobs = []
+        avg_aux_tags_lprobs: Optional[Tensor] = None
         outs = []
         avg_attn: Optional[Tensor] = None
         encoder_out: Optional[EncoderOut] = None
@@ -1119,8 +1208,12 @@ class EnsembleTwoPhaseModel(EnsembleModel):
             decoder_out_emb = decoder_out[0]
             decoder_out = (model.auxiliary_decoder.output_layer(decoder_out[0]), decoder_out[1])
             attn: Optional[Tensor] = None
+            aux_tags: Optional[Tensor] = None
             decoder_len = len(decoder_out)
             if decoder_len > 1 and decoder_out[1] is not None:
+                if isinstance(decoder_out[1], dict) and "tags" in decoder_out[1]:
+                    aux_tags = torch.log_softmax(decoder_out[1]["tags"], dim=-1)
+                    aux_tags = aux_tags[:, -1, :]
                 if isinstance(decoder_out[1], Tensor):
                     attn = decoder_out[1]
                 else:
@@ -1142,10 +1235,12 @@ class EnsembleTwoPhaseModel(EnsembleModel):
             )
             probs = probs[:, -1, :]
             if self.models_size == 1:
-                return probs, decoder_out_emb, attn
+                return probs, decoder_out_emb, attn, aux_tags
 
             log_probs.append(probs)
             outs.append(decoder_out_emb)
+            if aux_tags is not None:
+                aux_tags_lprobs.append(aux_tags)
             if attn is not None:
                 if avg_attn is None:
                     avg_attn = attn
@@ -1155,6 +1250,10 @@ class EnsembleTwoPhaseModel(EnsembleModel):
             self.models_size
         )
         avg_decoder_outs = torch.sum(torch.stack(outs, dim=0), dim=0).div_(self.models_size)
+        if len(aux_tags_lprobs) > 0:
+            avg_aux_tags_lprobs = torch.logsumexp(torch.stack(aux_tags_lprobs, dim=0), dim=0) - math.log(
+                self.models_size
+            )
         if avg_attn is not None:
             avg_attn.div_(self.models_size)
-        return avg_probs, avg_decoder_outs, avg_attn
+        return avg_probs, avg_decoder_outs, avg_attn, avg_aux_tags_lprobs

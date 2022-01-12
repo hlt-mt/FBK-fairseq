@@ -16,14 +16,14 @@ import os.path as op
 
 from examples.speech_to_text.data.speech_to_text_dataset_tagged import S2TDataConfigTagged, \
     SpeechToTextDatasetTaggedCreator
+from examples.speech_to_text.tasks.speech_translation_dualdecoding import SpeechTranslationDualDecodingTask
 from fairseq.tasks import register_task
-from examples.speech_to_text.tasks.speech_to_text_ctc import SpeechToTextCtcTask
 
 logger = logging.getLogger(__name__)
 
 
 @register_task("speech_to_text_tagged")
-class SpeechToTextTaggedTask(SpeechToTextCtcTask):
+class SpeechToTextTaggedTask(SpeechTranslationDualDecodingTask):
     """
     Task for training models on speech data tagged with named entities.
     """

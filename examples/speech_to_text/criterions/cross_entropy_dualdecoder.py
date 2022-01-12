@@ -1,3 +1,16 @@
+# Copyright 2021 FBK
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License
 import math
 
 
@@ -28,17 +41,16 @@ class CrossEntropyDualDecoder(FairseqCriterion):
         parser.add_argument('--label-smoothing', default=0., type=float, metavar='D',
                             help='epsilon for label smoothing, 0 means no label smoothing')
 
-    def forward(self, model, sample, reduce=True, log_probs=True):
-        net_output = model(**sample['net_input'])
+    def compute_loss(self, net_output, model, sample, reduce=True, log_probs=True):
         sample_size = sample['target'].size(0) if self.sentence_avg else sample['ntokens']
-        lprobs = model.get_normalized_probs(net_output[0], log_probs=True)
+        lprobs = model.get_normalized_probs(net_output[0], log_probs=log_probs)
         lprobs = lprobs.view(-1, lprobs.size(-1))
         target = model.get_targets(sample, net_output[0]).view(-1, 1)
         primary_loss, primary_nll_loss = label_smoothed_nll_loss(
             lprobs, target, self.eps, ignore_index=self.padding_idx, reduce=reduce,
         )
         auxiliary_token_lens = model.get_auxiliary_token_lens(sample)
-        auxiliary_probs = model.auxiliary_decoder.get_normalized_probs(net_output[1], log_probs=True)
+        auxiliary_probs = model.auxiliary_decoder.get_normalized_probs(net_output[1], log_probs=log_probs)
         auxiliary_probs = auxiliary_probs.view(-1, auxiliary_probs.size(-1))
         auxiliary_target = model.get_auxiliary_target(sample, net_output[1]).view(-1, 1)
         auxiliary_loss, auxiliary_nll_loss = label_smoothed_nll_loss(
@@ -57,6 +69,10 @@ class CrossEntropyDualDecoder(FairseqCriterion):
             'sample_size': sample_size,
         }
         return loss, sample_size, logging_output
+
+    def forward(self, model, sample, reduce=True, log_probs=True):
+        net_output = model(**sample['net_input'])
+        return self.compute_loss(net_output, model, sample, reduce=reduce, log_probs=log_probs)
 
     @staticmethod
     def logging_outputs_can_be_summed():

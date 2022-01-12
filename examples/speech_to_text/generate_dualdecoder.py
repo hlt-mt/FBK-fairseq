@@ -22,8 +22,39 @@ from fairseq import scoring, checkpoint_utils, options, tasks, utils
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from fairseq.logging import progress_bar
 from fairseq.logging.meters import StopwatchMeter, TimeMeter
-from fairseq.data import encoders
 from fairseq_cli.generate import get_symbols_to_strip_from_output
+
+
+def join_tags_tokens(tags, tokens, dictionary, tags_list):
+    """
+    Helper function that merges the `token` and `tags` predicted by a model.
+    It inserts the tokens corresponding to the predicted `tags` into the predicted `tokens`,
+    returning a list of string representation of the tags only and a list of tokens
+    that can be converted into a string containing the output of the model with
+    the tag predictions inline.
+    """
+    assert tags.shape[0] == tokens.shape[0]
+    tags_strings = []
+    joint_string = []
+    current_tag = 0
+    for t, s in zip(tags, tokens):
+        t = t.item()
+        if t == 0:
+            tags_strings.append("-")
+        else:
+            tags_strings.append(tags_list[t - 1])
+        # join string handling
+        if t != current_tag:
+            if current_tag != 0:
+                joint_string.append(
+                    dictionary.index('</{}>'.format(tags_list[current_tag - 1])))
+            if t != 0:
+                joint_string.append(
+                    dictionary.index('<{}>'.format(tags_list[t - 1])))
+        joint_string.append(s.item())
+        current_tag = t
+
+    return tags_strings, joint_string
 
 
 def main(cfg: DictConfig):
@@ -208,8 +239,9 @@ def _main(cfg: DictConfig, output_file):
                     ),
                 )
                 detok_hypo_str = decode_fn(hypo_str)
+                hypo_aux_tokens = hypo['aux_tokens'].int().cpu()
                 hypo_aux_str = src_dict.string(
-                    hypo['aux_tokens'].int().cpu(),
+                    hypo_aux_tokens,
                     cfg.common_eval.post_process,
                     extra_symbols_to_ignore={
                         generator.src_eos,
@@ -232,6 +264,36 @@ def _main(cfg: DictConfig, output_file):
                     print('AUX-{}\t{}\t{}'.format(sample_id, score, hypo_aux_str), file=output_file)
                     # detokenized hypothesis
                     print('AUXD-{}\t{}\t{}'.format(sample_id, score, detok_hypo_aux_str), file=output_file)
+
+                    if "tags" in hypo:
+                        tags_strings, joint_string = join_tags_tokens(
+                            hypo["tags"].int().cpu(), hypo_tokens, tgt_dict, task.data_cfg.tags)
+
+                        print('TAGS-{}\t{}\t{}'.format(sample_id, score, " ".join(tags_strings)), file=output_file)
+                        hypo_joint_str = tgt_dict.string(
+                            joint_string,
+                            cfg.common_eval.post_process,
+                            escape_unk=True,
+                            extra_symbols_to_ignore=get_symbols_to_strip_from_output(
+                                generator
+                            ),
+                        )
+                        detok_hypo_joint_str = decode_fn(hypo_joint_str)
+                        print('JOINTD-{}\t{}\t{}'.format(sample_id, score, detok_hypo_joint_str), file=output_file)
+                    if "aux_tags" in hypo:
+                        tags_strings, joint_string = join_tags_tokens(
+                            hypo["aux_tags"].int().cpu(), hypo_aux_tokens, src_dict, task.data_cfg.tags)
+                        print('AUXTAGS-{}\t{}\t{}'.format(sample_id, score, " ".join(tags_strings)), file=output_file)
+                        hypo_joint_str = src_dict.string(
+                            joint_string,
+                            cfg.common_eval.post_process,
+                            escape_unk=True,
+                            extra_symbols_to_ignore=get_symbols_to_strip_from_output(
+                                generator
+                            ),
+                        )
+                        detok_hypo_joint_str = decode_fn(hypo_joint_str)
+                        print('AUXJOINTD-{}\t{}\t{}'.format(sample_id, score, detok_hypo_joint_str), file=output_file)
 
                     if cfg.generation.print_step:
                         print('I-{}\t{}'.format(sample_id, hypo['steps']), file=output_file)

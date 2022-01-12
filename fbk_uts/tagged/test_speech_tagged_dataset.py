@@ -30,7 +30,7 @@ class MockS2TDataConfigTagged(S2TDataConfigTagged):
         return self.__tags
 
 
-class SpeechTaggedDatasetTestCase(unittest.TestCase):
+class TaggedDatasetSetup:
     def setUp(self):
         self.src_dict = Dictionary(extra_special_symbols=[
             "<A>", "</A>", "<B>", "</B>", "<C>", "</C>"])
@@ -56,6 +56,8 @@ class SpeechTaggedDatasetTestCase(unittest.TestCase):
             src_dict=self.src_dict,
         )
 
+
+class SpeechTaggedDatasetTestCase(TaggedDatasetSetup, unittest.TestCase):
     @patch('fairseq.data.audio.speech_to_text_dataset.get_features_or_waveform')
     def test_basic_usage(self, mock_get_features_or_waveform):
         mock_get_features_or_waveform.return_value = np.array([])
