@@ -17,7 +17,8 @@ from torch import nn, Tensor
 import torch
 
 from examples.speech_to_text.data.speech_to_text_dataset_tagged import S2TDataConfigTagged
-from examples.speech_to_text.models.conv_transformer_triangle import S2TTransformerTriangle, TriangleTransformerDecoder
+from examples.speech_to_text.models.base_triangle import TriangleTransformerDecoder
+from examples.speech_to_text.models.s2t_transformer_fbk_triangle import S2TTransformerTriangle
 from examples.speech_to_text.models.s2t_transformer_fbk import S2TTransformerModel, base_architecture, \
     s2t_transformer_m, s2t_transformer_s
 from fairseq.models import register_model, register_model_architecture
