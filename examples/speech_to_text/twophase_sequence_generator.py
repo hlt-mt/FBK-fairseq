@@ -802,6 +802,10 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                     attn[:, :, : step + 2], dim=0, index=active_bbsz_idx
                 )
 
+            if aux_tags is not None:
+                aux_tags[:, : step + 2] = torch.index_select(
+                    aux_tags[:, : step + 2], dim=0, index=active_bbsz_idx
+                )
             # reorder incremental state in decoder
             reorder_state = active_bbsz_idx
 
