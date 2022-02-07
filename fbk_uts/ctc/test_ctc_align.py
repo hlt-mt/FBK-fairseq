@@ -11,8 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
+import unittest
+
 from examples.speech_to_text.scripts import ctc_align
 
+
+class TestDoctest(unittest.TestCase):
+    def test_doctest(self):
+        import doctest
+        results = doctest.testmod(m=ctc_align)
+        self.assertEqual(0, results.failed)
+
+
 if __name__ == '__main__':
-    import doctest
-    doctest.testmod(m=ctc_align)
+    unittest.main()
