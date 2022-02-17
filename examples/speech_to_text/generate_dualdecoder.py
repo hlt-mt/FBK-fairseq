@@ -1,8 +1,17 @@
 #!/usr/bin/env python3 -u
-# Copyright (c) Facebook, Inc. and its affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
+# Copyright 2021 FBK
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License
 """
 Translate pre-processed data with a trained model.
 """
@@ -10,6 +19,7 @@ import ast
 import logging
 import math
 import os
+import string
 import sys
 from argparse import Namespace
 
@@ -25,35 +35,82 @@ from fairseq.logging.meters import StopwatchMeter, TimeMeter
 from fairseq_cli.generate import get_symbols_to_strip_from_output
 
 
-def join_tags_tokens(tags, tokens, dictionary, tags_list):
+PUNCTUATION_SET = set(string.punctuation.replace("-", ""))  # In our case, - can be inside words
+
+
+def previous_word_has_ended(x: str) -> bool:
+    # HACK: Taken from SentencepieceBPE where unfortunately it is not static...
+    if x in ["<unk>", "<s>", "</s>", "<pad>"]:
+        return True
+    if all(c in PUNCTUATION_SET for c in x):
+        return True
+    return x.startswith("\u2581")
+
+
+def join_tags_tokens(tag_logprobs, tokens, dictionary, tags_list):
     """
-    Helper function that merges the `token` and `tags` predicted by a model.
+    Helper function that merges the `token` and `tag_logprobs` predicted by a model.
     It inserts the tokens corresponding to the predicted `tags` into the predicted `tokens`,
     returning a list of string representation of the tags only and a list of tokens
     that can be converted into a string containing the output of the model with
     the tag predictions inline.
+    As the tags may be conflicting across the tokens of a single word, we cumulate the
+    probabilities for all the tokens and take the most likely tag for each word.
+    Currently this assumes sentencepiece encoding and does not work with other encodings.
     """
-    assert tags.shape[0] == tokens.shape[0]
-    tags_strings = []
+    assert tag_logprobs.shape[0] == tokens.shape[0]
+    tags_ids = []
     joint_string = []
-    current_tag = 0
-    for t, s in zip(tags, tokens):
-        t = t.item()
-        if t == 0:
+    word_tokens = []
+    word_tag_lprobs = None
+
+    def flush_word_buffer():
+        """
+        Elaborates the current buffers `word_tokens` and `word_tag_lprobs`
+        and flushes their content into the resulting values `tags_strings`
+        and `joint_string`.
+        """
+        if len(word_tokens) > 0:
+            if len(tags_ids) == 0:
+                current_tag = 0
+            else:
+                current_tag = tags_ids[-1]
+            tag_idx = torch.argmax(word_tag_lprobs)
+            if tag_idx != current_tag:
+                if current_tag != 0:
+                    joint_string.append(
+                        dictionary.index('</{}>'.format(tags_list[current_tag - 1])))
+                if tag_idx != 0:
+                    joint_string.append(
+                        dictionary.index('<{}>'.format(tags_list[tag_idx - 1])))
+            for wt in word_tokens:
+                tags_ids.append(tag_idx)
+                joint_string.append(wt)
+
+    for t_lprob, s in zip(tag_logprobs, tokens):
+        if previous_word_has_ended(dictionary[s.item()]):
+            # process current buffer if not empty (start of sentence)
+            flush_word_buffer()
+            # restart with newly initialized word buffers
+            word_tokens = [s.item()]
+            word_tag_lprobs = t_lprob
+        else:
+            word_tokens.append(s.item())
+            word_tag_lprobs = word_tag_lprobs + t_lprob
+
+    # process remaining last tokens
+    flush_word_buffer()
+    # If the sentence ends with tagged tokens,
+    # add the corresponding closing tag at the end
+    if len(tags_ids) > 0 and tags_ids[-1] != 0:
+        joint_string.append(
+            dictionary.index('</{}>'.format(tags_list[tags_ids[-1] - 1])))
+    tags_strings = []
+    for tag_idx in tags_ids:
+        if tag_idx == 0:
             tags_strings.append("-")
         else:
-            tags_strings.append(tags_list[t - 1])
-        # join string handling
-        if t != current_tag:
-            if current_tag != 0:
-                joint_string.append(
-                    dictionary.index('</{}>'.format(tags_list[current_tag - 1])))
-            if t != 0:
-                joint_string.append(
-                    dictionary.index('<{}>'.format(tags_list[t - 1])))
-        joint_string.append(s.item())
-        current_tag = t
-
+            tags_strings.append(tags_list[tag_idx - 1])
     return tags_strings, joint_string
 
 
@@ -265,7 +322,7 @@ def _main(cfg: DictConfig, output_file):
                     # detokenized hypothesis
                     print('AUXD-{}\t{}\t{}'.format(sample_id, score, detok_hypo_aux_str), file=output_file)
 
-                    if "tags" in hypo:
+                    if "tags" in hypo and hypo["tags"] is not None:
                         tags_strings, joint_string = join_tags_tokens(
                             hypo["tags"].int().cpu(), hypo_tokens, tgt_dict, task.data_cfg.tags)
 
@@ -280,7 +337,7 @@ def _main(cfg: DictConfig, output_file):
                         )
                         detok_hypo_joint_str = decode_fn(hypo_joint_str)
                         print('JOINTD-{}\t{}\t{}'.format(sample_id, score, detok_hypo_joint_str), file=output_file)
-                    if "aux_tags" in hypo:
+                    if "aux_tags" in hypo and hypo["aux_tags"] is not None:
                         tags_strings, joint_string = join_tags_tokens(
                             hypo["aux_tags"].int().cpu(), hypo_aux_tokens, src_dict, task.data_cfg.tags)
                         print('AUXTAGS-{}\t{}\t{}'.format(sample_id, score, " ".join(tags_strings)), file=output_file)

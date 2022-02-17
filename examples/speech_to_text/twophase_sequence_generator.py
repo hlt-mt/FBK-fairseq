@@ -1,8 +1,16 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
+# Copyright 2021 FBK
 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License
 import math
 from typing import Dict, List, Optional
 
@@ -189,22 +197,25 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             torch.zeros(bsz, beam_size, max_aux_len).long().fill_(self.src_pad).to(
                 aux_nbest[0][0]["tokens"].device)
         )
-        src_tags = (
-            torch.zeros(bsz, beam_size, max_aux_len).long().to(
-                aux_nbest[0][0]["tokens"].device)
-        )
+        if "aux_tags" in aux_nbest[0][0] and aux_nbest[0][0]["aux_tags"] is not None:
+            src_tags = (
+                torch.zeros(bsz, beam_size, max_aux_len, aux_nbest[0][0]["aux_tags"].shape[1]).float().to(
+                    aux_nbest[0][0]["tokens"].device)
+            )
+        else:
+            src_tags = None
         for i_batch in range(len(aux_nbest)):
             for i_best in range(len(aux_nbest[i_batch])):
                 cand = aux_nbest[i_batch][i_best]
                 src_tokens[i_batch, i_best, :cand["tokens"].shape[0]] = cand["tokens"]
                 if cand["aux_tags"] is not None:
-                    src_tags[i_batch, i_best, :cand["aux_tags"].shape[0]] = cand["aux_tags"]
+                    src_tags[i_batch, i_best, :cand["aux_tags"].shape[0], :] = cand["aux_tags"]
                 else:
                     src_tags = None
 
         src_tokens = src_tokens.view(bsz * beam_size, -1)
         if src_tags is not None:
-            src_tags = src_tags.view(bsz * beam_size, -1)
+            src_tags = src_tags.view(bsz * beam_size, max_aux_len, -1)
         # length of the source text being the character length except EndOfSentence and pad
         src_lengths = (
             (src_tokens.ne(self.src_eos) & src_tokens.ne(self.src_pad)).long().sum(dim=1)
@@ -344,8 +355,8 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             # Record tags, only support avg_attn_scores is a Tensor
             if tags_lprobs is not None:
                 if tags is None:
-                    tags = torch.empty(bsz * beam_size, max_len + 2).to(scores)
-                tags[:, step + 1] = torch.argmax(tags_lprobs, dim=-1)
+                    tags = torch.empty(bsz * beam_size, max_len + 2, tags_lprobs.shape[-1]).to(scores)
+                tags[:, step + 1, :] = tags_lprobs
 
             scores = scores.type_as(lprobs)
             eos_bbsz_idx = torch.empty(0).to(
@@ -439,7 +450,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                     )
                 if tags is not None:
                     tags = tags.view(bsz, -1)[batch_idxs].view(
-                        new_bsz * beam_size, -1
+                        new_bsz * beam_size, -1, tags.size(-1)
                     )
                 bsz = new_bsz
             else:
@@ -493,8 +504,8 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                     attn[:, :, : step + 2], dim=0, index=active_bbsz_idx
                 )
             if tags is not None:
-                tags[:, : step + 2] = torch.index_select(
-                    tags[:, : step + 2], dim=0, index=active_bbsz_idx
+                tags[:, : step + 2, :] = torch.index_select(
+                    tags[:, : step + 2, :], dim=0, index=active_bbsz_idx
                 )
 
             # reorder incremental state in decoder
@@ -653,8 +664,8 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             # Record tags
             if aux_tags_lprobs is not None:
                 if aux_tags is None:
-                    aux_tags = torch.empty(bsz * beam_size, max_len + 2).to(scores)
-                aux_tags[:, step + 1] = torch.argmax(aux_tags_lprobs, dim=-1)
+                    aux_tags = torch.empty(bsz * beam_size, max_len + 2, aux_tags_lprobs.shape[-1]).to(scores)
+                aux_tags[:, step + 1, :] = aux_tags_lprobs
 
             scores = scores.type_as(lprobs)
             eos_bbsz_idx = torch.empty(0).to(
@@ -744,7 +755,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                 aux_tokens = aux_tokens.view(bsz, -1)[batch_idxs].view(new_bsz * beam_size, -1)
                 if aux_tags is not None:
                     aux_tags = aux_tags.view(bsz, -1)[batch_idxs].view(
-                        new_bsz * beam_size, -1
+                        new_bsz * beam_size, -1, aux_tags.size(-1)
                     )
                 if attn is not None:
                     attn = attn.view(bsz, -1)[batch_idxs].view(
@@ -803,8 +814,8 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                 )
 
             if aux_tags is not None:
-                aux_tags[:, : step + 2] = torch.index_select(
-                    aux_tags[:, : step + 2], dim=0, index=active_bbsz_idx
+                aux_tags[:, : step + 2, :] = torch.index_select(
+                    aux_tags[:, : step + 2, :], dim=0, index=active_bbsz_idx
                 )
             # reorder incremental state in decoder
             reorder_state = active_bbsz_idx
@@ -891,7 +902,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             else None
         )
         aux_tags_clone = (
-            aux_tags.index_select(0, bbsz_idx)[:, 1: step + 2]
+            aux_tags.index_select(0, bbsz_idx)[:, 1: step + 2, :]
             if aux_tags is not None
             else None
         )
@@ -1007,7 +1018,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
         )
 
         tags_clone = (
-            tags.index_select(0, bbsz_idx)[:, 1: step + 2]
+            tags.index_select(0, bbsz_idx)[:, 1: step + 2, :]
             if tags is not None
             else None
         )
@@ -1061,7 +1072,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                 src_mask = src_tokens_clone[i] != self.src_pad
                 aux_tags = None
                 if src_tags_clone is not None:
-                    aux_tags = src_tags_clone[i].masked_select(src_mask)
+                    aux_tags = src_tags_clone[i][src_mask, :]
                 finalized[sent].append(
                     {
                         "tokens": tokens_clone[i],
