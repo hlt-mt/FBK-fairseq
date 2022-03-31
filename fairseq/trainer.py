@@ -557,6 +557,7 @@ class Trainer(object):
                     logger.warning(
                         "attempting to recover from OOM in forward/backward pass"
                     )
+                    logger.info(f"Samples causing OOM are: {sample['id']}")
                     ooms += 1
                     self.zero_grad()
                     if self.cuda:
