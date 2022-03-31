@@ -68,10 +68,10 @@ To start the training of the `Speechformer` arcitecture, the first step is to se
 `PlainConvattention` encoder (until the layer to which the CTC is 
 applied) by running this command:
 ```sh
-python ${FAIRSEQ_DIR}/examples/speech_to_text/strip_after_ctc.py \
+python ${FAIRSEQ_DIR}/examples/speech_to_text/scripts/strip_after_ctc.py \
   --user-dir examples/speech_to_text \
-  --model-path ${CHECKPOINT_PATH} \
-  --new-model-path ${STRIPPED_CHECKPOINT_PATH} 
+  --model-path ${CHECKPOINT_PATH} --encoder-layer-name speechformer_layer \
+  --new-model-path ${STRIPPED_CHECKPOINT_PATH}
 ```
 where `CHECKPOINT_PATH` is the absolute path to your PlainConvattention checkpoint .pt and `STRIPPED_CHECKPOINT_PATH` is the absolute path 
 to the new checkpoint .pt generated containing only the first part of the encoder. Also `--num-encoder-layers` and 

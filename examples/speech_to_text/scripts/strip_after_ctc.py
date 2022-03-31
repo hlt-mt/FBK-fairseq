@@ -35,7 +35,12 @@ def main(args):
     utils.import_user_module(args)
     model_state = load_checkpoint_to_cpu(args.model_path)
     print("Loaded model {}".format(args.model_path))
-    strip_what = [f'encoder.speechformer_layers.{num}' for num in range(args.ctc_encoder_layer, args.num_encoder_layers)]
+    strip_what = [
+        f'encoder.{args.encoder_layer_name}.{num}'
+        for num in range(args.ctc_encoder_layer, args.num_encoder_layers)]
+    strip_what.append("decoder")
+    if args.strip_ctc_weights:
+        strip_what.append("encoder.ctc_fc")
     model_state = _strip_params(model_state, strip_what=tuple(strip_what))
     print("Stripped {}".format(strip_what))
     save_state(model_state, args.new_model_path)
@@ -54,4 +59,8 @@ if __name__ == '__main__':
                         help="Number of layer to which ctc is applied")
     parser.add_argument('--num-encoder-layers', type=int, default=12,
                         help="Number of encoder layers")
+    parser.add_argument('--encoder-layer-name', default="conformer_layers",
+                        help="Name of encoder layers (e.g. conformer_layers)")
+    parser.add_argument('--strip-ctc-weights', default=False, action='store_true',
+                        help="If set, removes the weights of the CTC loss.")
     main(parser.parse_args())
