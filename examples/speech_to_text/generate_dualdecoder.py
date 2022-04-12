@@ -22,15 +22,19 @@ import math
 import os
 import sys
 from argparse import Namespace
+from itertools import chain
+from typing import Optional
 
 import numpy as np
 import torch
+from dataclasses import field, dataclass
 
 from omegaconf import DictConfig
 
 from examples.speech_to_text.utils.tags import join_tags_tokens
 from fairseq import scoring, checkpoint_utils, options, tasks, utils
-from fairseq.dataclass.utils import convert_namespace_to_omegaconf
+from fairseq.dataclass import FairseqDataclass
+from fairseq.dataclass.utils import convert_namespace_to_omegaconf, gen_parser_from_dataclass
 from fairseq.logging import progress_bar
 from fairseq.logging.meters import StopwatchMeter, TimeMeter
 from fairseq_cli.generate import get_symbols_to_strip_from_output
@@ -105,8 +109,34 @@ def _main(cfg: DictConfig, output_file):
     )
     task.load_dataset(cfg.dataset.gen_subset, task_cfg=saved_cfg.task)
 
+    def load_lm(lm_path):
+        """
+        Helper function to load language models
+        """
+        lm = None
+        if lm_path is not None:
+            overrides["data"] = cfg.task.data
+
+            try:
+                lms, _ = checkpoint_utils.load_model_ensemble(
+                    [lm_path], arg_overrides=overrides, task=None
+                )
+            except:
+                logger.warning(
+                    f"Failed to load language model! Please make sure that the language model dict is the same "
+                    f"as target dict and is located in the data dir ({cfg.task.data})"
+                )
+                raise
+
+            assert len(lms) == 1
+            lm = lms[0]
+        return lm
+
+    primary_lm = load_lm(cfg.primary_lm_path)
+    auxiliary_lm = load_lm(cfg.auxiliary_lm_path)
+
     # Optimize ensemble for generation
-    for model in models:
+    for model in chain(models, [primary_lm, auxiliary_lm]):
         if model is None:
             continue
         if cfg.common.fp16:
@@ -312,8 +342,42 @@ def _main(cfg: DictConfig, output_file):
     return scorer
 
 
+@dataclass
+class LMFusionConfig(FairseqDataclass):
+    primary_lm_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "path to lm checkpoint for primary lm fusion"},
+    )
+    primary_lm_weight: float = field(
+        default=0.0,
+        metadata={"help": "weight for lm probs for primary lm fusion"},
+    )
+    auxiliary_lm_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "path to lm checkpoint for auxiliary lm fusion"},
+    )
+    auxiliary_lm_weight: float = field(
+        default=0.0,
+        metadata={"help": "weight for lm probs for auxiliary lm fusion"},
+    )
+    encoder_avg_outs: Optional[str] = field(
+        default=None,
+        metadata={"help": "path to encoder avgs"},
+    )
+    primary_ilm_weight: float = field(
+        default=0.0,
+        metadata={"help": "weight for ilm probs for primary ilm removal"},
+    )
+    auxiliary_ilm_weight: float = field(
+        default=0.0,
+        metadata={"help": "weight for ilm probs for auxiliary ilm removal"},
+    )
+
+
 def cli_main():
     parser = options.get_generation_parser()
+    lm_group = parser.add_argument_group("LM fusion")
+    gen_parser_from_dataclass(lm_group, LMFusionConfig())
     args = options.parse_args_and_arch(parser)
     main(args)
 

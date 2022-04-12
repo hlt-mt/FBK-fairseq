@@ -124,9 +124,11 @@ class SpeechToTextTask(LegacyFairseqTask):
             for s, i in self.tgt_dict.indices.items()
             if SpeechToTextDataset.is_lang_tag(s)
         }
-        extra_gen_cls_kwargs = {"symbols_to_strip_from_output": lang_token_ids}
+        if extra_gen_cls_kwargs is None:
+            extra_gen_cls_kwargs = {}
+        extra_gen_cls_kwargs["symbols_to_strip_from_output"] = lang_token_ids
         return super().build_generator(
-            models, args, seq_gen_cls=None, extra_gen_cls_kwargs=extra_gen_cls_kwargs
+            models, args, seq_gen_cls=seq_gen_cls, extra_gen_cls_kwargs=extra_gen_cls_kwargs
         )
 
     def build_tokenizer(self, args):
