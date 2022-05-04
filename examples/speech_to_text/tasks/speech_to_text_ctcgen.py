@@ -13,6 +13,7 @@
 # limitations under the License
 import logging
 from functools import lru_cache
+from itertools import groupby
 
 import torch
 from torch.nn import functional as F
@@ -138,18 +139,39 @@ class CTCGenerator(object):
             self.penalty_aware_score = lambda x: x.logprob
         else:
             self.penalty_aware_score = lambda x: x.normalized_logprob(self.len_penalty)
+        if getattr(args, "sampling", False):
+            self.search = self.best_path_decoding
+        else:
+            self.search = self.beam_search
 
-    def generate(self, models, sample, **kwargs):
-        encoder_input = {
-            k: v for k, v in sample["net_input"].items() if k != "prev_output_tokens"
-        }
-        assert len(models) == 1, "Model ensemble for CTC is not yet supported"
-        encoder_out = models[0].encoder(**encoder_input, return_all_hiddens=True)
-        ctc_features = encoder_out["ctc_out"]
-        ctc_lengths = encoder_out["ctc_lengths"]
-        prob_ctc = F.log_softmax(ctc_features, dim=-1).to("cpu")
-        if not getattr(ctc_features, "batch_first", False):
-            prob_ctc = prob_ctc.transpose(0, 1)
+    def best_path_decoding(self, prob_ctc, ctc_lengths):
+        """
+        An implementation of the best path decoding algorithm, which consists in
+        taking the most likely prediction for each time step, aka greedy search.
+        See:
+            A. Graves, et al. "A novel connectionist system for unconstrained handwriting recognition."
+            IEEE Transactions on Pattern Analysis and Ma- chine Intelligence, 2009.
+        """
+        batch_predicted = []
+        prob_ctc = F.softmax(prob_ctc, dim=-1).transpose(0, 1)  # from T x B x D to B x T x D
+        for b in range(prob_ctc.shape[0]):
+            highest_probs, most_likely_elements = prob_ctc[b][: ctc_lengths[b]].max(-1)
+            predicted_tokens = [p[0] for p in groupby(most_likely_elements.tolist()) if p[0] != self.blank]
+            batch_predicted.append({
+                'tokens': torch.LongTensor(predicted_tokens),
+                'score': highest_probs.prod(),
+                'attention': None,
+                'alignment': None,
+                'positional_scores': highest_probs,
+            })
+
+    def beam_search(self, prob_ctc, ctc_lengths):
+        """
+        An implementation of the beam search algorithm on the CTC output.
+        The implementation follows the specification by:
+            K. Hwang and W. Sung. "Character-level incremental speech recognition with recurrent neural networks."
+            IEEE International Conference on Acoustics, Speech and Signal Processing, 2016.
+        """
         batch_predicted = []
         for batch_idx in range(prob_ctc.shape[0]):
             beam = [CTCBeamEntry(
@@ -187,6 +209,19 @@ class CTCGenerator(object):
                 'positional_scores': torch.FloatTensor([]),
             } for beam_entry in beam])
         return batch_predicted
+
+    def generate(self, models, sample, **kwargs):
+        encoder_input = {
+            k: v for k, v in sample["net_input"].items() if k != "prev_output_tokens"
+        }
+        assert len(models) == 1, "Model ensemble for CTC is not yet supported"
+        encoder_out = models[0].encoder(**encoder_input, return_all_hiddens=True)
+        ctc_features = encoder_out["ctc_out"]
+        ctc_lengths = encoder_out["ctc_lengths"]
+        prob_ctc = F.log_softmax(ctc_features, dim=-1).to("cpu")
+        if not getattr(ctc_features, "batch_first", False):
+            prob_ctc = prob_ctc.transpose(0, 1)
+        return self.search(prob_ctc, ctc_lengths)
 
     @staticmethod
     def deduplicate(beam_with_dup):
