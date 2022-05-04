@@ -89,3 +89,15 @@ Namely, we release:
  - [speechformer hybrid](https://drive.google.com/file/d/1RJPMmwg23tOL-H7ObPUACna603Vf0-yT/view?usp=sharing) (25.7 BLEU): the best model with encoder pre-training;
  - [conformer + CTC compr + char-ratio filter](https://drive.google.com/file/d/1pQAKYTCwi0dcBqWcD48TWKnSAj4k0dTK/view?usp=sharing) (26.7 BLEU): the best model obtained filtering the MuST-C training set; 
 
+# Citation
+
+```bibtex
+@inproceedings{gaido-et-al-2022-efficient,
+title = "Efficient yet Competitive Speech Translation: FBK@IWSLT2022",
+author = {Gaido, Marco and Papi, Sara and Fucci, Dennis and Fiameni, Giuseppe and Negri, Matteo and Turchi, Marco},
+booktitle = "Proceedings of the 19th International Conference on Spoken Language Translation (IWSLT 2022)",
+year = "2022",
+address = "Dublin, Ireland",
+publisher = "Association for Computational Linguistics"
+}
+```
