@@ -5,7 +5,10 @@ Dedicated README for each work can be found in the `fbk_works` directory.
 
  - [Speechformer: Reducing Information Loss in Direct Speech Translation](fbk_works/SPEECHFORMER.md)
  - [Efficient yet Competitive Speech Translation: FBK@IWSLT2022](fbk_works/IWSLT_2022.md)
+ - [Who Are We Talking About? Handling Person Names in Speech Translation](fbk_works/PERSON_NAMES_IWSLT2022.md)
 
+If using this repository, please acknowledge the related paper(s) citing them.
+Bibtex citations are available for each work in the dedicated README file.
 
 Below, there is the original Fairseq README file.
 
