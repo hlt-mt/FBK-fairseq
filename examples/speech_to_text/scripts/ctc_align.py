@@ -21,7 +21,7 @@ import os.path as op
 import numpy as np
 import torch
 from ctc_segmentation import CtcSegmentationParameters, ctc_segmentation, \
-    determine_utterance_segments, prepare_token_list
+    prepare_token_list
 from torch.nn import functional as F
 
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import S2TDataConfigSrc
@@ -31,7 +31,6 @@ from fairseq.data.audio.speech_to_text_dataset import SpeechToTextDatasetCreator
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from fairseq.logging import progress_bar
 from fairseq.models import FairseqEncoderDecoderModel
-
 
 CTC_BLANK = "<ctc_blank>"
 
@@ -132,6 +131,26 @@ def split_token_list(ltokens, split_chars=None):
     return splits
 
 
+def determine_time(utt_begin_indices, timings, text):
+    """
+    Determine timestamps without making the average as the built-in function.
+    :param utt_begin_indices: list of time indices of utterance start
+    :param timings: mapping of time indices to seconds
+    :param text: list of utterances
+    :return: segments, a list of utterance start and end [s]
+    """
+    segments = []
+    for i in range(len(text)):
+        start = timings[utt_begin_indices[i]]
+        # If no split_chars has been produced, return the start time
+        if len(utt_begin_indices) == 1:
+            end = start
+        else:
+            end = timings[utt_begin_indices[i + 1]]
+        segments.append((start, end))
+    return segments
+
+
 def main(cfg):
     if isinstance(cfg, argparse.Namespace):
         cfg = convert_namespace_to_omegaconf(cfg)
@@ -184,8 +203,9 @@ def main(cfg):
         char_list=ds.tgt_dict.symbols,
         blank=ds.tgt_dict.index(CTC_BLANK),
         index_duration=cfg.task.feature_duration,
-        space=CTC_BLANK,
+        start_of_ground_truth="Ꚃ",
     )
+    ctc_config.update_excluded_characters()
 
     for sample in itr:
         sample = utils.move_to_cuda(sample) if use_cuda else sample
@@ -197,25 +217,27 @@ def main(cfg):
             tgt_len = sample["target_lengths"][i].item()
             tgt_tokens = sample["target"][i][:tgt_len - 1].tolist()
             if tgt_len <= 1:
-                # if string to match is empty (ie. contains only EOS), return empty lists
+                # if string to match is empty (ie. contains only EOS), return start and end time of the segment
                 timings = []
-                segments = [(0.0, ctc_lengths[i].item() * cfg.task.feature_duration, 0.0)]
+                segments = [(0.0, ctc_lengths[i].item() * cfg.task.feature_duration)]
             else:
                 token_splits = split_token_list(tgt_tokens, split_chars=split_chars)
                 tokenized_texts = [np.array(l) for l in token_splits]
                 ground_truth_mat, utt_begin_indices = prepare_token_list(ctc_config, tokenized_texts)
                 logging.debug(f"{tokenized_texts} have been converted into the ground matrix {ground_truth_mat}")
                 # Align using CTC segmentation
-                timings, char_probs, state_list = ctc_segmentation(
-                    ctc_config, lprob[i][:ctc_lengths[i].item()].cpu().detach().numpy(), ground_truth_mat
-                )
-                # Obtain list of utterances with time intervals and confidence score
-                segments = determine_utterance_segments(
-                    ctc_config, utt_begin_indices, char_probs, timings, token_splits
-                )
+                lpz = lprob[i][:ctc_lengths[i].item()].cpu().detach().numpy()
+                if len(ground_truth_mat) > lpz.shape[0]:
+                    timings = []
+                    segments = [(0.0, ctc_lengths[i].item() * cfg.task.feature_duration)]
+                    logging.warning("Attention: the text is longer than audio and cannot be aligned.")
+                else:
+                    timings, char_probs, state_list = ctc_segmentation(ctc_config, lpz, ground_truth_mat)
+                    # Obtain list of utterances with time intervals
+                    segments = determine_time(utt_begin_indices, timings, token_splits)
             print(f"TEXT-{sample_id}\t{ds.tgt_dict.string(tgt_tokens)}")
             print(f"TIME-{sample_id}\t{' '.join(np.char.mod('%f', timings))}")
-            print(f"SEGM-{sample_id}\t{' '.join(str(start) + '-' + str(end) for start, end, _ in segments)}")
+            print(f"SEGM-{sample_id}\t{' '.join(str(start) + '-' + str(end) for start, end in segments)}")
 
 
 if __name__ == '__main__':
