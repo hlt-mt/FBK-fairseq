@@ -26,8 +26,8 @@ def formatted_absolute_time(timestamp, audio_offset):
     milliseconds are expressed using 3 characters.
     """
     absolute_time = float(timestamp) + audio_offset
-    # Replace "." used by datetime library with "," used for milliseconds
-    formatted_time = str(timedelta(seconds=absolute_time)).replace(".", ",")
+    # Replace "." used by datetime library with "," used for milliseconds and add 1 microsecond to ensure time format
+    formatted_time = str(timedelta(seconds=absolute_time, microseconds=1)).replace(".", ",")
     # Use "0{HOUR}" instead of only "{HOUR}" in case HOUR < 10, as prescribed by the .srt format
     if formatted_time[:2].endswith(":"):
         formatted_time = "0" + formatted_time
