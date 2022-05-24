@@ -166,6 +166,8 @@ class S2TTransformerModel(FairseqEncoderDecoderModel):
         parser.add_argument('--distance-penalty', type=str, default=False,
                             choices=['log', 'gauss'],
                             help='Add distance penalty to the encoder')
+        parser.add_argument('--init-variance', type=float, default=0.0, required=False,
+                            help='Initial variance for Gaussian distance penalty')
 
     @classmethod
     def build_encoder(cls, args, dictionary):
@@ -392,6 +394,7 @@ def base_architecture(args):
     args.quant_noise_pq = getattr(args, "quant_noise_pq", 0)
 
     args.distance_penalty = getattr(args, 'distance_penalty', False)
+    args.init_variance = getattr(args, 'init_variance', 0.0)
 
 
 @register_model_architecture("s2t_transformer_fbk", "s2t_transformer_s_fbk")

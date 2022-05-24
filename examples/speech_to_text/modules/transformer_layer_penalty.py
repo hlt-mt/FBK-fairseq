@@ -35,7 +35,7 @@ class LogPenalty(nn.Module):
 class GaussPenalty(nn.Module):
     def __init__(self, args):
         super().__init__()
-        self.variance = Parameter(torch.Tensor(self.num_heads).fill_(args.init_variance))
+        self.variance = Parameter(torch.Tensor(args.encoder_attention_heads).fill_(args.init_variance))
 
     def forward(self, position_distances, batch_size):
         num = (position_distances * position_distances).unsqueeze(0)
