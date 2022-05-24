@@ -132,8 +132,13 @@ def _main(cfg: DictConfig, output_file):
             lm = lms[0]
         return lm
 
-    primary_lm = load_lm(cfg.primary_lm_path)
-    auxiliary_lm = load_lm(cfg.auxiliary_lm_path)
+    primary_lm_path = getattr(cfg, "primary_lm_path", None)
+    auxiliary_lm_path = getattr(cfg, "primary_lm_path", None)
+    primary_lm_path = getattr(cfg.task, "primary_lm_path", None) if primary_lm_path is None else primary_lm_path
+    auxiliary_lm_path = getattr(cfg.task, "primary_lm_path", None) if auxiliary_lm_path is None else auxiliary_lm_path
+
+    primary_lm = load_lm(primary_lm_path)
+    auxiliary_lm = load_lm(auxiliary_lm_path)
 
     # Optimize ensemble for generation
     for model in chain(models, [primary_lm, auxiliary_lm]):
