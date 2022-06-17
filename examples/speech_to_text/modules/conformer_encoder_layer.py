@@ -102,7 +102,7 @@ class ConformerEncoderLayer(nn.Module):
         x = new_x * self.feed_forward_residual_factor + x
         new_x = self.attention(x, encoder_padding_mask.unsqueeze(1))
         x = new_x + x
-        new_x = self.conv_module(x)
+        new_x = self.conv_module(x, encoder_padding_mask)
         x = new_x + x
         new_x = self.second_feed_forward(x)
         x = new_x * self.feed_forward_residual_factor + x

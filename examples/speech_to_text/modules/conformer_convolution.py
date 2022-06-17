@@ -80,13 +80,21 @@ class ConformerConvModule(nn.Module):
         )
         self.dropout_module = FairseqDropout(p=dropout_p, module_name=self.__class__.__name__)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, encoder_padding_mask: Tensor) -> Tensor:
         x = self.layernorm(x).transpose(1, 2)
         x = self.first_pointwise_conv1d(x)
         x = F.glu(x, dim=1)
+        if encoder_padding_mask is not None:
+            x = x.float().masked_fill(encoder_padding_mask.unsqueeze(1), 0.0)
         x = self.depthwise_conv1d(x)
+        if encoder_padding_mask is not None:
+            x = x.float().masked_fill(encoder_padding_mask.unsqueeze(1), 0.0)
         x = self.batchnorm(x)
+        if encoder_padding_mask is not None:
+            x = x.float().masked_fill(encoder_padding_mask.unsqueeze(1), 0.0)
         x = F.silu(x)
         x = self.second_pointwise_conv1d(x)
+        if encoder_padding_mask is not None:
+            x = x.float().masked_fill(encoder_padding_mask.unsqueeze(1), 0.0)
         x = self.dropout_module(x)
         return x.transpose(1, 2)

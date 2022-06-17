@@ -15,10 +15,12 @@ import copy
 import unittest
 from argparse import Namespace
 
-from torch import nn
+from examples.speech_to_text.modules.conformer_encoder_layer import ConformerEncoderLayer
+from torch import nn, rand, all, LongTensor
 
 from examples.speech_to_text.models.conformer import conformer_s, ConformerEncoder
 from fairseq.data import Dictionary
+from fairseq.data.data_utils import lengths_to_padding_mask
 
 
 class ConformerEncoderTestCase(unittest.TestCase):
@@ -52,3 +54,16 @@ class ConformerEncoderTestCase(unittest.TestCase):
         encoder = ConformerEncoder(args, self.fake_dict)
         for layer in range(len(encoder._modules["conformer_layers"])):
             isinstance(encoder._modules["conformer_layers"][layer].conv_module.batchnorm, norm_class)
+
+    def test_conformer_convolutional_layer_padding(self):
+        batchnorm_args = copy.deepcopy(self.base_args)
+        batchnorm_args.no_syncbatchnorm = True
+        batchnorm_args.encoder_embed_dim = 8
+        fake_sample = rand(2, 10, 8)
+        fake_sample[1, 3:, :] = 0
+        fake_lengths = LongTensor([10, 3])
+        padding_mask = lengths_to_padding_mask(fake_lengths)
+        encoder_layer = ConformerEncoderLayer(batchnorm_args)
+        encoder_layer.eval()
+        out = encoder_layer.conv_module(fake_sample, padding_mask).transpose(0, 1)
+        self.assertTrue(all(out[1, 3:, :] == 0.0), f"non-zero entries in {out[1, 3:, :]}")
