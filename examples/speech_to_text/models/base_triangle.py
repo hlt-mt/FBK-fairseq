@@ -81,6 +81,10 @@ class BaseTriangle(MultiTaskModel):
         return sample["transcript_lengths"]
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens, prev_transcript_tokens, **kwargs):
+        for k in ['prev_target_tags', 'prev_transcript_tags']:
+            if k in kwargs:
+                del kwargs[k]
+
         encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
         auxiliary_out = self.auxiliary_decoder(
             prev_transcript_tokens, encoder_out=encoder_out, features_only=True)
@@ -160,7 +164,7 @@ class TriangleTransformerDecoder(TransformerDecoderScriptable):
     def extract_features(
         self,
         prev_output_tokens,
-        encoder_out: Optional[EncoderOut] = None,
+        encoder_out: Optional[Dict[str, Optional[Tensor]]] = None,
         aux_decoder_out: Optional[torch.Tensor] = None,
         aux_decoder_padding_mask: Optional[torch.Tensor] = None,
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,

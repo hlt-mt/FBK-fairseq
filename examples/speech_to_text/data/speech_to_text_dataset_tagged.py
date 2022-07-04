@@ -204,6 +204,8 @@ class SpeechToTextDatasetTagged(SpeechToTextDatasetWithSrc):
                 "src_lengths": n_frames,
                 "prev_output_tokens": prev_output_tokens,
                 "prev_transcript_tokens": prev_transcript_tokens,
+                "prev_target_tags": torch.roll(tgt_tags, 1),
+                "prev_transcript_tags": torch.roll(src_tags, 1),
             },
             "target": target,
             "target_lengths": target_lengths,

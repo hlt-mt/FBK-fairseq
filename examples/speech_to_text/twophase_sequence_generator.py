@@ -7,6 +7,8 @@ import math
 from typing import Dict, List, Optional
 
 import torch
+
+from examples.speech_to_text.models.base_triangle_with_prev_tags import BaseTrianglePreviousTags
 from fairseq import search
 from fairseq.models.fairseq_encoder import EncoderOut
 from torch import Tensor
@@ -308,6 +310,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                 incremental_states,
                 src_tokens,
                 auxiliary_outputs,
+                tags[:, : step + 1] if tags is not None else tags,
                 self.temperature
             )
             lprobs[lprobs != lprobs] = torch.tensor(-math.inf).to(lprobs)
@@ -344,7 +347,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             # Record tags, only support avg_attn_scores is a Tensor
             if tags_lprobs is not None:
                 if tags is None:
-                    tags = torch.empty(bsz * beam_size, max_len + 2).to(scores)
+                    tags = torch.empty(bsz * beam_size, max_len + 2).to(scores).to(torch.int64)
                 tags[:, step + 1] = torch.argmax(tags_lprobs, dim=-1)
 
             scores = scores.type_as(lprobs)
@@ -609,7 +612,11 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
                 aux_outputs = aux_outputs.index_select(1, reorder_state)
 
             lprobs, aux_out, avg_attn_scores, aux_tags_lprobs = self.model.forward_auxiliary_decoder(
-                aux_tokens[:, : step + 1], encoder_outs, auxiliary_incremental_states, self.temperature
+                aux_tokens[:, : step + 1],
+                encoder_outs,
+                auxiliary_incremental_states,
+                aux_tags[:, : step + 1] if aux_tags is not None else aux_tags,
+                self.temperature
             )
             if step == 0:
                 # We need to initialize this here as we don't know the last dimension (C)
@@ -653,7 +660,7 @@ class TwoPhaseSequenceGenerator(SequenceGenerator):
             # Record tags
             if aux_tags_lprobs is not None:
                 if aux_tags is None:
-                    aux_tags = torch.empty(bsz * beam_size, max_len + 2).to(scores)
+                    aux_tags = torch.empty(bsz * beam_size, max_len + 2).to(scores).to(torch.int64)
                 aux_tags[:, step + 1] = torch.argmax(aux_tags_lprobs, dim=-1)
 
             scores = scores.type_as(lprobs)
@@ -1098,6 +1105,7 @@ class EnsembleTwoPhaseModel(EnsembleModel):
             incremental_states,
             aux_tokens: Tensor,
             aux_decoder_out: Tensor,
+            prev_tags_probs: Optional[Tensor] = None,
             temperature: float = 1.0
     ):
         log_probs = []
@@ -1110,13 +1118,29 @@ class EnsembleTwoPhaseModel(EnsembleModel):
                 encoder_out = encoder_outs[i]
             # decode each model
             if self.has_incremental_states():
-                decoder_out = model.forward_decoder(
-                    tokens,
-                    auxiliary_out=aux_decoder_out,
-                    auxiliary_tokens=aux_tokens,
-                    encoder_out=encoder_out,
-                    incremental_state=incremental_states[i],
-                )
+                if isinstance(model, BaseTrianglePreviousTags):
+                    if prev_tags_probs is None:
+                        # We are in the condition that nothing has been generated yet,
+                        # so we feed a vector of zeroes that correspond to padding.
+                        # Internally the model will covert it to a one hot representation
+                        prev_tags_probs = torch.zeros(tokens.shape, dtype=torch.long).to(tokens.device)
+
+                    decoder_out = model.forward_decoder(
+                        tokens,
+                        auxiliary_out=aux_decoder_out,
+                        auxiliary_tokens=aux_tokens,
+                        encoder_out=encoder_out,
+                        incremental_state=incremental_states[i],
+                        prev_target_tags=prev_tags_probs,
+                    )
+                else:
+                    decoder_out = model.forward_decoder(
+                        tokens,
+                        auxiliary_out=aux_decoder_out,
+                        auxiliary_tokens=aux_tokens,
+                        encoder_out=encoder_out,
+                        incremental_state=incremental_states[i],
+                    )
             else:
                 decoder_out = model.forward_decoder(
                     tokens,
@@ -1186,7 +1210,12 @@ class EnsembleTwoPhaseModel(EnsembleModel):
 
     @torch.jit.export
     def forward_auxiliary_decoder(
-        self, tokens, encoder_outs: List[EncoderOut], auxiliary_incremental_states, temperature: float = 1.0
+        self,
+        tokens,
+        encoder_outs: List[EncoderOut],
+        auxiliary_incremental_states,
+        prev_tags_probs: Optional[Tensor] = None,
+        temperature: float = 1.0
     ):
         log_probs = []
         aux_tags_lprobs = []
@@ -1199,12 +1228,27 @@ class EnsembleTwoPhaseModel(EnsembleModel):
                 encoder_out = encoder_outs[i]
             # decode each model
             if self.has_incremental_states():
-                decoder_out = model.auxiliary_decoder.forward(
-                    tokens,
-                    encoder_out=encoder_out,
-                    incremental_state=auxiliary_incremental_states[i],
-                    features_only=True,
-                )
+                if isinstance(model, BaseTrianglePreviousTags):
+                    if prev_tags_probs is None:
+                        # We are in the condition that nothing has been generated yet,
+                        # so we feed a vector of zeroes that correspond to padding.
+                        # Internally the model will covert it to a one hot representation
+                        prev_tags_probs = torch.zeros(tokens.shape, dtype=torch.long).to(tokens.device)
+
+                    decoder_out = model.auxiliary_decoder.forward(
+                        tokens,
+                        encoder_out=encoder_out,
+                        incremental_state=auxiliary_incremental_states[i],
+                        features_only=True,
+                        prev_target_tags=prev_tags_probs,
+                    )
+                else:
+                    decoder_out = model.auxiliary_decoder.forward(
+                        tokens,
+                        encoder_out=encoder_out,
+                        incremental_state=auxiliary_incremental_states[i],
+                        features_only=True,
+                    )
             else:
                 decoder_out = model.auxiliary_decoder.forward(
                     tokens, encoder_out=encoder_out, features_only=True)
