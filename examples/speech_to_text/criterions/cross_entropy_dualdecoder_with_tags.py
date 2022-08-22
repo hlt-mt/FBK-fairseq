@@ -16,30 +16,9 @@ import math
 import torch
 
 from examples.speech_to_text.criterions.cross_entropy_dualdecoder import CrossEntropyDualDecoder
+from examples.speech_to_text.criterions.cross_entropy_with_tags import masked_label_smoothed_ce
 from fairseq import metrics
 from fairseq.criterions import register_criterion
-
-
-def masked_label_smoothed_ce(lprobs, target, epsilon, pad_mask=None, reduce=True):
-    """
-    A label-smoothing cross entropy implementation that is aware of the padding mask.
-    """
-    if target.dim() == lprobs.dim() - 1:
-        target = target.unsqueeze(-1)
-    nll_loss = -lprobs.gather(dim=-1, index=target)
-    smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
-    if pad_mask is not None:
-        nll_loss.masked_fill_(pad_mask, 0.0)
-        smooth_loss.masked_fill_(pad_mask, 0.0)
-    else:
-        nll_loss = nll_loss.squeeze(-1)
-        smooth_loss = smooth_loss.squeeze(-1)
-    if reduce:
-        nll_loss = nll_loss.sum()
-        smooth_loss = smooth_loss.sum()
-    eps_i = epsilon / lprobs.size(-1)
-    loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
-    return loss, nll_loss
 
 
 @register_criterion("cross_entropy_dualdecoder_with_tags")

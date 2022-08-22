@@ -1,4 +1,4 @@
-# Copyright 2021 FBK
+# Copyright 2022 FBK
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,108 +11,56 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-from typing import Optional, Dict, Any, List
+from typing import Optional, Any, Dict, List
 
 from torch import nn, Tensor
-import torch
+from torch.nn import functional as F
 
-from examples.speech_to_text.models.base_triangle import BaseTriangle, TriangleTransformerDecoder
-from fairseq.models.fairseq_encoder import EncoderOut
-from examples.speech_to_text.models.transformer_decoder_with_tags import TagsEmbeddingSupport,\
-    TransformerDecoderWithTags
+from fairseq.models.speech_to_text import TransformerDecoderScriptable
 
 
-class BaseTrianglePreviousTags(BaseTriangle):
-    """
-    This model adds the support to add the embeddings of previously predicted tags
-    to the previous output tokens.
-    """
+class TagsEmbeddingSupport:
+    def init_tag_embeddings(self, args, tags, embed_dim):
+        self.tags_num = len(tags) + 1  # all tags + the no-tag token
+        self.tags = tags
+        self.add_tag_embeddings = getattr(args, 'add_tags_embeddings', False)
+        if self.add_tag_embeddings:
+            self.tags_embeddings = nn.Linear(self.tags_num, embed_dim, bias=False)
+            nn.init.normal_(self.tags_embeddings.weight, mean=0, std=embed_dim ** -0.5)
 
-    @staticmethod
-    def add_args(parser):
-        BaseTriangle.add_args(parser)
-        parser.add_argument('--add-tags-embeddings', default=False, action='store_true',
-                            help='if set, the previous token embeddings are summed with embeddings of their tag')
-
-    @classmethod
-    def build_model(cls, args, task):
-        """Build a new model instance."""
-
-        # make sure all arguments are present in older models
-        cls.add_base_args(args)
-
-        if not hasattr(args, 'max_source_positions'):
-            args.max_source_positions = 100000
-        if not hasattr(args, 'max_target_positions'):
-            args.max_target_positions = 100000
-
-        # This model requires a task that provides source dictionary and transcripts
-        assert task.source_dictionary is not None and task.target_dictionary is not None
-
-        src_dict, tgt_dict = task.source_dictionary, task.target_dictionary
-
-        def build_embedding(dictionary, embed_dim):
-            num_embeddings = len(dictionary)
-            padding_idx = dictionary.pad()
-            return Embedding(num_embeddings, embed_dim, padding_idx)
-
-        target_embed_tokens = build_embedding(tgt_dict, args.decoder_embed_dim)
-        src_embed_tokens = build_embedding(src_dict, args.decoder_embed_dim)
-        encoder = cls.encoder_parent_model.build_encoder(args, src_dict if src_dict is not None else tgt_dict)
-        decoder = TriangleTransformerDecoderWithTags(args, tgt_dict, target_embed_tokens, task.data_cfg.tags)
-        auxiliary_decoder = TransformerDecoderWithTags(args, src_dict, src_embed_tokens, task.data_cfg.tags)
-        return cls(encoder, decoder, auxiliary_decoder)
-
-    def forward(self, src_tokens, src_lengths, prev_output_tokens, prev_transcript_tokens, **kwargs):
-        prev_transcript_tags = kwargs.get('prev_transcript_tags', None)
-        if 'prev_transcript_tags' in kwargs:
-            del kwargs['prev_transcript_tags']
-
-        encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
-        auxiliary_out = self.auxiliary_decoder(
-            prev_transcript_tokens,
-            encoder_out=encoder_out,
-            prev_target_tags=prev_transcript_tags,
-            features_only=True)
-        auxiliary_padding_mask = prev_transcript_tokens.eq(
-            self.auxiliary_decoder.padding_idx)
-        decoder_out = self.decoder(
-            prev_output_tokens,
-            encoder_out=encoder_out,
-            aux_decoder_out=auxiliary_out[0].transpose(0, 1),
-            aux_decoder_padding_mask=auxiliary_padding_mask,
-            **kwargs
-        )
-        if self.encoder.ctc_flag:
-            return (decoder_out, (self.auxiliary_decoder.output_layer(auxiliary_out[0]), auxiliary_out[1])), \
-                   {"ctc_out": encoder_out["ctc_out"], "ctc_lengths": encoder_out["ctc_lengths"]}
-        else:
-            return decoder_out, (self.auxiliary_decoder.output_layer(auxiliary_out[0]), auxiliary_out[1])
+    def add_tag_embeddings_to_embeddings(self, x, tags):
+        # Add tags embeddings to normal token embeddings
+        if self.add_tag_embeddings:
+            # We accept either the tag index here or the probability vector
+            # In the first case, we first convert to one-hot encoding giving
+            # 1 probability to the correct previous NE tag
+            if len(tags.shape) == 2:  # it is (batch, tgt_len)
+                tags = F.one_hot(tags, num_classes=self.tags_num).float()
+            return x + self.tags_embeddings(tags)
+        return x
 
 
-class TriangleTransformerDecoderWithTags(TriangleTransformerDecoder, TagsEmbeddingSupport):
+class TransformerDecoderWithTags(TransformerDecoderScriptable, TagsEmbeddingSupport):
     def __init__(self, args, dictionary, embed_tokens, tags):
         super().__init__(args, dictionary, embed_tokens)
-        tags_num = len(tags) + 1  # all tags + the no-tag token
+        self.tags_num = len(tags) + 1  # all tags + the no-tag token
         self.tags = tags
-        self.tags_output_projection = nn.Linear(self.output_embed_dim, tags_num, bias=False)
+        self.tags_output_projection = nn.Linear(self.output_embed_dim, self.tags_num, bias=False)
         nn.init.normal_(self.tags_output_projection.weight, mean=0, std=self.output_embed_dim ** -0.5)
         self.init_tag_embeddings(args, tags, self.embed_dim)
 
     def forward(
         self,
         prev_output_tokens,
-        encoder_out: Optional[EncoderOut] = None,
-        aux_decoder_out: Optional[torch.Tensor] = None,
-        aux_decoder_padding_mask: Optional[torch.Tensor] = None,
+        encoder_out: Optional[Dict[str, List[Tensor]]] = None,
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         features_only: bool = False,
+        full_context_alignment: bool = False,
         alignment_layer: Optional[int] = None,
         alignment_heads: Optional[int] = None,
         src_lengths: Optional[Any] = None,
         return_all_hiddens: bool = False,
         prev_target_tags: Optional[Tensor] = None,
-
     ):
         """
         Args:
@@ -133,14 +81,13 @@ class TriangleTransformerDecoderWithTags(TriangleTransformerDecoder, TagsEmbeddi
         x, extra = self.extract_features(
             prev_output_tokens,
             encoder_out=encoder_out,
-            aux_decoder_out=aux_decoder_out,
-            aux_decoder_padding_mask=aux_decoder_padding_mask,
             incremental_state=incremental_state,
+            full_context_alignment=full_context_alignment,
             alignment_layer=alignment_layer,
             alignment_heads=alignment_heads,
-            prev_target_tags=prev_target_tags,
+            prev_target_tags=prev_target_tags
         )
-        extra["tags"] = self.tags_output_projection(x)
+        extra = {"tags": self.tags_output_projection(x), "attn": None}
         if not features_only:
             x = self.output_layer(x)
         return x, extra
@@ -148,9 +95,7 @@ class TriangleTransformerDecoderWithTags(TriangleTransformerDecoder, TagsEmbeddi
     def extract_features(
         self,
         prev_output_tokens,
-        encoder_out: Optional[Dict[str, Optional[Tensor]]] = None,
-        aux_decoder_out: Optional[torch.Tensor] = None,
-        aux_decoder_padding_mask: Optional[torch.Tensor] = None,
+        encoder_out: Optional[Dict[str, List[Tensor]]],
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         full_context_alignment: bool = False,
         alignment_layer: Optional[int] = None,
@@ -204,6 +149,7 @@ class TriangleTransformerDecoderWithTags(TriangleTransformerDecoder, TagsEmbeddi
         # Add tags embeddings to normal token embeddings
         x = self.add_tag_embeddings_to_embeddings(x, prev_target_tags)
 
+
         if self.quant_noise is not None:
             x = self.quant_noise(x)
 
@@ -241,12 +187,10 @@ class TriangleTransformerDecoderWithTags(TriangleTransformerDecoder, TagsEmbeddi
                 else None,
                 encoder_out["encoder_padding_mask"][0]
                 if (
-                        encoder_out is not None
-                        and len(encoder_out["encoder_padding_mask"]) > 0
+                    encoder_out is not None
+                    and len(encoder_out["encoder_padding_mask"]) > 0
                 )
                 else None,
-                aux_decoder_out,
-                aux_decoder_padding_mask,
                 incremental_state,
                 self_attn_mask=self_attn_mask,
                 self_attn_padding_mask=self_attn_padding_mask,
@@ -274,10 +218,3 @@ class TriangleTransformerDecoderWithTags(TriangleTransformerDecoder, TagsEmbeddi
             x = self.project_out_dim(x)
 
         return x, {"attn": [attn], "inner_states": inner_states}
-
-
-def Embedding(num_embeddings, embedding_dim, padding_idx):
-    m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
-    nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
-    nn.init.constant_(m.weight[padding_idx], 0)
-    return m

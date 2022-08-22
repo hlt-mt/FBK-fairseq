@@ -18,43 +18,12 @@ import torch
 
 from omegaconf import DictConfig
 
+from examples.speech_to_text.utils.tags import join_tags_tokens
 from fairseq import scoring, checkpoint_utils, options, tasks, utils
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from fairseq.logging import progress_bar
 from fairseq.logging.meters import StopwatchMeter, TimeMeter
 from fairseq_cli.generate import get_symbols_to_strip_from_output
-
-
-def join_tags_tokens(tags, tokens, dictionary, tags_list):
-    """
-    Helper function that merges the `token` and `tags` predicted by a model.
-    It inserts the tokens corresponding to the predicted `tags` into the predicted `tokens`,
-    returning a list of string representation of the tags only and a list of tokens
-    that can be converted into a string containing the output of the model with
-    the tag predictions inline.
-    """
-    assert tags.shape[0] == tokens.shape[0]
-    tags_strings = []
-    joint_string = []
-    current_tag = 0
-    for t, s in zip(tags, tokens):
-        t = t.item()
-        if t == 0:
-            tags_strings.append("-")
-        else:
-            tags_strings.append(tags_list[t - 1])
-        # join string handling
-        if t != current_tag:
-            if current_tag != 0:
-                joint_string.append(
-                    dictionary.index('</{}>'.format(tags_list[current_tag - 1])))
-            if t != 0:
-                joint_string.append(
-                    dictionary.index('<{}>'.format(tags_list[t - 1])))
-        joint_string.append(s.item())
-        current_tag = t
-
-    return tags_strings, joint_string
 
 
 def main(cfg: DictConfig):

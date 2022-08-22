@@ -286,6 +286,22 @@ def _main(cfg: DictConfig, output_file):
                         "D-{}\t{}\t{}".format(sample_id, score, detok_hypo_str),
                         file=output_file,
                     )
+                    if "tags" in hypo:
+                        from examples.speech_to_text.utils.tags import join_tags_tokens
+                        tags_strings, joint_string = join_tags_tokens(
+                            hypo["tags"].int().cpu(), hypo_tokens, tgt_dict, task.data_cfg.tags)
+
+                        print('TAGS-{}\t{}\t{}'.format(sample_id, score, " ".join(tags_strings)), file=output_file)
+                        hypo_joint_str = tgt_dict.string(
+                            joint_string,
+                            cfg.common_eval.post_process,
+                            escape_unk=True,
+                            extra_symbols_to_ignore=get_symbols_to_strip_from_output(
+                                generator
+                            ),
+                        )
+                        detok_hypo_joint_str = decode_fn(hypo_joint_str)
+                        print('JOINTD-{}\t{}\t{}'.format(sample_id, score, detok_hypo_joint_str), file=output_file)
                     print(
                         "P-{}\t{}".format(
                             sample_id,
