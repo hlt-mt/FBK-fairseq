@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 import requests
 
-PROJECT_BASE_URL = "https://gitlab.com/api/v4/projects/7979857/"
+PROJECT_BASE_URL = "https://gitlab.fbk.eu/api/v4/projects/4604/"
 
 mr_id = sys.argv[1]
 git_root = Path(__file__).parent.parent
