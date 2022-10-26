@@ -24,8 +24,12 @@ from fairseq.modules import (
 )
 from torch import Tensor
 
-
 logger = logging.getLogger(__name__)
+
+
+def get_length(seq_lens, kernel_size=5, padding=1, stride=2):
+    compressed_seq_lens = seq_lens.clone()
+    return ((compressed_seq_lens.float() - kernel_size + 2 * padding) / stride + 1).floor().long()
 
 
 class Conv1dSubsampler(nn.Module):
@@ -60,21 +64,21 @@ class Conv1dSubsampler(nn.Module):
             for i, k in enumerate(kernel_sizes)
         )
 
-    def get_out_seq_lens_tensor(self, in_seq_lens_tensor):
-        out = in_seq_lens_tensor.clone()
-        for _ in range(self.n_layers):
-            out = ((out.float() - 1) / 2 + 1).floor().long()
-        return out
-
     def forward(self, src_tokens, src_lengths):
-        bsz, in_seq_len, _ = src_tokens.size()  # B x T x (C x D)
-        x = src_tokens.transpose(1, 2).contiguous()  # -> B x (C x D) x T
+        x = src_tokens.transpose(1, 2).contiguous()  # B x T x (C x D) -> B x (C x D) x T
+        actual_src_lengths = src_lengths
         for conv in self.conv_layers:
             x = conv(x)
             x = nn.functional.glu(x, dim=1)
-        _, _, out_seq_len = x.size()
+            actual_src_lengths = get_length(
+                actual_src_lengths,
+                kernel_size=conv.kernel_size[0],
+                padding=conv.padding[0],
+                stride=conv.stride[0])
+            x = x.masked_fill(
+                lengths_to_padding_mask(actual_src_lengths).unsqueeze(1), 0)
         x = x.transpose(1, 2).transpose(0, 1).contiguous()  # -> T x B x (C x D)
-        return x, self.get_out_seq_lens_tensor(src_lengths)
+        return x, actual_src_lengths
 
 
 @register_model("s2t_transformer")
