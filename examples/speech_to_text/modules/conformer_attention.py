@@ -135,9 +135,12 @@ class RelativeMultiHeadAttention(nn.Module):
 
         if mask is not None:
             mask = mask.unsqueeze(1)
-            score.masked_fill_(mask, -1e9 if mask.dtype == torch.float32 else -1e+4)
+            score.masked_fill_(mask, -1e9 if mask.dtype == torch.float32 else -1e4)
 
-        attn = F.softmax(score, -1)
+        attn = F.softmax(score, dim=-1)
+        # set to 0.0 all attention weights of padding elements
+        if mask is not None:
+            attn = attn.masked_fill(mask, 0.0)
         attn = self.dropout(attn)
 
         # Attention computation
@@ -172,7 +175,7 @@ class MultiHeadedSelfAttentionModule(nn.Module):
 
     Inputs: inputs, mask
         x (batch, time, dim): Tensor containing input vector
-        mask (batch, 1, time2) or (batch, time1, time2): Tensor containing indices to be masked
+        mask (batch, time1, time2): Tensor containing indices to be masked
 
     Returns:
         **outputs** (batch, time, dim): Tensor produces by relative multi headed self attention module.
