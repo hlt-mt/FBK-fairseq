@@ -30,7 +30,7 @@ python ${FAIRSEQ_DIR}/examples/speech_to_text/preprocess_generic.py \
 script again changing `--vocab-size 8000` to `--vocab-size 5000`, with the option 
 `--no-filterbank-extraction` to avoid the re-computation of the mel-filterbank features. 
 
-##Training 
+## Training 
 In the following, there are the scripts for training both `PlainConvattention` and `Speechformer` architectures.
 
 ⭐️**Please note** that the training phase of `PlainConvattention` (which corresponds to the encoder pretraining of the 
@@ -162,10 +162,19 @@ Remember that the results in our paper are the average BLEU score of 3 runs, her
 Please cite as:
 
 ``` bibtex
-@inproceedings{papi2021speechformer,
-  title = {{Speechformer: Reducing Information Loss in Direct Speech Translation}},
-  author = {Papi, Sara and Gaido, Marco and Negri, Matteo and Turchi, Marco},
-  booktitle = {Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (EMNLP)},
-  year = {2021},
+@inproceedings{papi-etal-2021-speechformer,
+    title = "Speechformer: Reducing Information Loss in Direct Speech Translation",
+    author = "Papi, Sara  and
+      Gaido, Marco  and
+      Negri, Matteo  and
+      Turchi, Marco",
+    booktitle = "Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing",
+    month = nov,
+    year = "2021",
+    address = "Online and Punta Cana, Dominican Republic",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2021.emnlp-main.127",
+    doi = "10.18653/v1/2021.emnlp-main.127",
+    pages = "1698--1706",
 }
 ```
