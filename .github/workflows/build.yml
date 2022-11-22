@@ -13,8 +13,8 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        platform: [ubuntu-latest, macos-latest]
-        python-version: [3.6, 3.7]
+        platform: [ubuntu-latest]
+        python-version: [3.8]
 
     runs-on: ${{ matrix.platform }}
 
@@ -47,4 +47,4 @@ jobs:
 
     - name: Run tests
       run: |
-          python setup.py test
+          python -m unittest discover -s fbk_uts -p "*.py"
