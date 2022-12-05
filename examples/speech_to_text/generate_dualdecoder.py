@@ -1,8 +1,18 @@
 #!/usr/bin/env python3 -u
-# Copyright (c) Facebook, Inc. and its affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
+# Copyright 2021 FBK
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License
+
 """
 Translate pre-processed data with a trained model.
 """
@@ -234,7 +244,7 @@ def _main(cfg: DictConfig, output_file):
                     # detokenized hypothesis
                     print('AUXD-{}\t{}\t{}'.format(sample_id, score, detok_hypo_aux_str), file=output_file)
 
-                    if "tags" in hypo:
+                    if "tags" in hypo and hypo["tags"] is not None:
                         tags_strings, joint_string = join_tags_tokens(
                             hypo["tags"].int().cpu(), hypo_tokens, tgt_dict, task.data_cfg.tags)
 
@@ -249,7 +259,7 @@ def _main(cfg: DictConfig, output_file):
                         )
                         detok_hypo_joint_str = decode_fn(hypo_joint_str)
                         print('JOINTD-{}\t{}\t{}'.format(sample_id, score, detok_hypo_joint_str), file=output_file)
-                    if "aux_tags" in hypo:
+                    if "aux_tags" in hypo and hypo["aux_tags"] is not None:
                         tags_strings, joint_string = join_tags_tokens(
                             hypo["aux_tags"].int().cpu(), hypo_aux_tokens, src_dict, task.data_cfg.tags)
                         print('AUXTAGS-{}\t{}\t{}'.format(sample_id, score, " ".join(tags_strings)), file=output_file)
