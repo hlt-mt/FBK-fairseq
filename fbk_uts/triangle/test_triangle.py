@@ -29,39 +29,15 @@ from examples.speech_to_text.models.s2t_transformer_fbk_triangle import s2t_tran
     S2TTransformerTriangle
 from examples.speech_to_text.models.speechformer_triangle import SpeechformerTriangle
 from fairseq import utils
-from fairseq.data import Dictionary
 from fairseq.logging.meters import MetersDict
+from fbk_uts.base_utilities import BaseSpeechTestCase
 
 
-class MockS2TDataConfigSrc(S2TDataConfigSrc):
-    def __init__(self):
-        self.config = {}
-
-
-class TriangleTestCase(unittest.TestCase):
+class TriangleTestCase(unittest.TestCase, BaseSpeechTestCase):
     @patch('fairseq.data.audio.speech_to_text_dataset.get_features_or_waveform')
     def setUp(self, mock_get_features_or_waveform) -> None:
         mock_get_features_or_waveform.return_value = np.random.random((200, 4))
-        self.src_dict = Dictionary()
-        src_lines = ["I like quokkas", "I like tortoises", "I like elephants"]
-        for l in src_lines:
-            self.src_dict.encode_line(l)
-        self.tgt_dict = Dictionary()
-        tgt_lines = ["Mi piacciono i quokka", "Mi piacciono le tartarughe", "Mi piacciono gli elefanti"]
-        for l in tgt_lines:
-            self.tgt_dict.encode_line(l)
-        self.ds = SpeechToTextDatasetWithSrc(
-            "quokka",
-            True,
-            MockS2TDataConfigSrc(),
-            ["f1.wav", "f2.wav", "f3.wav"],
-            [30, 100, 27],
-            src_lines,
-            tgt_lines,
-            ["s1", "s2", "s3"],
-            tgt_dict=self.tgt_dict,
-            src_dict=self.src_dict,
-        )
+        self.init_sample_dataset(SpeechToTextDatasetWithSrc)
         args = Namespace()
         args.underlying_criterion = "cross_entropy_dualdecoder"
         args.criterion = "ctc_multi_loss"
