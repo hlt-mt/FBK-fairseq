@@ -3,12 +3,18 @@
 This repository contains the open source code by the MT unit of FBK.
 Dedicated README for each work can be found in the `fbk_works` directory.
 
- - [Speechformer: Reducing Information Loss in Direct Speech Translation](fbk_works/SPEECHFORMER.md)
- - [Efficient yet Competitive Speech Translation: FBK@IWSLT2022](fbk_works/IWSLT_2022.md)
- - [Who Are We Talking About? Handling Person Names in Speech Translation](fbk_works/PERSON_NAMES_IWSLT2022.md)
- - [Over-Generation Cannot Be Rewarded: Length-Adaptive Average Lagging for Simultaneous Speech Translation](fbk_works/LAAL.md)
- - [Does Simultaneous Speech Translation need Simultaneous Models?](fbk_works/SIMULTANEOUS_OFFLINE_ST.md)
- - [Dodging the Data Bottleneck: Automatic Subtitling with Automatically Segmented ST Corpora](fbk_works/SUBTITLE_SEGMENTER_AACL2022.md)
+ ### 2022
+
+ - [[AACL2022] **Dodging the Data Bottleneck: Automatic Subtitling with Automatically Segmented ST Corpora**](fbk_works/SUBTITLE_SEGMENTER_AACL2022.md)
+ - [[EMNLP2022 Findings] **Does Simultaneous Speech Translation need Simultaneous Models?**](fbk_works/SIMULTANEOUS_OFFLINE_ST.md)
+ - [[AutoSimTrans2022] **Over-Generation Cannot Be Rewarded: Length-Adaptive Average Lagging for Simultaneous Speech Translation**](fbk_works/LAAL.md)
+ - [[IWSLT2022] **Who Are We Talking About? Handling Person Names in Speech Translation**](fbk_works/PERSON_NAMES_IWSLT2022.md)
+ - [[IWSLT2022] **Efficient yet Competitive Speech Translation: FBK@IWSLT2022**](fbk_works/IWSLT_2022.md)
+
+### 2021
+
+ - [[EMNLP2021] **Speechformer: Reducing Information Loss in Direct Speech Translation**](fbk_works/SPEECHFORMER.md)
+
 
 If using this repository, please acknowledge the related paper(s) citing them.
 Bibtex citations are available for each work in the dedicated README file.
