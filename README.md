@@ -8,6 +8,7 @@ Dedicated README for each work can be found in the `fbk_works` directory.
  - [Who Are We Talking About? Handling Person Names in Speech Translation](fbk_works/PERSON_NAMES_IWSLT2022.md)
  - [Over-Generation Cannot Be Rewarded: Length-Adaptive Average Lagging for Simultaneous Speech Translation](fbk_works/LAAL.md)
  - [Does Simultaneous Speech Translation need Simultaneous Models?](fbk_works/SIMULTANEOUS_OFFLINE_ST.md)
+ - [Dodging the Data Bottleneck: Automatic Subtitling with Automatically Segmented ST Corpora](fbk_works/SUBTITLE_SEGMENTER_AACL2022.md)
 
 If using this repository, please acknowledge the related paper(s) citing them.
 Bibtex citations are available for each work in the dedicated README file.
