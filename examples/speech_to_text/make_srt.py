@@ -31,6 +31,9 @@ def formatted_absolute_time(timestamp, audio_offset):
     # Use "0{HOUR}" instead of only "{HOUR}" in case HOUR < 10, as prescribed by the .srt format
     if formatted_time[:2].endswith(":"):
         formatted_time = "0" + formatted_time
+    # Use 3 characters for milliseconds even if composed by only zeros
+    if not formatted_time[-4] == ",":
+        formatted_time = formatted_time + ",000"
     return formatted_time[:12]  # ignore more than 3 characters for milliseconds
 
 
