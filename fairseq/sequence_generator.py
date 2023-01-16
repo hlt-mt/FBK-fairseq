@@ -649,7 +649,7 @@ class SequenceGenerator(nn.Module):
             idx = bbsz_idx[i]
             score = eos_scores[i]
             # sentence index in the current (possibly reduced) batch
-            unfin_idx = idx // beam_size
+            unfin_idx = torch.div(idx, beam_size, rounding_mode='trunc')
             # sentence index in the original (unreduced) batch
             sent = unfin_idx + cum_unfin[unfin_idx]
             # Cannot create dict for key type '(int, int)' in torchscript.
