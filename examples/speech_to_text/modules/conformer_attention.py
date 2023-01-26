@@ -78,6 +78,7 @@ class RelativeMultiHeadAttention(nn.Module):
             d_model: int = 512,
             num_heads: int = 16,
             dropout_p: float = 0.1,
+            batch_unsafe_relative_shift: bool = False
     ):
         super(RelativeMultiHeadAttention, self).__init__()
         assert d_model % num_heads == 0, "d_model % num_heads should be zero."
@@ -108,6 +109,7 @@ class RelativeMultiHeadAttention(nn.Module):
         self.out_proj = nn.Linear(d_model, d_model)
         init.xavier_uniform_(self.out_proj.weight)
         init.zeros_(self.out_proj.bias)
+        self.relative_shift_func = self._relative_shift_unsafe if batch_unsafe_relative_shift else self._relative_shift
 
     def forward(
             self,
@@ -129,7 +131,7 @@ class RelativeMultiHeadAttention(nn.Module):
         # Relative positional weights computation using Q + v as in Transformer-XL
         pos_score = torch.matmul((query + self.v_bias).transpose(1, 2), pos_embedding.permute(0, 2, 3, 1))
         # Right shifting mechanism described in Transformer-XL
-        pos_score = self._relative_shift(pos_score)
+        pos_score = self.relative_shift_func(pos_score, mask)
         # Final attention weights obtained summing the attention with its relative positional embeddings
         score = (content_score + pos_score) / self.sqrt_dim
 
@@ -149,7 +151,33 @@ class RelativeMultiHeadAttention(nn.Module):
 
         return self.out_proj(context)
 
-    def _relative_shift(self, pos_score: Tensor) -> Tensor:
+    def _relative_shift(self, pos_score: Tensor, padding_mask: Tensor) -> Tensor:
+        """
+        This methods performs the relative shift operation row-wise.
+        Although inefficient, it enforces that each row is shifted accounting its padding,
+        which enforces that the result does not change depending on whether a given row
+        is padded or not.
+        """
+        batch_size, num_heads, seq_length1, seq_length2 = pos_score.size()
+        assert seq_length1 == seq_length2, "Currently we support only self-attention"
+        zeros = pos_score.new_zeros(batch_size, num_heads, seq_length1, 1)
+        padded_pos_score = torch.cat([zeros, pos_score], dim=-1)
+
+        seq_lengths = (seq_length1 - (padding_mask[:, :, 0]).sum(-1)).tolist()
+        for b_i in range(batch_size):
+            padded_batch_pos_scores = padded_pos_score[b_i, :, :seq_lengths[b_i], :seq_lengths[b_i] + 1]
+            padded_batch_pos_scores = padded_batch_pos_scores.reshape(num_heads, seq_lengths[b_i] + 1, seq_lengths[b_i])
+            pos_score[b_i, :, :seq_lengths[b_i], :seq_lengths[b_i]] = padded_batch_pos_scores[:, 1:, :]
+        pos_score.masked_fill_(padding_mask.unsqueeze(1), 0.0)
+        return pos_score
+
+    def _relative_shift_unsafe(self, pos_score: Tensor, padding_mask: Tensor) -> Tensor:
+        """
+         This implementation reflects other open source ones (e.g. fairseq), which
+         shift the values from the row above in the batch. Although efficient,
+         this leads to inconsistencies in the results, as the same row has different
+         values according to whether it is padded (and how much it is) or not.
+         """
         batch_size, num_heads, seq_length1, seq_length2 = pos_score.size()
         zeros = pos_score.new_zeros(batch_size, num_heads, seq_length1, 1)
         padded_pos_score = torch.cat([zeros, pos_score], dim=-1)
@@ -180,11 +208,11 @@ class MultiHeadedSelfAttentionModule(nn.Module):
     Returns:
         **outputs** (batch, time, dim): Tensor produces by relative multi headed self attention module.
     """
-    def __init__(self, d_model: int, num_heads: int, dropout_p: float = 0.1):
+    def __init__(self, d_model: int, num_heads: int, dropout_p: float = 0.1, batch_unsafe_relative_shift: bool = False):
         super(MultiHeadedSelfAttentionModule, self).__init__()
         self.positional_encoding = PositionalEncoding(d_model)
         self.layer_norm = nn.LayerNorm(d_model)
-        self.attention = RelativeMultiHeadAttention(d_model, num_heads, dropout_p)
+        self.attention = RelativeMultiHeadAttention(d_model, num_heads, dropout_p, batch_unsafe_relative_shift)
         self.dropout = FairseqDropout(p=dropout_p, module_name=self.__class__.__name__)
 
     def forward(self, x: Tensor, mask: Optional[Tensor] = None):

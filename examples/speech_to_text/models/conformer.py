@@ -83,6 +83,11 @@ class ConformerModel(S2TTransformerModel):
             '--no-syncbatchnorm', default=False, action='store_true',
             help='If enabled, SyncBatchNorm is replaced by BatchNorm1D in the Conformer Convolution Layer.'
         )
+        parser.add_argument(
+            '--batch-unsafe-relative-shift', default=False, action='store_true',
+            help='If enabled, use the relative_shift implementation that disregards padding,'
+                 'but is faster. This may lead to inconsistencies with different batch sizes.'
+        )
 
     @classmethod
     def build_encoder(cls, args, dictionary):

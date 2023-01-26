@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 import copy
+import math
 import unittest
 from argparse import Namespace
 
@@ -19,6 +20,7 @@ import torch
 from torch import nn
 
 from examples.speech_to_text.models.conformer import conformer_s, ConformerEncoder
+from examples.speech_to_text.modules.conformer_attention import MultiHeadedSelfAttentionModule
 from examples.speech_to_text.modules.conformer_encoder_layer import ConformerEncoderLayer
 from fairseq.data import Dictionary
 from fairseq.data.data_utils import lengths_to_padding_mask
@@ -85,6 +87,81 @@ class ConformerEncoderTestCase(unittest.TestCase):
         self.assertTrue(
             torch.all(net_out["encoder_out"][0][1, 13:, :] == 0.0),
             f"non-zero entries in {net_out['encoder_out'][0][1, 13:, :]}")
+
+    def test_multihead_selfattn(self):
+        batchnorm_args = copy.deepcopy(self.base_args)
+        batchnorm_args.no_syncbatchnorm = True
+        batchnorm_args.encoder_embed_dim = 8
+        fake_sample = torch.rand(2, 10, 8)
+        fake_sample[1, 3:, :] = 0
+        fake_lengths = torch.LongTensor([10, 3])
+        padding_mask = lengths_to_padding_mask(fake_lengths)
+        fake_sample2 = fake_sample[1:, :3, :]
+        padding_mask2 = lengths_to_padding_mask(fake_lengths[1].unsqueeze(0))
+        att_mask = padding_mask.unsqueeze(1).repeat([1, fake_sample.shape[1], 1])
+        att_mask = att_mask.logical_or(att_mask.transpose(1, 2))
+        att_mask2 = padding_mask2.unsqueeze(1).repeat([1, fake_sample2.shape[1], 1])
+        att_mask2 = att_mask2.logical_or(att_mask2.transpose(1, 2))
+        attn = MultiHeadedSelfAttentionModule(8, 4)
+        attn.eval()
+        attn_out = attn(fake_sample, att_mask)
+        attn_out2 = attn(fake_sample2, att_mask2)
+        self.assertTrue(
+            torch.allclose(
+                attn_out[1, :3, :],
+                attn_out2[0], atol=1e-07, rtol=1e-04))
+        self.assertTrue(
+            torch.all(attn_out[1, 3:, :] == 0.0), f"non-zero entries in {attn_out[1, 3:, :]}")
+
+    def test_encoder_batch(self):
+        batchnorm_args = copy.deepcopy(self.base_args)
+        batchnorm_args.no_syncbatchnorm = True
+        batchnorm_args.encoder_embed_dim = 8
+        batchnorm_args.input_feat_per_channel = 8
+        batchnorm_args.encoder_layers = 3
+        fake_sample = torch.rand(5, 27, 8)
+        fake_sample[1, 13:, :] = 0
+        fake_sample[2, 8:, :] = 0
+        fake_sample[3, 8:, :] = 0
+        fake_sample[4, 5:, :] = 0
+        fake_lengths = torch.LongTensor([27, 13, 8, 8, 5])
+        encoder = ConformerEncoder(batchnorm_args, self.fake_dict)
+        encoder.eval()
+        net_out = encoder.forward(fake_sample, fake_lengths, return_all_hiddens=True)
+
+        def test_item(item_idx):
+            item_len = fake_lengths[item_idx].item()
+            item_out_len = math.ceil(item_len / 4)
+            fake_sample2 = fake_sample[item_idx, :item_len, :]
+            net_out2 = encoder.forward(
+                fake_sample2.unsqueeze(0), fake_lengths[item_idx].unsqueeze(0), return_all_hiddens=True)
+            self.assertTrue(
+                torch.allclose(
+                    net_out["encoder_out"][0][:item_out_len, item_idx, :],
+                    net_out2["encoder_out"][0][:, 0, :], atol=1e-06, rtol=1e-04))
+
+        for i in range(5):
+            test_item(i)
+
+    def test_encoder_batch_unsafe_fails(self):
+        batchnorm_args = copy.deepcopy(self.base_args)
+        batchnorm_args.no_syncbatchnorm = True
+        batchnorm_args.encoder_embed_dim = 8
+        batchnorm_args.input_feat_per_channel = 8
+        batchnorm_args.encoder_layers = 3
+        batchnorm_args.batch_unsafe_relative_shift = True
+        fake_sample = torch.rand(2, 27, 8)
+        fake_sample[1, 13:, :] = 0
+        fake_lengths = torch.LongTensor([27, 13])
+        encoder = ConformerEncoder(batchnorm_args, self.fake_dict)
+        encoder.eval()
+        net_out = encoder.forward(fake_sample, fake_lengths, return_all_hiddens=True)
+        fake_sample2 = fake_sample[1, :13, :]
+        net_out2 = encoder.forward(fake_sample2.unsqueeze(0), fake_lengths[1].unsqueeze(0), return_all_hiddens=True)
+        self.assertFalse(
+            torch.allclose(
+                net_out["encoder_out"][0][:4, 1, :],
+                net_out2["encoder_out"][0][:, 0, :], atol=1e-07, rtol=1e-04))
 
 
 if __name__ == '__main__':

@@ -62,6 +62,7 @@ class ConformerEncoderLayer(nn.Module):
         self.conv_kernel_size = args.conformer_conv_kernel_size
         self.half_step_residual = args.conformer_half_step_residual
         self.no_syncbatchnorm = args.no_syncbatchnorm
+        self.batch_unsafe_relative_shift = getattr(args, 'batch_unsafe_relative_shift', False)
 
         if self.half_step_residual:
             self.feed_forward_residual_factor = 0.5
@@ -78,6 +79,7 @@ class ConformerEncoderLayer(nn.Module):
             d_model=self.encoder_dim,
             num_heads=self.num_attention_heads,
             dropout_p=self.attention_dropout_p,
+            batch_unsafe_relative_shift=self.batch_unsafe_relative_shift,
         )
 
         self.conv_module = ConformerConvModule(
