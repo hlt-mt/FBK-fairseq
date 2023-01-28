@@ -56,7 +56,8 @@ class ConformerEncoderTestCase(unittest.TestCase):
     def check_norm(self, args, norm_class):
         encoder = ConformerEncoder(args, self.fake_dict)
         for layer in range(len(encoder._modules["conformer_layers"])):
-            isinstance(encoder._modules["conformer_layers"][layer].conv_module.batchnorm, norm_class)
+            self.assertTrue(
+                isinstance(encoder._modules["conformer_layers"][layer].conv_module.batchnorm, norm_class))
 
     def test_conformer_encoder_layer_padding(self):
         batchnorm_args = copy.deepcopy(self.base_args)
