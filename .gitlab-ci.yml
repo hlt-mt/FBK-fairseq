@@ -13,11 +13,19 @@ stages:
   - test
 
 before_script:
+  - apt-get update && apt-get --yes install libsndfile1
   - python --version  # For debugging
   - pip install virtualenv
   - virtualenv venv
   - source venv/bin/activate
   - pip install -e .
+  - pip install torchaudio
+  - curdir=$(pwd) && cd ..
+  - git clone https://github.com/facebookresearch/SimulEval.git/
+  - cd SimulEval
+  - git checkout 844e4bf62cb4031b4d49247b9520a9966416eea3
+  - pip install -e .
+  - cd $curdir
 
 test:
   stage: test
