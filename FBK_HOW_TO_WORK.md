@@ -13,6 +13,8 @@ To start working on this code, first download the repository with `git clone`.
 The master branch containing the up-to-date FBK MT Fairseq internal version is `internal_master`,
 so you can access it entering into the cloned folder and running the command `git checkout internal_master`.
 To install the repository, run `pip install -e .`.
+If you plan to work on speech translation, complete the setup of you environment
+by installing the required dependencies with `pip install -r speech_requirements.txt`.
 We recommend installing the repository in a dedicated python virtual environment,
 which you can create with PyCharm when importing the project or on command line.
 In alternative, you can create a dedicated Anaconda environment.

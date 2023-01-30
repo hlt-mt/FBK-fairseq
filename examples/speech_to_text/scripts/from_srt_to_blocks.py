@@ -13,9 +13,9 @@
 # limitations under the License
 
 try:
-    import pysrt
+    import srt
 except ImportError:
-    print("Please install pysrt 'pip install pysrt'")
+    print("Please install srt 'pip install srt'")
     raise ImportError
 import re
 import sys
@@ -47,11 +47,12 @@ def main():
     and each newline inside that block will be substituted by an <eol>.
     """
     srt_path = sys.argv[1]
-    subs = pysrt.open(srt_path)
+    with open(srt_path) as f:
+        subs = list(srt.parse(f))
 
     with open(srt_path + ".blocks", 'w') as fp:
         for sub in subs:
-            fp.write("%s\n" % add_eol_eob(sub.text))
+            fp.write("%s\n" % add_eol_eob(sub.content))
 
 
 if __name__ == "__main__":

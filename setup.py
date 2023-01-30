@@ -192,8 +192,6 @@ def do_setup(package_data):
             "sacrebleu>=1.4.12",
             "torch",
             "tqdm",
-            "ctc_segmentation",
-            "pysrt"
         ],
         dependency_links=dependency_links,
         packages=find_packages(

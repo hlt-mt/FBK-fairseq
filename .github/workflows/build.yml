@@ -37,7 +37,7 @@ jobs:
         git submodule update --init --recursive
         python setup.py build_ext --inplace
         python -m pip install --editable .
-        pip install torchaudio
+        pip install -r speech_requirements.txt
         curdir=$(pwd) && cd ..
         git clone https://github.com/facebookresearch/SimulEval.git/
         cd SimulEval

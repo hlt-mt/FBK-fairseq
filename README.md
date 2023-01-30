@@ -25,6 +25,14 @@ Dedicated README for each work can be found in the `fbk_works` directory.
 If using this repository, please acknowledge the related paper(s) citing them.
 Bibtex citations are available for each work in the dedicated README file.
 
+To install the repository, do:
+
+```
+pip install -e .
+pip install -r speech_requirements.txt  # required for speech translation
+```
+
+
 Below, there is the original Fairseq README file.
 
 --------------------------------------------------------------------------------

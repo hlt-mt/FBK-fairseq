@@ -19,7 +19,7 @@ before_script:
   - virtualenv venv
   - source venv/bin/activate
   - pip install -e .
-  - pip install torchaudio
+  - pip install -r speech_requirements.txt
   - curdir=$(pwd) && cd ..
   - rm -rf SimulEval
   - git clone https://github.com/facebookresearch/SimulEval.git/
