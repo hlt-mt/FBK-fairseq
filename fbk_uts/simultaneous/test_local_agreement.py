@@ -21,7 +21,7 @@ from examples.speech_to_text.simultaneous_translation.agents.simul_offline_local
 
 from simuleval.states import SpeechStates
 
-from examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk import OnlineFeatureExtractor
+from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import OnlineFeatureExtractor
 
 
 class LocalAgreementSimulSTPolicyTestCase(unittest.TestCase):
@@ -41,13 +41,14 @@ class LocalAgreementSimulSTPolicyTestCase(unittest.TestCase):
         self.initialize_agent(self)
         self.initialize_state(self)
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk.FairseqSimulSTAgent.__init__')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent.FairseqSimulSTAgent.__init__')
     def initialize_agent(self, mock_agent_init):
         mock_agent_init.return_value = None
         self.agent = LocalAgreementSimulSTAgent(self.args)
         self.agent.feature_extractor = OnlineFeatureExtractor(self.args)
         self.agent.eos = "<s>"
         self.agent.eos_idx = 0
+        self.prefix_token_idx = 0
 
     def initialize_state(self):
         self.states = SpeechStates(None, None, 0, self.agent)
@@ -86,3 +87,7 @@ class LocalAgreementSimulSTPolicyTestCase(unittest.TestCase):
         ]
         prefix = LocalAgreementSimulSTAgent.prefix(self.agent, self.states)
         self.assertEqual(prefix, ["I", "am"])
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -182,6 +182,7 @@ class SequenceGenerator(nn.Module):
         constraints: Optional[Tensor] = None,
         bos_token: Optional[int] = None,
         pre_computed_encoder_outs: Optional[Tensor] = None,
+        extract_attn_from_layer: Optional[int] = None,
     ):
         incremental_states = torch.jit.annotate(
             List[Dict[str, Dict[str, Optional[Tensor]]]],
@@ -316,6 +317,7 @@ class SequenceGenerator(nn.Module):
                 encoder_outs,
                 incremental_states,
                 self.temperature,
+                extract_attn_from_layer=extract_attn_from_layer
             )
 
             if self.lm_model is not None:
@@ -812,6 +814,7 @@ class EnsembleModel(nn.Module):
         encoder_outs: List[Dict[str, List[Tensor]]],
         incremental_states: List[Dict[str, Dict[str, Optional[Tensor]]]],
         temperature: float = 1.0,
+        extract_attn_from_layer: int = None,
     ):
         log_probs = []
         avg_attn: Optional[Tensor] = None
@@ -825,9 +828,11 @@ class EnsembleModel(nn.Module):
                     tokens,
                     encoder_out=encoder_out,
                     incremental_state=incremental_states[i],
+                    alignment_layer=extract_attn_from_layer,
                 )
             else:
-                decoder_out = model.decoder.forward(tokens, encoder_out=encoder_out)
+                decoder_out = model.decoder.forward(
+                    tokens, encoder_out=encoder_out, alignment_layer=extract_attn_from_layer)
 
             attn: Optional[Tensor] = None
             decoder_len = len(decoder_out)

@@ -100,6 +100,7 @@ class DualEncoderEnsembleModel(EnsembleModel):
         encoder_outs: List[List[Dict[str, List[Tensor]]]],
         incremental_states: List[Dict[str, Dict[str, Optional[Tensor]]]],
         temperature: float = 1.0,
+        extract_attn_from_layer: int = None,
     ):
         log_probs = []
         avg_attn: Optional[Tensor] = None

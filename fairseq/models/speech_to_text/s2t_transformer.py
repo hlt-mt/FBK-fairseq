@@ -379,7 +379,9 @@ class TransformerDecoderScriptable(TransformerDecoder):
             alignment_layer,
             alignment_heads,
         )
-        return x, None
+        if alignment_layer is None:
+            return x, None
+        return x, _
 
 
 @register_model_architecture(model_name="s2t_transformer", arch_name="s2t_transformer")
