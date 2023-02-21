@@ -14,45 +14,32 @@
 import unittest
 from unittest.mock import patch
 
-from argparse import Namespace
 import torch
+from simuleval import READ_ACTION
 
 from examples.speech_to_text.simultaneous_translation.agents.simul_offline_edatt import EDAttSTAgent
-
-from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import OnlineFeatureExtractor
-from fbk_uts.simultaneous.test_local_agreement import LocalAgreementSimulSTPolicyTestCase
+from fbk_uts.simultaneous.test_base_simulst_agent import BaseSTAgentTestCase
 
 
-class EDAttSimulSTPolicyTestCase(unittest.TestCase):
-
-    @classmethod
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_edatt.EDAttSTAgent.load_model_vocab')
-    def setUpClass(self, mock_load_model_vocab):
-        mock_load_model_vocab.return_value = None
-        self.args = Namespace()
-        self.args.model_path = "dummy"
-        self.args.data_bin = "dummy"
-        self.args.shift_size = 10
-        self.args.window_size = 25
-        self.args.sample_rate = 16000
-        self.args.feature_dim = 80
-        self.args.global_cmvn = None
+class EDAttSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
+    def add_extra_args(self):
         self.args.attn_threshold = 0.2
         self.args.frame_num = 2
         self.args.extract_attn_from_layer = 1
-        self.initialize_agent(self)
-        LocalAgreementSimulSTPolicyTestCase.initialize_state(self)
 
+    def create_agent(self):
+        return EDAttSTAgent(self.args)
+
+    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_edatt.EDAttSTAgent.load_model_vocab')
     @patch('examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent.FairseqSimulSTAgent.__init__')
-    def initialize_agent(self, mock_agent_init):
-        mock_agent_init.return_value = None
-        self.agent = EDAttSTAgent(self.args)
-        self.agent.feature_extractor = OnlineFeatureExtractor(self.args)
-        self.agent.eos = "<s>"
-        self.agent.eos_idx = 0
-        self.agent.prefix_token_idx = 0
+    def setUp(self, mock_load_model_vocab, mock_simulst_agent_init):
+        mock_load_model_vocab.return_value = None
+        mock_simulst_agent_init.return_value = None
+        self.base_init()
 
-    def test_first_two_tokens_below_threshold(self):
+    @patch(
+        'examples.speech_to_text.simultaneous_translation.agents.simul_offline_edatt.EDAttSTAgent._get_hypo_and_prefix')
+    def test_first_two_tokens_below_threshold(self, get_hypo_and_prefix):
         hypo = {
             "tokens": torch.tensor([1, 2, 3, 4]),
             "attention": torch.tensor([
@@ -62,20 +49,25 @@ class EDAttSimulSTPolicyTestCase(unittest.TestCase):
                 [0.5, 0.05, 0.05, 0.05, 0.05, 0.3],
             ]).transpose(0, 1)
         }
-        prefix_len = 0
-        self.assertTrue(EDAttSTAgent.check_attention_threshold(self.agent, hypo, prefix_len, self.states))
+        # prefix len 0
+        get_hypo_and_prefix.return_value = hypo, 0
+        self.assertTrue(EDAttSTAgent._policy(self.agent, self.states))
         self.assertTrue(
             torch.equal(self.states.write, torch.tensor([1, 2], dtype=self.states.write.dtype))
         )
-        prefix_len = 1
-        self.assertTrue(EDAttSTAgent.check_attention_threshold(self.agent, hypo, prefix_len, self.states))
+        # prefix len 1
+        get_hypo_and_prefix.return_value = hypo, 1
+        self.assertTrue(EDAttSTAgent._policy(self.agent, self.states))
         self.assertTrue(
             torch.equal(self.states.write, torch.tensor([2], dtype=self.states.write.dtype))
         )
-        prefix_len = 2
-        self.assertFalse(EDAttSTAgent.check_attention_threshold(self.agent, hypo, prefix_len, self.states))
+        # prefix len 2
+        get_hypo_and_prefix.return_value = hypo, 2
+        self.assertEqual(READ_ACTION, EDAttSTAgent._policy(self.agent, self.states))
 
-    def test_no_tokens_below_threshold(self):
+    @patch(
+        'examples.speech_to_text.simultaneous_translation.agents.simul_offline_edatt.EDAttSTAgent._get_hypo_and_prefix')
+    def test_no_tokens_below_threshold(self, get_hypo_and_prefix):
         hypo = {
             "tokens": torch.tensor([1, 2, 3, 4]),
             "attention": torch.tensor([
@@ -85,10 +77,12 @@ class EDAttSimulSTPolicyTestCase(unittest.TestCase):
                 [0.05, 0.05, 0.05, 0.05, 0.5, 0.3],
             ]).transpose(0, 1)
         }
-        prefix_len = 0
-        self.assertFalse(EDAttSTAgent.check_attention_threshold(self.agent, hypo, prefix_len, self.states))
+        get_hypo_and_prefix.return_value = hypo, 0
+        self.assertEqual(READ_ACTION, EDAttSTAgent._policy(self.agent, self.states))
 
-    def test_all_tokens_below_threshold(self):
+    @patch(
+        'examples.speech_to_text.simultaneous_translation.agents.simul_offline_edatt.EDAttSTAgent._get_hypo_and_prefix')
+    def test_all_tokens_below_threshold(self, get_hypo_and_prefix):
         hypo = {
             "tokens": torch.tensor([1, 2, 3, 4]),
             "attention": torch.tensor([
@@ -100,13 +94,20 @@ class EDAttSimulSTPolicyTestCase(unittest.TestCase):
         }
         full_output_tokens = [1, 2, 3, 4]
         for prefix_len in range(3):
-            self.assertTrue(EDAttSTAgent.check_attention_threshold(self.agent, hypo, prefix_len, self.states))
+            get_hypo_and_prefix.return_value = hypo, prefix_len
+            self.assertTrue(EDAttSTAgent._policy(self.agent, self.states))
             self.assertTrue(
                 torch.equal(
                     self.states.write,
                     torch.tensor(full_output_tokens[prefix_len:], dtype=self.states.write.dtype)))
-        prefix_len = 4
-        self.assertFalse(EDAttSTAgent.check_attention_threshold(self.agent, hypo, prefix_len, self.states))
+        get_hypo_and_prefix.return_value = hypo, 4
+        self.assertEqual(READ_ACTION, EDAttSTAgent._policy(self.agent, self.states))
+
+    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_edatt.'
+           'EDAttSTAgent._emit_remaining_tokens')
+    def test_finish_read(self, mock_emit_remaining_tokens):
+        mock_emit_remaining_tokens.return_values = None
+        super().test_finish_read()
 
 
 if __name__ == '__main__':

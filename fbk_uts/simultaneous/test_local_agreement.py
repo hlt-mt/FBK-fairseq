@@ -14,45 +14,22 @@
 import unittest
 from unittest.mock import patch
 
-from argparse import Namespace
-
 from examples.speech_to_text.simultaneous_translation.agents.simul_offline_local_agreement import \
     LocalAgreementSimulSTAgent
-
-from simuleval.states import SpeechStates
-
-from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import OnlineFeatureExtractor
+from fbk_uts.simultaneous.test_base_simulst_agent import BaseSTAgentTestCase
 
 
-class LocalAgreementSimulSTPolicyTestCase(unittest.TestCase):
+class LocalAgreementSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
+    def create_agent(self):
+        return LocalAgreementSimulSTAgent(self.args)
 
-    @classmethod
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_local_agreement.LocalAgreementSimulSTAgent.load_model_vocab')
-    def setUpClass(self, mock_load_model_vocab):
-        mock_load_model_vocab.return_value = None
-        self.args = Namespace()
-        self.args.model_path = "dummy"
-        self.args.data_bin = "dummy"
-        self.args.shift_size = 10
-        self.args.window_size = 25
-        self.args.sample_rate = 16000
-        self.args.feature_dim = 80
-        self.args.global_cmvn = None
-        self.initialize_agent(self)
-        self.initialize_state(self)
-
+    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_local_agreement.'
+           'LocalAgreementSimulSTAgent.load_model_vocab')
     @patch('examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent.FairseqSimulSTAgent.__init__')
-    def initialize_agent(self, mock_agent_init):
-        mock_agent_init.return_value = None
-        self.agent = LocalAgreementSimulSTAgent(self.args)
-        self.agent.feature_extractor = OnlineFeatureExtractor(self.args)
-        self.agent.eos = "<s>"
-        self.agent.eos_idx = 0
-        self.prefix_token_idx = 0
-
-    def initialize_state(self):
-        self.states = SpeechStates(None, None, 0, self.agent)
-        self.agent.initialize_states(self.states)
+    def setUp(self, mock_load_model_vocab, mock_simulst_agent_init):
+        mock_simulst_agent_init.return_value = None
+        mock_load_model_vocab.return_value = None
+        self.base_init()
 
     def test_incomplete_prefix(self):
         self.states.chunks_hyp = [["I", "am", "a", "quokka."], ["I", "am", "an", "elephant."]]
@@ -87,6 +64,12 @@ class LocalAgreementSimulSTPolicyTestCase(unittest.TestCase):
         ]
         prefix = LocalAgreementSimulSTAgent.prefix(self.agent, self.states)
         self.assertEqual(prefix, ["I", "am"])
+
+    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_local_agreement.'
+           'LocalAgreementSimulSTAgent._emit_remaining_tokens')
+    def test_finish_read(self, mock_emit_remaining_tokens):
+        mock_emit_remaining_tokens.return_values = None
+        super().test_finish_read()
 
 
 if __name__ == '__main__':

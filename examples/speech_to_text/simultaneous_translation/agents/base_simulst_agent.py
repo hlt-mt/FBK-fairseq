@@ -129,10 +129,12 @@ class FairseqSimulSTAgent(SpeechAgent):
     - load both model, task, and generator (*load_model_vocab*) and generate the hypothesis
     through *generate_hypothesis*;
     - transform the audio information to features (*segment_to_units*) and the generated token indexes
-    to full and detokenized words (*units_to_segment*); only SentencePiece is supported.
-    This class has to be extended by adding two methods:
-    - *policy* that implements the logic of the policy, returning READ_ACTION or WRITE_ACTION;
-    - *predict* that passes to the SimulEval tool the list of token indexes to emit based on the policy.
+    to full and detokenized words (*units_to_segment*); only SentencePiece is supported;
+    - integrates the logic of the policy (*policy*) both in the case in which the input is incrementally
+    received (*_policy*) and in the case in which the input has been completely received (*_emit_tokens*)
+    - pass to SimulEval the indexes of the tokens to predict (*predict*)
+    
+    To be used, the content of *_emit_tokens* and *_policy* has to be implemented.
     """
     speech_segment_size = 40  # in ms, 4 pooling ratio * 10 ms step size
 
@@ -284,6 +286,8 @@ class FairseqSimulSTAgent(SpeechAgent):
         states.units.source = TensorListEntry()
         states.units.target = ListEntry()
         states.incremental_states = dict()
+        states.write = []
+        states.new_segment = False
 
     def segment_to_units(self, segment, states):
         # Convert speech samples to features
@@ -299,13 +303,10 @@ class FairseqSimulSTAgent(SpeechAgent):
             return DEFAULT_EOS
 
         segment = []
-        if None in units.value:
-            units.value.remove(None)
-
         for index in units:
             if index is None:
                 units.pop()
-            if self.prefix_token_idx and index == self.prefix_token_idx:
+            if self.prefix_token_idx is not None and index == self.prefix_token_idx:
                 units.pop()
             token = self.tgtdict[index]
             if token.startswith(BOW_PREFIX) or index == self.eos_idx:
@@ -350,12 +351,23 @@ class FairseqSimulSTAgent(SpeechAgent):
         # Happens after a read action
         if not states.finish_read():
             self.update_model_encoder(states)
+            states.new_segment = True
 
     def _get_prefix(self, states):
-        if states.prev_toks:
-            return torch.LongTensor(states.prev_toks).unsqueeze(0)
+        if states.units.target.value:
+            prefix_tokens = torch.tensor([states.units.target.value], dtype=torch.int64)
+            if self.prefix_token_idx is not None:
+                return torch.cat(
+                    (torch.LongTensor([[self.prefix_token_idx]]), prefix_tokens), dim=1)
+            return prefix_tokens
         else:
+            if self.prefix_token_idx is not None:
+                return torch.LongTensor([[self.prefix_token_idx]])
             return None
+
+    @staticmethod
+    def _get_prefix_len(prefix):
+        return len(prefix[0]) if prefix is not None else 0
 
     def _generate_hypothesis(self, sample, prefix_tokens, states):
         # Hypothesis generation
@@ -377,15 +389,52 @@ class FairseqSimulSTAgent(SpeechAgent):
             }
         }
 
-        if self.prefix_token_idx:
-            if prefix_tokens is not None:
-                prefix_tokens = torch.cat(
-                    (torch.LongTensor([[self.prefix_token_idx]]), prefix_tokens), dim=1)
-            else:
-                prefix_tokens = torch.LongTensor([[self.prefix_token_idx]])
-
         prefix_tokens = self.to_device(prefix_tokens) if prefix_tokens is not None else None
 
         hypos = self._generate_hypothesis(sample, prefix_tokens, states)
 
-        return hypos[0][0], prefix_tokens  # We consider only the most likely hypothesis
+        return hypos[0][0]  # We consider only the most likely hypothesis
+
+    def _emit_remaining_tokens(self, states):
+        """
+        It implements the actions to be performed when
+        the input has been completely received.
+        """
+        pass
+
+    def _policy(self, states):
+        """
+        It implements the logic of the policy that determines whether to
+        read more input (in this case, it returns *READ_ACTION*) or emit a
+        full or partial translation (in this case, it returns *WRITE_ACTION*).
+        """
+        pass
+
+    def policy(self, states):
+        if not getattr(states, "encoder_states", None):
+            return READ_ACTION
+
+        # Write the remaining generated hypothesis
+        if len(states.write) > 0:
+            return WRITE_ACTION
+
+        # If the input has been completely received, write the remaining hypothesis
+        if states.finish_read():
+            self._emit_remaining_tokens(states)
+            return WRITE_ACTION
+
+        # If no new input is received, read more
+        if not states.new_segment:
+            return READ_ACTION
+
+        return self._policy(states)
+
+    def predict(self, states):
+        """
+        Consumes and returns the idx(s) in *states.write* one at a time.
+        """
+        if len(states.write) == 0:
+            return self.eos_idx
+        idx_to_write = states.write[0]
+        states.write = states.write[1:]
+        return idx_to_write

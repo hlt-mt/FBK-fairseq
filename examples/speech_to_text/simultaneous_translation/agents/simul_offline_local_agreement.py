@@ -14,8 +14,7 @@
 
 import torch
 
-from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import FairseqSimulSTAgent, \
-    TensorListEntry
+from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import FairseqSimulSTAgent
 
 try:
     from simuleval import READ_ACTION, WRITE_ACTION, DEFAULT_EOS
@@ -51,15 +50,9 @@ class LocalAgreementSimulSTAgent(FairseqSimulSTAgent):
         return parser
 
     def initialize_states(self, states):
-        self.feature_extractor.clear_cache()
-        states.units.source = TensorListEntry()
-        states.units.target = ListEntry()
-        states.incremental_states = dict()
+        super().initialize_states(states)
         states.chunks_hyp = []
         states.displayed = []
-        states.retrieved = []
-        states.new_segment = False
-        states.write = []
 
     def update_states_read(self, states):
         super().update_states_read(states)
@@ -100,15 +93,23 @@ class LocalAgreementSimulSTAgent(FairseqSimulSTAgent):
         else:
             return None
 
-    def _predict(self, states):
+    def _emit_remaining_tokens(self, states):
+        if self.prefix_token_idx and states.chunks_hyp[-1][0] == self.prefix_token_idx:
+            states.chunks_hyp[-1] = states.chunks_hyp[-1][1:]
+        states.write = states.chunks_hyp[-1][len(states.displayed):]
+
+    def _policy(self, states):
         """
-        This method takes *states* as input, generates a translation hypothesis, and applies the *self.prefix()*
-        method to obtain the common prefix among the previously generated hypotheses. It returns False if the prefix
-        is empty, meaning that there is no common prefix among the generated hypotheses, and True otherwise.
+        It generates a translation hypothesis starting from the encoder states
+        contained in *states.encoder_states*, and applies the *self.prefix()*
+        method to obtain the common prefix among the previously generated
+        hypotheses. It returns READ_ACTION if the prefix is empty, meaning that
+        there is no common prefix among the generated hypotheses, and
+        WRITE_ACTION otherwise.
         """
         states.new_segment = False
         prefix_tokens = self._get_prefix(states)
-        hypo, _ = self.generate_hypothesis(states, prefix_tokens)
+        hypo = self.generate_hypothesis(states, prefix_tokens)
         hypo_tokens = hypo['tokens'].int().cpu()
         if self.prefix_token_idx:
             hypo_tokens = hypo_tokens[1:]
@@ -119,29 +120,5 @@ class LocalAgreementSimulSTAgent(FairseqSimulSTAgent):
         if len(common_pref) > 0:
             states.displayed.extend(common_pref)
             states.write = common_pref
-            return True
-        return False
-
-    def policy(self, states):
-        # Set a maximum to avoid possible loops by the system
-        if len(states.units.target.value) > self.args.max_len:
-            states.status['write'] = False
-
-        if len(states.write) > 0:
-            return WRITE_ACTION
-        if states.new_segment and self._predict(states):
-            return WRITE_ACTION
-        if states.finish_read():
-            # finish writing the hypo
-            if self.prefix_token_idx and states.chunks_hyp[-1][0] == self.prefix_token_idx:
-                states.chunks_hyp[-1] = states.chunks_hyp[-1][1:]
-            states.write = states.chunks_hyp[-1][len(states.displayed):]
             return WRITE_ACTION
         return READ_ACTION
-
-    def predict(self, states):
-        if len(states.write) == 0:
-            return self.eos_idx
-        w = states.write[0]
-        states.write = states.write[1:]
-        return w

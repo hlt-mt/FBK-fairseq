@@ -15,8 +15,7 @@
 import torch
 import torch.nn.functional as F
 
-from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import FairseqSimulSTAgent, \
-    TensorListEntry
+from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import FairseqSimulSTAgent
 
 try:
     from simuleval import READ_ACTION, WRITE_ACTION, DEFAULT_EOS
@@ -62,14 +61,6 @@ class EDAttSTAgent(FairseqSimulSTAgent):
         # fmt: on
         return parser
 
-    def initialize_states(self, states):
-        self.feature_extractor.clear_cache()
-        states.units.source = TensorListEntry()
-        states.units.target = ListEntry()
-        states.incremental_states = dict()
-        states.new_segment = False
-        states.write = []
-
     def _generate_hypothesis(self, sample, prefix_tokens, states):
         with torch.no_grad():
             hypos = self.generator.generate(
@@ -78,24 +69,34 @@ class EDAttSTAgent(FairseqSimulSTAgent):
             )
         return hypos
 
-    def _predict(self, states):
+    def _get_hypo_and_prefix(self, states):
         """
         This method takes *states* as input, generates a translation hypothesis, and returns the most likely
         hypothesis *hypo* together with the length of the previously generated tokens *prefix_len*.
         """
         states.new_segment = False
-        previous_output = torch.tensor([states.units.target.value], dtype=torch.int64)
-        hypo, prefix_tokens = self.generate_hypothesis(states, previous_output)
-        prefix_len = len(prefix_tokens[0]) if prefix_tokens is not None else 0
-        return hypo, prefix_len
+        prefix_tokens = self._get_prefix(states)
+        hypo = self.generate_hypothesis(states, prefix_tokens)
+        return hypo, self._get_prefix_len(prefix_tokens)
 
-    def check_attention_threshold(self, hypo, prefix_len, states):
+    def _emit_remaining_tokens(self, states):
+        hypo, prefix_len = self._get_hypo_and_prefix(states)
+        hypo_tokens = hypo['tokens'].int().cpu()
+        states.write = hypo_tokens[prefix_len:]
+
+    def _policy(self, states):
         """
-        This method takes as input the generated hypothesis *hypo*, the length of the previous output tokens
-        *prefix_len*, and the states *states*. It normalizes the attention scores considering all but last
-        attention scores, sums the last *self.frame_num* attention scores and checks if this sum exceeds the
-        attention threshold *self.attn_threshold*
+        First, it generates the translation hypothesis *hypo* (also containing the
+        attention scores) and the length of the previous output tokens *prefix_len*
+        starting from the encoder states contained in *states.encoder_states*.
+        Second, for each token of the hypothesis, it normalizes the attention scores
+        considering all but the last attention scores, sums the last *self.frame_num*
+        (corresponding to lambda, in the paper) attention scores and checks if this
+        sum exceeds the attention threshold *self.attn_threshold* (corresponding to
+        alpha, in the paper). If, for at least one token, this condition is not
+        verified, WRITE_ACTION is returned, otherwise it is returned READ_ACTION.
         """
+        hypo, prefix_len = self._get_hypo_and_prefix(states)
         hypo_tokens = hypo['tokens'].int().cpu()
         hypo_attn = hypo['attention'].float().cpu()
         # select new partial hypothesis (without the already emitted tokens)
@@ -119,29 +120,5 @@ class EDAttSTAgent(FairseqSimulSTAgent):
                 new_hypo = new_hypo[:invalid_token_idxs[0]]
             if len(new_hypo) > 0:
                 states.write = new_hypo
-                return True
-        return False
-
-    def valid_prediction(self, states):
-        """
-        This method takes *states* as input, generates the translation hypothesis
-        (also containing the attention scores) and verify if at least one token can be emitted.
-        """
-        hypo, prefix_len = self._predict(states)
-        return self.check_attention_threshold(hypo, prefix_len, states)
-
-    def policy(self, states):
-        if not getattr(states, "encoder_states", None):
-            return READ_ACTION
-
-        if len(states.write) > 0:
-            return WRITE_ACTION
-        if states.finish_read():
-            # finish writing the hypo
-            hypo, prefix_len = self._predict(states)
-            hypo_tokens = hypo['tokens'].int().cpu()
-            states.write = hypo_tokens[prefix_len:]
-            return WRITE_ACTION
-        if states.new_segment and self.valid_prediction(states):
-            return WRITE_ACTION
+                return WRITE_ACTION
         return READ_ACTION
