@@ -56,7 +56,7 @@ class BaseSTAgentTestCase:
         agent.feature_extractor = OnlineFeatureExtractor(args)
         agent.eos = "<s>"
         agent.eos_idx = 0
-        agent.prefix_token_idx = 0
+        agent.prefix_token_idx = None
         agent.tgtdict = Dictionary()
         agent.tgtdict.add_symbol(BOW_PREFIX + "I")
         agent.tgtdict.add_symbol(BOW_PREFIX + "am")
