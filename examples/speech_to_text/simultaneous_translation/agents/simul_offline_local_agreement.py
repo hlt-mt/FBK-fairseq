@@ -52,51 +52,36 @@ class LocalAgreementSimulSTAgent(FairseqSimulSTAgent):
     def initialize_states(self, states):
         super().initialize_states(states)
         states.chunks_hyp = []
-        states.displayed = []
 
     def update_states_read(self, states):
         super().update_states_read(states)
         if not states.finish_read():
             states.new_segment = True
 
-    def prefix(self, states):
+    def common_prefix(self, states, prefix_tokens):
         """
-        This method takes *states* as input, which stores the hypothesis generated at each time step
-        in *states.chunks_hyp*, and returns the common prefix among the last *self.la_n* hypotheses
-        without including the already displayed prefix *states.displayed*.
+        This method takes *states* as input, which stores the hypothesis generated at
+        each time step in *states.chunks_hyp*, and returns the common prefix among the
+        last *self.la_n* hypotheses without including the already emitted prefix.
         """
-        if states.finish_read() and len(states.chunks_hyp) > 0:
-            displayed = len(states.displayed)
-            return states.chunks_hyp[-1][displayed:]
-
         if len(states.chunks_hyp) < self.la_n:
             return []
 
-        displayed = len(states.displayed)
-
-        prefixes = [s[displayed:] for s in states.chunks_hyp[-self.la_n:]]
+        prefix_len = self._get_prefix_len(prefix_tokens)
+        candidates = [s[prefix_len:] for s in states.chunks_hyp[-self.la_n:]]
         common_pref = []
-        for prefix in zip(*prefixes):
-            prefix_candidate = prefix[0]
-            if all(prefix_el == prefix_candidate for prefix_el in prefix) and prefix_candidate != self.eos_idx:
+        for candidate in zip(*candidates):
+            prefix_candidate = candidate[0]
+            if all(prefix_el == prefix_candidate for prefix_el in candidate) and prefix_candidate != self.eos_idx:
                 common_pref.append(prefix_candidate)
             else:
                 break
 
         return common_pref
 
-    def _get_prefix(self, states):
-        if len(states.displayed) > 1 and states.displayed[0] == self.eos_idx:
-            return torch.LongTensor([states.displayed[1:]])
-        elif len(states.displayed) > 0:
-            return torch.LongTensor([states.displayed])
-        else:
-            return None
-
     def _emit_remaining_tokens(self, states):
-        if self.prefix_token_idx and states.chunks_hyp[-1][0] == self.prefix_token_idx:
-            states.chunks_hyp[-1] = states.chunks_hyp[-1][1:]
-        states.write = states.chunks_hyp[-1][len(states.displayed):]
+        prefix_tokens = self._get_prefix(states)
+        states.write = states.chunks_hyp[-1][self._get_prefix_len(prefix_tokens):]
 
     def _policy(self, states):
         """
@@ -111,14 +96,11 @@ class LocalAgreementSimulSTAgent(FairseqSimulSTAgent):
         prefix_tokens = self._get_prefix(states)
         hypo = self.generate_hypothesis(states, prefix_tokens)
         hypo_tokens = hypo['tokens'].int().cpu()
-        if self.prefix_token_idx:
-            hypo_tokens = hypo_tokens[1:]
 
         states.chunks_hyp.append(hypo_tokens)
-        common_pref = self.prefix(states)
+        common_pref = self.common_prefix(states, prefix_tokens)
 
         if len(common_pref) > 0:
-            states.displayed.extend(common_pref)
             states.write = common_pref
             return WRITE_ACTION
         return READ_ACTION

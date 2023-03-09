@@ -33,28 +33,36 @@ class LocalAgreementSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase
 
     def test_incomplete_prefix(self):
         self.states.chunks_hyp = [["I", "am", "a", "quokka."], ["I", "am", "an", "elephant."]]
-        prefix = LocalAgreementSimulSTAgent.prefix(self.agent, self.states)
+        prefix = LocalAgreementSimulSTAgent.common_prefix(self.agent, self.states, None)
         self.assertEqual(prefix, ["I", "am"])
 
     def test_complete_prefix(self):
         self.states.chunks_hyp = [["I", "am", "a", "quokka."], ["I", "am", "a", "quokka."]]
-        prefix = LocalAgreementSimulSTAgent.prefix(self.agent, self.states)
+        prefix = LocalAgreementSimulSTAgent.common_prefix(self.agent, self.states, None)
         self.assertEqual(prefix, ["I", "am", "a", "quokka."])
 
     def test_empty_prefix(self):
         self.states.chunks_hyp = [["I", "am", "a", "quokka."], ["Hello", "I", "am", "a", "quokka."]]
-        prefix = LocalAgreementSimulSTAgent.prefix(self.agent, self.states)
+        prefix = LocalAgreementSimulSTAgent.common_prefix(self.agent, self.states, None)
         self.assertEqual(prefix, [])
 
     def test_empty_chunks(self):
         self.states.chunks_hyp = []
-        prefix = LocalAgreementSimulSTAgent.prefix(self.agent, self.states)
+        prefix = LocalAgreementSimulSTAgent.common_prefix(self.agent, self.states, None)
         self.assertEqual(prefix, [])
 
     def test_one_chunk(self):
         self.states.chunks_hyp = [["I", "am", "a", "quokka."]]
-        prefix = LocalAgreementSimulSTAgent.prefix(self.agent, self.states)
+        prefix = LocalAgreementSimulSTAgent.common_prefix(self.agent, self.states, None)
         self.assertEqual(prefix, [])
+
+    def test_prefix(self):
+        self.states.chunks_hyp = [
+            ["I", "am", "a", "quokka."],
+            ["I", "am", "an", "elephant."]
+        ]
+        prefix = LocalAgreementSimulSTAgent.common_prefix(self.agent, self.states, [["I"]])
+        self.assertEqual(prefix, ["am"])
 
     def test_three_chunks(self):
         self.states.chunks_hyp = [
@@ -62,8 +70,18 @@ class LocalAgreementSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase
             ["I", "am", "a", "quokka."],
             ["I", "am", "an", "elephant."]
         ]
-        prefix = LocalAgreementSimulSTAgent.prefix(self.agent, self.states)
+        prefix = LocalAgreementSimulSTAgent.common_prefix(self.agent, self.states, None)
         self.assertEqual(prefix, ["I", "am"])
+
+    def test_multilang_prefix(self):
+        # Tags must be present in the sentences and removed only during the
+        # write operation.
+        self.states.chunks_hyp = [
+            ["<langtag>", "I", "am", "a", "quokka."],
+            ["<langtag>", "I", "am", "an", "elephant."]
+        ]
+        prefix = LocalAgreementSimulSTAgent.common_prefix(self.agent, self.states, None)
+        self.assertEqual(prefix, ["<langtag>", "I", "am"])
 
     @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_local_agreement.'
            'LocalAgreementSimulSTAgent._emit_remaining_tokens')
