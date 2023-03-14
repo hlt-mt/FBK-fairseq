@@ -168,6 +168,10 @@ class S2TTransformerModel(FairseqEncoderDecoderModel, EncoderPretrainingSupport)
                             help='Add distance penalty to the encoder')
         parser.add_argument('--init-variance', type=float, default=0.0, required=False,
                             help='Initial variance for Gaussian distance penalty')
+        parser.add_argument('--allow-extra-tokens', default=False, action="store_true",
+                            help="Allow processing extra tokens that are provided by the"
+                                 "target vocabulary. If True, the target embeddings matrix"
+                                 "is extended to match the current target vocabulary size.")
 
     @classmethod
     def build_encoder(cls, args, dictionary):
@@ -198,7 +202,32 @@ class S2TTransformerModel(FairseqEncoderDecoderModel, EncoderPretrainingSupport)
         )
         encoder = cls.build_encoder(args, src_dict if src_dict is not None else tgt_dict)
         decoder = cls.build_decoder(args, task, decoder_embed_tokens)
-        return cls(encoder, decoder)
+        model = cls(encoder, decoder)
+        model.args = args
+        return model
+
+    def update_weights_to_extra_tokens(self, weight, state_dict):
+        loaded_dict_size = state_dict[weight].size(0)
+        if len(self.decoder.dictionary) != loaded_dict_size:
+            num_toks_to_add = len(self.decoder.dictionary) - loaded_dict_size
+            embed_dim = state_dict[weight].size(1)
+            new_toks_embed_to_add = torch.zeros(num_toks_to_add, embed_dim)
+            nn.init.normal_(new_toks_embed_to_add, mean=0, std=embed_dim ** -0.5)
+            new_toks_embed_to_add = new_toks_embed_to_add.to(
+                dtype=state_dict[weight].dtype)
+            state_dict[weight] = torch.cat([
+                state_dict[weight], new_toks_embed_to_add])
+            logger.info(
+                f"{weight} increased from size {loaded_dict_size} to size "
+                f"{loaded_dict_size + num_toks_to_add}")
+
+    def upgrade_state_dict_named(self, state_dict, name):
+        super().upgrade_state_dict_named(state_dict, name)
+        if getattr(self.args, "allow_extra_tokens", False):
+            self.update_weights_to_extra_tokens(
+                "decoder.embed_tokens.weight", state_dict)
+            self.update_weights_to_extra_tokens(
+                "decoder.output_projection.weight", state_dict)
 
     def get_normalized_probs(
             self,
@@ -395,6 +424,7 @@ def base_architecture(args):
 
     args.distance_penalty = getattr(args, 'distance_penalty', False)
     args.init_variance = getattr(args, 'init_variance', 0.0)
+    args.allow_extra_tokens = getattr(args, 'allow_extra_tokens', False)
 
 
 @register_model_architecture("s2t_transformer_fbk", "s2t_transformer_s_fbk")
