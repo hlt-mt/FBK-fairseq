@@ -52,14 +52,14 @@ class S2TTransformerEncoderTestCase(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 subsample_out[0][:5, 1, :],
-                subsample_out2[0][:, 0, :], atol=1e-07, rtol=1e-04))
+                subsample_out2[0][:, 0, :], rtol=1e-04))
         encoder_out = encoder(fake_sample, fake_lengths)
         encoder_out2 = encoder(fake_sample2, fake_lengths[1:])
         # Ensure encoder output
         self.assertTrue(
             torch.allclose(
                 encoder_out['encoder_out'][0][:5, 1, :],
-                encoder_out2['encoder_out'][0][:, 0, :], atol=1e-07, rtol=1e-04))
+                encoder_out2['encoder_out'][0][:, 0, :], rtol=1e-04))
 
 
 if __name__ == '__main__':

@@ -110,7 +110,7 @@ class ConformerEncoderTestCase(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 attn_out[1, :3, :],
-                attn_out2[0], atol=1e-07, rtol=1e-04))
+                attn_out2[0], rtol=1e-04))
         self.assertTrue(
             torch.all(attn_out[1, 3:, :] == 0.0), f"non-zero entries in {attn_out[1, 3:, :]}")
 
@@ -139,7 +139,7 @@ class ConformerEncoderTestCase(unittest.TestCase):
             self.assertTrue(
                 torch.allclose(
                     net_out["encoder_out"][0][:item_out_len, item_idx, :],
-                    net_out2["encoder_out"][0][:, 0, :], atol=1e-06, rtol=1e-04))
+                    net_out2["encoder_out"][0][:, 0, :], rtol=1e-04))
 
         for i in range(5):
             test_item(i)
@@ -162,7 +162,7 @@ class ConformerEncoderTestCase(unittest.TestCase):
         self.assertFalse(
             torch.allclose(
                 net_out["encoder_out"][0][:4, 1, :],
-                net_out2["encoder_out"][0][:, 0, :], atol=1e-07, rtol=1e-04))
+                net_out2["encoder_out"][0][:, 0, :], rtol=1e-04))
 
 
 if __name__ == '__main__':
