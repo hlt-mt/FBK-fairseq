@@ -107,10 +107,7 @@ class ConformerEncoderTestCase(unittest.TestCase):
         attn.eval()
         attn_out = attn(fake_sample, att_mask)
         attn_out2 = attn(fake_sample2, att_mask2)
-        self.assertTrue(
-            torch.allclose(
-                attn_out[1, :3, :],
-                attn_out2[0], rtol=1e-04))
+        torch.testing.assert_allclose(attn_out[1, :3, :], attn_out2[0])
         self.assertTrue(
             torch.all(attn_out[1, 3:, :] == 0.0), f"non-zero entries in {attn_out[1, 3:, :]}")
 
@@ -136,10 +133,9 @@ class ConformerEncoderTestCase(unittest.TestCase):
             fake_sample2 = fake_sample[item_idx, :item_len, :]
             net_out2 = encoder.forward(
                 fake_sample2.unsqueeze(0), fake_lengths[item_idx].unsqueeze(0), return_all_hiddens=True)
-            self.assertTrue(
-                torch.allclose(
+            torch.testing.assert_allclose(
                     net_out["encoder_out"][0][:item_out_len, item_idx, :],
-                    net_out2["encoder_out"][0][:, 0, :], rtol=1e-04))
+                    net_out2["encoder_out"][0][:, 0, :])
 
         for i in range(5):
             test_item(i)
@@ -159,10 +155,11 @@ class ConformerEncoderTestCase(unittest.TestCase):
         net_out = encoder.forward(fake_sample, fake_lengths, return_all_hiddens=True)
         fake_sample2 = fake_sample[1, :13, :]
         net_out2 = encoder.forward(fake_sample2.unsqueeze(0), fake_lengths[1].unsqueeze(0), return_all_hiddens=True)
-        self.assertFalse(
-            torch.allclose(
+        with self.assertRaises(AssertionError) as ae:
+            torch.testing.assert_allclose(
                 net_out["encoder_out"][0][:4, 1, :],
-                net_out2["encoder_out"][0][:, 0, :], rtol=1e-04))
+                net_out2["encoder_out"][0][:, 0, :])
+        self.assertTrue("Tensor-likes are not close!" in str(ae.exception))
 
 
 if __name__ == '__main__':

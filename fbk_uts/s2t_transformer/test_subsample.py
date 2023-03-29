@@ -49,17 +49,15 @@ class S2TTransformerEncoderTestCase(unittest.TestCase):
         # Sum of padded elements must be equal to 0
         self.assertTrue((subsample_out[0][5:, 1, :].sum() == 0).item())
         # Non padded elements of the processed batch must be equal to the unpadded sample
-        self.assertTrue(
-            torch.allclose(
+        torch.testing.assert_allclose(
                 subsample_out[0][:5, 1, :],
-                subsample_out2[0][:, 0, :], rtol=1e-04))
+                subsample_out2[0][:, 0, :])
         encoder_out = encoder(fake_sample, fake_lengths)
         encoder_out2 = encoder(fake_sample2, fake_lengths[1:])
         # Ensure encoder output
-        self.assertTrue(
-            torch.allclose(
+        torch.testing.assert_allclose(
                 encoder_out['encoder_out'][0][:5, 1, :],
-                encoder_out2['encoder_out'][0][:, 0, :], rtol=1e-04))
+                encoder_out2['encoder_out'][0][:, 0, :])
 
 
 if __name__ == '__main__':
