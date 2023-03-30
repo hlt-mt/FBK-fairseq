@@ -14,6 +14,8 @@
 from fairseq import checkpoint_utils
 import logging
 
+from torch.nn.modules.batchnorm import _BatchNorm
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +26,7 @@ class EncoderPretrainingSupport:
     if the encoder has a different structure than the current architecture
     - if --allow-partial-encoder-loading is enabled, only a part of encoder can be loaded (e.g. 2 out of 4 layers)
     without issuing any error
+    - if --freeze-encoder is enabled, the encoder weights are not updated during training
     """
 
     @staticmethod
@@ -41,6 +44,13 @@ class EncoderPretrainingSupport:
             help="if set, the model is restored even if it doesn't match exactly the architecture, "
                  "ie. some params are missing."
         )
+        parser.add_argument(
+            '--freeze-encoder',
+            action='store_true',
+            default=False,
+            help="If set, the encoder is not trained together with the model and the weights"
+                 "remains freezed."
+        )
 
     @staticmethod
     def load_pretrained(args, encoder):
@@ -53,4 +63,11 @@ class EncoderPretrainingSupport:
                 f"loaded pretrained encoder from: "
                 f"{args.load_pretrained_encoder_from}"
             )
+        if getattr(args, "freeze_encoder", False):
+            for _, param in encoder.named_parameters():
+                param.requires_grad = False
+            # set BatchNorm layers in eval mode to avoid changes
+            for module in encoder.modules():
+                if isinstance(module, _BatchNorm):
+                    module.eval()
         return encoder
