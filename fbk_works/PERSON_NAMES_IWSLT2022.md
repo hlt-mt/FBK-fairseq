@@ -1,6 +1,9 @@
-# Training
+# Person Names Translation
 
-The models trained on multi-ligual source audio described in the paper have been created with the following scripts:
+## Training
+
+Follow the [preprocessing steps of Speechformer](SPEECHFORMER.md#preprocessing) to preprocess the MuST-C data.
+The models trained on multilingual source audio described in the paper have been created with the following scripts:
 
  - **Base**
 
@@ -69,7 +72,7 @@ fairseq-train $data_root \
 	--skip-invalid-size-inputs-valid-test > ${st_save_dir}train.log 2> ${st_save_dir}train.err
 ```
 
-# Inference
+## Inference
 
 The output of the triangle models can be obtained using this script:
 
@@ -97,7 +100,7 @@ python fairseq_cli/generate.py $data_bin \
     --task speech_to_text  > $out_path
 ```
 
-# Models
+## Models
 
 We here release the pre-trained models that we used in our experiments.
 The models correspond to those reported in Table 7 of the paper.
@@ -112,7 +115,7 @@ the Fairseq configuration files, and the checkpoints.
 |   [all-it](https://drive.google.com/file/d/1ZSTpDvunl8m0L8ebMjdq4lmZwjaIVhKy/view?usp=sharing)           |    [all-it](https://drive.google.com/file/d/1wvt2cNMyAbtzJPnFqeljdodaaBFGxNaZ/view?usp=sharing)    |    [all-it](https://drive.google.com/file/d/1zO9nd39yqi-76nYLNe0RWxNXLktKbcC8/view?usp=sharing)  |      [all-it](https://drive.google.com/file/d/14HZa2RdPC5Pck2P9Uymrn7DBS4HbOZwI/view?usp=sharing)    |      [all-it](https://drive.google.com/file/d/1DsFHAMrWLly3oTGfvtPArKXd54BwAJYr/view?usp=sharing)       |
 
 
-# Citation
+## Citation
 
 ```bibtex
 @inproceedings{gaido-etal-2022-who,

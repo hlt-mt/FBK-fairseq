@@ -1,7 +1,26 @@
-# Training
+# Efficient Speech Translation (IWSLT 2022)
+
+## Data preparation
+
+Follow the [preprocessing steps of Speechformer](SPEECHFORMER.md#preprocessing) to preprocess the MuST-C data.
+Once you obtain the TSV definition of the training data, you can filter it with:
+
+```bash
+python examples/speech_to_text/scripts/filter_on_char_ratio.py \
+        --train-subset $TSV_TRAINING_SET \
+        --tsv-out $NEW_TSV_TRAINING \
+        --threshold-min 0.8 --threshold-max 1.6
+```
+
+Please note that these thresholds are those used in the paper where the source text is
+normalized and without punctuation, while the target text is true-cased and contains punctuation. If this
+is not the case in your data, these thresholds may be different.
+We recommend to check your data with a histogram as in the paper to determine the thresholds.
+
+## Training
 
 Our Conformer model without pre-training was obtained running the following command
-on 4 A40 GPUs (48GB RAM). With different hardware you may need to ajust the `--max-tokens` parameter
+on 4 A40 GPUs (48GB RAM). With different hardware you may need to adjust the `--max-tokens` parameter
 (in case your GPUs have less RAM) and the `--update-frequency` 
 (to keep the product of `--max-tokens`, `--update-frequency`, and number of GPUs constant).
 
@@ -50,9 +69,9 @@ python train.py ${DATA_ROOT} \
 ```
 
 
-# Models
+## Models
 
-## IWSLT Submission
+### IWSLT Submission
 
 We here release the trained models used in our participation to the competition.
 They all share the same [configuration](https://drive.google.com/file/d/1xkmIxVs7qXgqqTAWXq0Cy1PCiGKL6gpx/view?usp=sharing),
@@ -72,7 +91,7 @@ Please refer to the paper for a detailed description of each model.
 | 2. | [conformer_pretrain_indomainfn](https://drive.google.com/file/d/1Q8tlaBh5xiFEwGU7YGpuyB3K7c-OWq-p/view?usp=sharing) | 31.7 | 30.4 |
 | 6. | [conformer_pretrain_indomainfn_resegmfn](https://drive.google.com/file/d/11A4nJxUuCe7VDH-trJN4uDp4XgIk50Gd/view?usp=sharing) | - | 29.7 |
 
-## MuST-C only Models
+### MuST-C only Models
 
 We release here the best models mentioned in our paper trained only on MuST-C.
 They share the same [config](https://drive.google.com/file/d/1ODBDkqdVjUKZmRivkT5_Iecc2KfYGzQj/view?usp=sharing)
@@ -89,7 +108,7 @@ Namely, we release:
  - [speechformer hybrid](https://drive.google.com/file/d/1RJPMmwg23tOL-H7ObPUACna603Vf0-yT/view?usp=sharing) (25.7 BLEU): the best model with encoder pre-training;
  - [conformer + CTC compr + char-ratio filter](https://drive.google.com/file/d/1pQAKYTCwi0dcBqWcD48TWKnSAj4k0dTK/view?usp=sharing) (26.7 BLEU): the best model obtained filtering the MuST-C training set; 
 
-# Citation
+## Citation
 
 ```bibtex
 @inproceedings{gaido-et-al-2022-efficient,
