@@ -154,6 +154,8 @@ class MultiTaskConformerTestCase(AuxiliaryClassificationDatasetSetup, unittest.T
         model = MultitaskConformer.build_model(args, task)
         model.freeze_base_model()
         self.assertFalse(model.encoder.conformer_layers[0].conv_module.batchnorm.training)
+        model.train()
+        self.assertFalse(model.encoder.conformer_layers[0].conv_module.batchnorm.training)
         model.freeze_base_model(update_weights=True)
         self.assertTrue(model.encoder.conformer_layers[0].conv_module.batchnorm.training)
 

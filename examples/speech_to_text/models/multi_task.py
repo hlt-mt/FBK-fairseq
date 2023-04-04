@@ -56,6 +56,12 @@ class MultiTaskModel(FairseqEncoderDecoderModel):
 
 
 class MultiTaskClassifierModel(MultiTaskModel):
+
+    def __init__(self, encoder, decoder, auxiliary_decoder):
+        super().__init__(encoder, decoder, auxiliary_decoder)
+        self.__freeze_base = False
+        self.__freeze_classifier = False
+
     @staticmethod
     def add_args(parser):
         parser.add_argument("--reverted-classifier", action='store_true', default=False,
@@ -80,12 +86,13 @@ class MultiTaskClassifierModel(MultiTaskModel):
         for _, param in self.decoder.named_parameters():
             param.requires_grad = update_weights
         # set BatchNorm layers in eval mode to avoid changes
-        for module in self.encoder.modules():
+        for module in [*self.encoder.modules(), *self.decoder.modules()]:
             if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
                 if update_weights:
                     module.train()
                 else:
                     module.eval()
+        self.__freeze_base = not update_weights
 
     def freeze_classifier(self, update_weights=False):
         """
@@ -94,6 +101,23 @@ class MultiTaskClassifierModel(MultiTaskModel):
         """
         for _, param in self.auxiliary_decoder.named_parameters():
             param.requires_grad = update_weights
+        self.__freeze_classifier = not update_weights
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        # set BatchNorm layers in eval mode to avoid changes when they have
+        # to be freezed. This is required as train() is called on the model
+        # before each epoch starts and after begin_epoch() is called on the
+        # task.
+        if self.__freeze_base and mode:
+            for module in [*self.encoder.modules(), *self.decoder.modules()]:
+                if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+                    module.eval()
+        if self.__freeze_classifier and mode:
+            for module in self.auxiliary_decoder.modules():
+                if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+                    module.eval()
+        return self
 
     @classmethod
     def build_with_classifier(cls, base_model, args, task):
