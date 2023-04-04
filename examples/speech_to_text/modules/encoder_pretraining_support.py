@@ -14,12 +14,13 @@
 from fairseq import checkpoint_utils
 import logging
 
+from torch.nn import Module
 from torch.nn.modules.batchnorm import _BatchNorm
 
 logger = logging.getLogger(__name__)
 
 
-class EncoderPretrainingSupport:
+class EncoderPretrainingSupport(Module):
     """
     This class implements the loading of a pre-trained encoder or a part of it:
     - if --load-pretrained-encoder-from is specified, the whole encoder will be loaded from the path and an error arises
@@ -70,4 +71,17 @@ class EncoderPretrainingSupport:
             for module in encoder.modules():
                 if isinstance(module, _BatchNorm):
                     module.eval()
+            setattr(encoder, '__freeze_batchnorm', True)
         return encoder
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        # set BatchNorm layers in eval mode to avoid changes when they have
+        # to be freezed. This is required as train() is called on the model
+        # before each epoch starts and after begin_epoch() is called on the
+        # task.
+        if getattr(self.encoder, "__freeze_batchnorm", False) and mode:
+            for module in self.encoder.modules():
+                if isinstance(module, _BatchNorm):
+                    module.eval()
+        return self

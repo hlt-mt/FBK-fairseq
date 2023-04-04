@@ -76,7 +76,7 @@ class InitialConv1dBlock(Conv1dSubsampler):
 
 
 @register_model("speechformer")
-class SpeechformerModel(FairseqEncoderDecoderModel):
+class SpeechformerModel(FairseqEncoderDecoderModel, EncoderPretrainingSupport):
 
     def __init__(self, encoder, decoder):
         super().__init__(encoder, decoder)

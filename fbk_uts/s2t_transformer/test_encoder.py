@@ -67,6 +67,7 @@ class S2TTransformerEncoderTestCase(unittest.TestCase, BaseSpeechTestCase):
 
     def train_step(self, args, model):
         # Train step over the model to update weights
+        model.train()
         criterion = CTCMultiLoss(args, self.task)
         loss, _, _ = criterion.forward(model, self.samples)
         optimizer = optim.sgd.SGD(args, model.parameters())
