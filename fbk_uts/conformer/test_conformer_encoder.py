@@ -85,9 +85,9 @@ class ConformerEncoderTestCase(unittest.TestCase):
         encoder = ConformerEncoder(batchnorm_args, self.fake_dict)
         encoder.eval()
         net_out = encoder.forward(fake_sample, fake_lengths, return_all_hiddens=True)
-        self.assertTrue(
-            torch.all(net_out["encoder_out"][0][1, 13:, :] == 0.0),
-            f"non-zero entries in {net_out['encoder_out'][0][1, 13:, :]}")
+        padding_area = net_out["encoder_out"][0][4:, 1, :]  # output is N x B x C and downsampled by 4
+        self.assertGreater(padding_area.numel(), 0)
+        self.assertTrue(torch.all(padding_area == 0.0), f"non-zero entries in {padding_area}")
 
     def test_multihead_selfattn(self):
         batchnorm_args = copy.deepcopy(self.base_args)
