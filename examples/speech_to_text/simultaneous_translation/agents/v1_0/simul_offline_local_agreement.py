@@ -14,7 +14,8 @@
 
 import torch
 
-from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import FairseqSimulSTAgent
+from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import BaseSimulSTAgent
+from examples.speech_to_text.simultaneous_translation.agents.v1_0.base_simulst_agent import FairseqSimulSTAgent
 
 try:
     from simuleval import READ_ACTION, WRITE_ACTION, DEFAULT_EOS
@@ -40,12 +41,11 @@ class LocalAgreementSimulSTAgent(FairseqSimulSTAgent):
         super().__init__(args)
         # Local Agreement using last 2 generated sentences as memory
         self.la_n = 2
-        torch.set_grad_enabled(False)
 
     @staticmethod
     def add_args(parser):
         # fmt: off
-        FairseqSimulSTAgent.add_args(parser)
+        BaseSimulSTAgent.add_args(parser)
         # fmt: on
         return parser
 
@@ -95,7 +95,7 @@ class LocalAgreementSimulSTAgent(FairseqSimulSTAgent):
         states.new_segment = False
         prefix_tokens = self._get_prefix(states)
         hypo = self.generate_hypothesis(states, prefix_tokens)
-        hypo_tokens = hypo['tokens'].int().cpu()
+        hypo_tokens = hypo['tokens'].int()
 
         states.chunks_hyp.append(hypo_tokens)
         common_pref = self.common_prefix(states, prefix_tokens)

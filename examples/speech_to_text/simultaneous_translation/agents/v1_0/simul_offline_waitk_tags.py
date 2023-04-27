@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 import torch
-from examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk import WaitkAgent
+from examples.speech_to_text.simultaneous_translation.agents.v1_0.simul_offline_waitk import WaitkAgent
 
 try:
     from simuleval import READ_ACTION, WRITE_ACTION, DEFAULT_EOS
@@ -69,9 +69,9 @@ class WaitkAgentWithTags(WaitkAgent):
         prefix_tokens = self._get_prefix(states)
         prefix_len = self._get_prefix_len(prefix_tokens)
         hypo = self.generate_hypothesis(states, prefix_tokens)
-        hypo_tokens = hypo['tokens'].int().cpu()
+        hypo_tokens = hypo['tokens'].int()
         new_hypo_tokens = hypo_tokens[prefix_len:]
-        hypo_tags = hypo['tags'].int().cpu()
+        hypo_tags = hypo['tags'].int()
         new_hypo_tags = hypo_tags[prefix_len:]
         return new_hypo_tokens, new_hypo_tags
 

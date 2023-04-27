@@ -15,10 +15,10 @@ import unittest
 from unittest.mock import patch
 import copy
 
-from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import BOW_PREFIX
-from examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk import WaitkAgent
+from examples.speech_to_text.simultaneous_translation.agents.speech_utils import BOW_PREFIX
+from examples.speech_to_text.simultaneous_translation.agents.v1_0.simul_offline_waitk import WaitkAgent
 
-from fbk_uts.simultaneous.test_base_simulst_agent import BaseSTAgentTestCase
+from fbk_simul_uts.v1_0.test_base_simulst_agent import BaseSTAgentTestCase
 
 
 class WaitkSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
@@ -28,8 +28,10 @@ class WaitkSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
     def create_agent(self):
         return WaitkAgent(self.args)
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk.WaitkAgent.load_model_vocab')
-    @patch('examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent.FairseqSimulSTAgent.__init__')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_waitk.WaitkAgent.load_model_vocab')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'base_simulst_agent.FairseqSimulSTAgent.__init__')
     def setUp(self, mock_load_model_vocab, mock_simulst_agent_init):
         mock_simulst_agent_init.return_value = None
         mock_load_model_vocab.return_value = None
@@ -38,7 +40,8 @@ class WaitkSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
         self.encoded_hypo = self.agent.tgtdict.encode_line(self.hypo, add_if_not_exist=False)
         self.states.n_audio_words = 4
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk.WaitkAgent.new_hypo')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_waitk.WaitkAgent.new_hypo')
     def test_wait_0(self, mock_new_hypo):
         # Full hypothesis emitted
         mock_new_hypo.return_value = self.encoded_hypo
@@ -46,7 +49,8 @@ class WaitkSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
         WaitkAgent.waitk_prediction(self.agent, self.states)
         self.assertEqual(self.states.write, [4, 5, 6, 7, 8, 2])
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk.WaitkAgent.new_hypo')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_waitk.WaitkAgent.new_hypo')
     def test_wait_2(self, mock_new_hypo):
         # Partial hypothesis emitted
         mock_new_hypo.return_value = self.encoded_hypo
@@ -56,7 +60,8 @@ class WaitkSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
         WaitkAgent.waitk_prediction(new_agent, self.states)
         self.assertEqual(self.states.write, [4, 5])
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk.WaitkAgent.new_hypo')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_waitk.WaitkAgent.new_hypo')
     def test_wait_2_predicted_1(self, mock_new_hypo):
         # Partial hypothesis emitted considering already predicted words
         mock_new_hypo.return_value = self.encoded_hypo
@@ -66,7 +71,8 @@ class WaitkSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
         WaitkAgent.waitk_prediction(new_agent, self.states)
         self.assertEqual(self.states.write, [4])
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk.WaitkAgent.new_hypo')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_waitk.WaitkAgent.new_hypo')
     def test_wait_4(self, mock_new_hypo):
         # No hypothesis emitted
         mock_new_hypo.return_value = self.encoded_hypo
@@ -76,8 +82,8 @@ class WaitkSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
         WaitkAgent.waitk_prediction(new_agent, self.states)
         self.assertEqual(self.states.write, [])
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_waitk.'
-           'WaitkAgent._emit_remaining_tokens')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_waitk.WaitkAgent._emit_remaining_tokens')
     def test_finish_read(self, mock_emit_remaining_tokens):
         mock_emit_remaining_tokens.return_values = None
         super().test_finish_read()

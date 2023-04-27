@@ -14,18 +14,19 @@
 import unittest
 from unittest.mock import patch
 
-from examples.speech_to_text.simultaneous_translation.agents.simul_offline_local_agreement import \
+from examples.speech_to_text.simultaneous_translation.agents.v1_0.simul_offline_local_agreement import \
     LocalAgreementSimulSTAgent
-from fbk_uts.simultaneous.test_base_simulst_agent import BaseSTAgentTestCase
+from fbk_simul_uts.v1_0.test_base_simulst_agent import BaseSTAgentTestCase
 
 
 class LocalAgreementSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
     def create_agent(self):
         return LocalAgreementSimulSTAgent(self.args)
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_local_agreement.'
-           'LocalAgreementSimulSTAgent.load_model_vocab')
-    @patch('examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent.FairseqSimulSTAgent.__init__')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_local_agreement.LocalAgreementSimulSTAgent.load_model_vocab')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'base_simulst_agent.FairseqSimulSTAgent.__init__')
     def setUp(self, mock_load_model_vocab, mock_simulst_agent_init):
         mock_simulst_agent_init.return_value = None
         mock_load_model_vocab.return_value = None
@@ -83,8 +84,8 @@ class LocalAgreementSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase
         prefix = LocalAgreementSimulSTAgent.common_prefix(self.agent, self.states, None)
         self.assertEqual(prefix, ["<langtag>", "I", "am"])
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_local_agreement.'
-           'LocalAgreementSimulSTAgent._emit_remaining_tokens')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_local_agreement.LocalAgreementSimulSTAgent._emit_remaining_tokens')
     def test_finish_read(self, mock_emit_remaining_tokens):
         mock_emit_remaining_tokens.return_values = None
         super().test_finish_read()

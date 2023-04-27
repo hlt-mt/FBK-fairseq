@@ -22,18 +22,18 @@ from tests.test_sequence_generator import get_dummy_task_and_parser, get_dummy_d
 
 class SequenceGeneratorWithAttentionTestCase(unittest.TestCase):
     @classmethod
-    def setUpClass(self):
-        self.task, self.parser = get_dummy_task_and_parser()
-        self.dictionary = get_dummy_dictionary()
-        self.tgt_dict = self.dictionary
+    def setUpClass(cls):
+        cls.task, cls.parser = get_dummy_task_and_parser()
+        cls.dictionary = get_dummy_dictionary()
+        cls.tgt_dict = cls.dictionary
         # B x T x C
         src_tokens = torch.rand(2, 24, 5)
         src_lengths = torch.LongTensor([2, 24])
-        self.sample = {
+        cls.sample = {
             "net_input": {"src_tokens": src_tokens, "src_lengths": src_lengths}
         }
-        S2TTransformerModel.add_args(self.parser)
-        args = self.parser.parse_args([])
+        S2TTransformerModel.add_args(cls.parser)
+        args = cls.parser.parse_args([])
         args.encoder_layers = 2
         args.decoder_layers = 4
         args.input_feat_per_channel = 5
@@ -42,8 +42,8 @@ class SequenceGeneratorWithAttentionTestCase(unittest.TestCase):
         args.max_target_positions = 20
         args.criterion = "label_smoothed_cross_entropy"
         args.ctc_compress_strategy = "none"
-        self.model = S2TTransformerModel.build_model(args, self.task)
-        self.generator = SequenceGenerator([self.model], self.tgt_dict, beam_size=1)
+        cls.model = S2TTransformerModel.build_model(args, cls.task)
+        cls.generator = SequenceGenerator([cls.model], cls.tgt_dict, beam_size=1)
 
     def test_sequence_generator_with_attention(self):
         hypos = self.generator.generate(

@@ -11,6 +11,8 @@ cache:
 
 stages:
   - test
+  - test_simul_v1.0.2
+  - test_simul_v1.1.0
 
 before_script:
   - apt-get update && apt-get --yes install libsndfile1
@@ -24,7 +26,6 @@ before_script:
   - rm -rf SimulEval
   - git clone https://github.com/facebookresearch/SimulEval.git/
   - cd SimulEval
-  - git checkout 844e4bf62cb4031b4d49247b9520a9966416eea3
   - pip install -e .
   - cd $curdir
 
@@ -32,5 +33,26 @@ test:
   stage: test
   script:
     - python -m unittest discover -s fbk_uts -p "*.py"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+test_simul_v1.0.2:
+  stage: test_simul_v1.0.2
+  script:
+    - cd ../SimulEval
+    - git checkout v1.0.2
+    - cd $curdir
+    - python -m unittest discover -s fbk_simul_uts/v1_0 -p "*.py"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+test_simul_v1.1.0:
+  stage: test_simul_v1.1.0
+  script:
+    - cd ../SimulEval
+    # No version/tag is available for SimulEval 1.1.0
+    - git checkout main
+    - cd $curdir
+    - python -m unittest discover -s fbk_simul_uts/v1_1 -p "*.py"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'

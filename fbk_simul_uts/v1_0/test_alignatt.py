@@ -18,8 +18,8 @@ import copy
 import torch
 from simuleval import WRITE_ACTION, READ_ACTION
 
-from examples.speech_to_text.simultaneous_translation.agents.simul_offline_alignatt import AlignAttSTAgent
-from fbk_uts.simultaneous.test_base_simulst_agent import BaseSTAgentTestCase
+from examples.speech_to_text.simultaneous_translation.agents.v1_0.simul_offline_alignatt import AlignAttSTAgent
+from fbk_simul_uts.v1_0.test_base_simulst_agent import BaseSTAgentTestCase
 
 
 class AlignAttSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
@@ -31,17 +31,17 @@ class AlignAttSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
     def create_agent(self):
         return AlignAttSTAgent(self.args)
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_alignatt.'
-           'AlignAttSTAgent.load_model_vocab')
-    @patch('examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent.'
-           'FairseqSimulSTAgent.__init__')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_alignatt.AlignAttSTAgent.load_model_vocab')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'base_simulst_agent.FairseqSimulSTAgent.__init__')
     def setUp(self, mock_load_model_vocab, mock_simulst_agent_init):
         mock_load_model_vocab.return_value = None
         mock_simulst_agent_init.return_value = None
         self.base_init()
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_alignatt.'
-           'AlignAttSTAgent._get_hypo_and_prefix')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_alignatt.AlignAttSTAgent._get_hypo_and_prefix')
     def test_first_two_tokens_not_aligned_to_banned_frames(self, get_hypo_and_prefix):
         hypo = {
             "tokens": torch.tensor([1, 2, 3, 4, 0]),
@@ -67,8 +67,8 @@ class AlignAttSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
         get_hypo_and_prefix.return_value = hypo, 2
         self.assertEqual(READ_ACTION, AlignAttSTAgent._policy(self.agent, self.states))
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_alignatt.'
-           'AlignAttSTAgent._get_hypo_and_prefix')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_alignatt.AlignAttSTAgent._get_hypo_and_prefix')
     def test_no_token_emitted(self, get_hypo_and_prefix):
         hypo = {
             "tokens": torch.tensor([1, 2, 3, 4, 0]),
@@ -83,8 +83,8 @@ class AlignAttSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
         get_hypo_and_prefix.return_value = hypo, 0
         self.assertEqual(READ_ACTION, AlignAttSTAgent._policy(self.agent, self.states))
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_alignatt.'
-           'AlignAttSTAgent._get_hypo_and_prefix')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_alignatt.AlignAttSTAgent._get_hypo_and_prefix')
     def test_all_tokens_emitted(self, get_hypo_and_prefix):
         hypo = {
             "tokens": torch.tensor([1, 2, 3, 4, 0]),
@@ -106,8 +106,8 @@ class AlignAttSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
         get_hypo_and_prefix.return_value = hypo, 4
         self.assertEqual(READ_ACTION, AlignAttSTAgent._policy(self.agent, self.states))
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_alignatt.'
-           'AlignAttSTAgent._get_hypo_and_prefix')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_alignatt.AlignAttSTAgent._get_hypo_and_prefix')
     def test_multilingual_emission(self, get_hypo_and_prefix):
         hypo = {
             "tokens": torch.tensor([5, 1, 2, 3, 4, 0]),
@@ -132,8 +132,8 @@ class AlignAttSimulSTPolicyTestCase(BaseSTAgentTestCase, unittest.TestCase):
         get_hypo_and_prefix.return_value = hypo, 5
         self.assertEqual(READ_ACTION, AlignAttSTAgent._policy(self.agent, self.states))
 
-    @patch('examples.speech_to_text.simultaneous_translation.agents.simul_offline_alignatt.'
-           'AlignAttSTAgent._emit_remaining_tokens')
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_0.'
+           'simul_offline_alignatt.AlignAttSTAgent._emit_remaining_tokens')
     def test_finish_read(self, mock_emit_remaining_tokens):
         mock_emit_remaining_tokens.return_values = None
         super().test_finish_read()

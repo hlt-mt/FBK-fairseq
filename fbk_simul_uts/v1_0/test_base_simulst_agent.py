@@ -16,8 +16,8 @@ from argparse import Namespace
 from simuleval import WRITE_ACTION, READ_ACTION
 from simuleval.states import SpeechStates
 
-from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import OnlineFeatureExtractor, \
-    FairseqSimulSTAgent, BOW_PREFIX
+from examples.speech_to_text.simultaneous_translation.agents.speech_utils import OnlineFeatureExtractor, BOW_PREFIX
+from examples.speech_to_text.simultaneous_translation.agents.v1_0.base_simulst_agent import FairseqSimulSTAgent
 from fairseq.data import Dictionary
 
 

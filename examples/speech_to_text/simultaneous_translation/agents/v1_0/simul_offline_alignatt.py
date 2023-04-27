@@ -14,7 +14,7 @@
 
 import torch
 
-from examples.speech_to_text.simultaneous_translation.agents.simul_offline_edatt import EDAttSTAgent
+from examples.speech_to_text.simultaneous_translation.agents.v1_0.simul_offline_edatt import EDAttSTAgent
 
 try:
     from simuleval import READ_ACTION, WRITE_ACTION, DEFAULT_EOS
@@ -43,8 +43,8 @@ class AlignAttSTAgent(EDAttSTAgent):
         # Select new partial hypothesis (without the already emitted tokens)
         # with the relative attention scores and remove end of sentence and
         # the last attention score
-        new_hypo = hypo['tokens'][prefix_len:-1].int().cpu()
-        hypo_attn = hypo['attention'][:-1, prefix_len:-1].transpose(0, 1).float().cpu()
+        new_hypo = hypo['tokens'][prefix_len:-1].int()
+        hypo_attn = hypo['attention'][:-1, prefix_len:-1].transpose(0, 1).float()
         if hypo_attn.shape[0] > 0 and hypo_attn.shape[1] > 0:
             # Compute the frame to which each token mostly attends to
             most_attended_idxs = torch.argmax(hypo_attn, dim=1)

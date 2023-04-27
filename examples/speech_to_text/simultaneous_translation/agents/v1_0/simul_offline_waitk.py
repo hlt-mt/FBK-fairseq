@@ -17,7 +17,8 @@ import itertools
 import torch
 import torch.nn.functional as F
 
-from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import FairseqSimulSTAgent, BOW_PREFIX
+from examples.speech_to_text.simultaneous_translation.agents.base_simulst_agent import BaseSimulSTAgent
+from examples.speech_to_text.simultaneous_translation.agents.v1_0.base_simulst_agent import FairseqSimulSTAgent, BOW_PREFIX
 
 try:
     from simuleval import READ_ACTION, WRITE_ACTION, DEFAULT_EOS
@@ -32,12 +33,11 @@ class WaitkAgent(FairseqSimulSTAgent):
     def __init__(self, args):
         super().__init__(args)
         self.waitk = args.waitk
-        torch.set_grad_enabled(False)
 
     @staticmethod
     def add_args(parser):
         # fmt: off
-        FairseqSimulSTAgent.add_args(parser)
+        BaseSimulSTAgent.add_args(parser)
         parser.add_argument("--waitk", type=int, default=None,
                             help="Wait k lagging value for test.")
         parser.add_argument("--adaptive-segmentation", default=False, action="store_true",
@@ -90,7 +90,7 @@ class WaitkAgent(FairseqSimulSTAgent):
         states.new_segment = False
         prefix_tokens = self._get_prefix(states)
         hypo = self.generate_hypothesis(states, prefix_tokens)
-        hypo = hypo['tokens'].int().cpu()
+        hypo = hypo['tokens'].int()
         new_hypo = hypo[self._get_prefix_len(prefix_tokens):]
         return new_hypo
 
