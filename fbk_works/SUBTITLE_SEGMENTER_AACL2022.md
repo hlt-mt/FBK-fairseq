@@ -3,9 +3,18 @@
 Code for the paper: 
 [Dodging the Data Bottleneck: Automatic Subtitling with Automatically Segmented ST Corpora](https://aclanthology.org/2022.aacl-short.59.pdf).
 
-## Pre-trained multimodal model
-We here release the multilingual multimodal model with parallel attention (Figure 1) used for the paper:
-- [model_checkpoint](https://drive.google.com/file/d/1ACzTPG3UgK173cPXIRsz1gp8NldRw4uV/view?usp=share_link) | [config.yaml](https://drive.google.com/file/d/1Yttj2QnSPJnrgFqwbRV-wPVifMsE8pWd/view?usp=share_link) | [spm_model](https://drive.google.com/file/d/1KiuTxVUFsIP9-K3Hc_ggubDp-FW_-aKh/view?usp=share_link) | [fairseq_vocabulary](https://drive.google.com/file/d/1wJtiXzIDQMdNOeL0GjlgdMisqsger0qi/view?usp=share_link)
+## Pre-trained multimodal models
+We here release the multilingual multimodal models with parallel attention (Figure 1 in the paper). 
+The original model used in the paper is `de_en_fr_it`.
+We also release another version of the segmenter trained on all MuST-Cinema languages,
+which provides overall higher scores for the languages that are not covered by the `de_en_fr_it` model.
+- **de_en_fr_it**: [checkpoint](https://drive.google.com/file/d/1ACzTPG3UgK173cPXIRsz1gp8NldRw4uV/view?usp=share_link) | [config.yaml](https://drive.google.com/file/d/1Yttj2QnSPJnrgFqwbRV-wPVifMsE8pWd/view?usp=share_link) | [spm_model](https://drive.google.com/file/d/1KiuTxVUFsIP9-K3Hc_ggubDp-FW_-aKh/view?usp=share_link) | [fairseq_vocabulary](https://drive.google.com/file/d/1wJtiXzIDQMdNOeL0GjlgdMisqsger0qi/view?usp=share_link)
+- **all_langs**: [checkpoint](https://fbk-my.sharepoint.com/:u:/r/personal/spapi_fbk_eu/Documents/subtitling/segmenter/checkpoint_avg7.pt?csf=1&web=1&e=1epB74) | [config.yaml](https://fbk-my.sharepoint.com/:u:/r/personal/spapi_fbk_eu/Documents/subtitling/segmenter/config_multi_all_lang.yaml?csf=1&web=1&e=F96hj0) | [spm_model](https://fbk-my.sharepoint.com/:u:/g/personal/spapi_fbk_eu/EYagCJS5-KBElYZvSP7GG_gBpyySyDQHYRhFb5k1u66Qkw?e=5qM8SG) | [fairseq_vocabulary](https://fbk-my.sharepoint.com/:t:/r/personal/spapi_fbk_eu/Documents/subtitling/segmenter/spm_unigram16000_multi_all_lang.txt?csf=1&web=1&e=cMZbr7)
+
+| Results (Sigma-CPL%) | de        | en        | es        | fr        | it        | nl        | pt        | ro        |
+|----------------------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
+| de_en_fr_it          | 86.4-89.1 | 88.2-94.6 | 81.2-89.3 | 86.7-93.3 | 85.5-89.3 | 81.2-89.0 | 81.4-89.3 | 75.3-83.3 |
+| all_langs            | 86.3-88.4 | 87.1-94.4 | 84.5-93.0 | 87.1-93.2 | 85.2-89.6 | 86.5-86.0 | 87.2-89.6 | 86.6-91.4 |
 
 ## Preprocessing
 Preprocess the [MuST-Cinema](https://ict.fbk.eu/must-cinema/) dataset as already explained 
@@ -93,8 +102,7 @@ python ${FBK_fairseq}/generate.py ${DATA_ROOT} \
       --max-tokens 25000 --beam 5 --scoring sacrebleu \
       --results-path ${SAVE_DIR}
 ```
-where `LANG` is the language selected for inference (in our paper, Spanish or es and Dutch or nl for the zero-shot 
-results) and `CHECKPOINT_FILENAME` is the file containing the average of the checkpoints of the previous step.
+where `LANG` is the language selected for inference and `CHECKPOINT_FILENAME` is the file containing the average of the checkpoints of the previous step.
 
 Please use [sacrebleu](https://github.com/mjpost/sacrebleu) to obtain BLEU scores and 
 [EvalSubtitle](https://github.com/fyvo/EvalSubtitle) to obtain Sigma and CPL.
