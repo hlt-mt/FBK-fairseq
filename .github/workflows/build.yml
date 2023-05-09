@@ -32,10 +32,18 @@ jobs:
 
     - name: Install locally
       run: |
+        apt-get update && apt-get --yes install libsndfile1
         python -m pip install --upgrade pip
         git submodule update --init --recursive
         python setup.py build_ext --inplace
         python -m pip install --editable .
+        pip install torchaudio
+        curdir=$(pwd) && cd ..
+        git clone https://github.com/facebookresearch/SimulEval.git/
+        cd SimulEval
+        git checkout 844e4bf62cb4031b4d49247b9520a9966416eea3
+        pip install -e .
+        cd $curdir
 
     - name: Lint with flake8
       run: |
