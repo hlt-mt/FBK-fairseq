@@ -4,6 +4,7 @@ This repository contains the open source code by the MT unit of FBK.
 Dedicated README for each work can be found in the `fbk_works` directory.
 
  ### 2023
+ - [[ACL 2023] **Attention as a Guide for Simultaneous Speech Translation**](fbk_works/EDATT_SIMULST_AGENT_ACL2023.md)
  - [**Reproducibility is Nothing Without Correctness: The Importance of Testing Code in NLP**](fbk_works/BUGFREE_CONFORMER.md)
 
  ### 2022
