@@ -1,7 +1,7 @@
 import importlib
 import os
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 
 
 class AudioFeatureTransform(ABC):
@@ -9,6 +9,15 @@ class AudioFeatureTransform(ABC):
     @abstractmethod
     def from_config_dict(cls, config: Optional[Dict] = None):
         pass
+
+    @property
+    def extra_args(self) -> Set[str]:
+        """
+        If the transform requires other fields of the dataset (and not only the waveform),
+        list here the additional properties required. They will be fed to the __call__
+        function as key-value args.
+        """
+        return {}
 
 
 AUDIO_FEATURE_TRANSFORM_REGISTRY = {}
@@ -67,10 +76,18 @@ class CompositeAudioFeatureTransform(AudioFeatureTransform):
 
     def __init__(self, transforms):
         self.transforms = [t for t in transforms if t is not None]
-
-    def __call__(self, x):
+        self._extra_args_needed = set()
         for t in self.transforms:
-            x = t(x)
+            self._extra_args_needed = self._extra_args_needed.union(t.extra_args)
+
+    @property
+    def extra_args(self) -> Set[str]:
+        return self._extra_args_needed
+
+    def __call__(self, x, **kwargs):
+        for t in self.transforms:
+            t_kwargs = {k: kwargs[k] for k in t.extra_args}
+            x = t(x, **t_kwargs)
         return x
 
     def __repr__(self):

@@ -19,7 +19,7 @@ from fairseq.data import (
     ResamplingDataset,
     data_utils as fairseq_data_utils,
 )
-from fairseq.data.audio.audio_utils import get_fbank, get_waveform
+from fairseq.data.audio.audio_utils import get_fbank, get_waveform, _get_kaldi_fbank, _get_torchaudio_fbank
 from fairseq.data.audio.feature_transforms import CompositeAudioFeatureTransform
 
 
@@ -105,19 +105,41 @@ class S2TDataConfig(object):
         the root path. Set this to empty string when using absolute paths."""
         return self.config.get("audio_root", "")
 
-    def get_feature_transforms(self, split, is_train):
-        """Split-specific feature transforms. Allowing train set wildcard `_train`,
-        evaluation set wildcard `_eval` and general wildcard `*` for matching."""
+    def _read_transform_config(self, split, is_train, transform_keyword):
+        """Reads the split-specific transforms (either on features or on waveforms).
+        Allowing train set wildcard `_train`, evaluation set wildcard `_eval` and
+        general wildcard `*` for matching."""
         from copy import deepcopy
 
         cfg = deepcopy(self.config)
-        _cur = cfg.get("transforms", {})
+        _cur = cfg.get(transform_keyword, {})
         cur = _cur.get(split)
         cur = _cur.get("_train") if cur is None and is_train else cur
         cur = _cur.get("_eval") if cur is None and not is_train else cur
         cur = _cur.get("*") if cur is None else cur
         cfg["transforms"] = cur
         return cfg
+
+    def get_feature_transforms(self, split, is_train):
+        """Split-specific feature transforms. Allowing train set wildcard `_train`,
+        evaluation set wildcard `_eval` and general wildcard `*` for matching."""
+        return self._read_transform_config(split, is_train, "transforms")
+
+    def get_waveform_transforms(self, split, is_train):
+        """Split-specific feature transforms. Allowing train set wildcard `_train`,
+        evaluation set wildcard `_eval` and general wildcard `*` for matching."""
+        return self._read_transform_config(split, is_train, "raw_transforms")
+
+    @property
+    def is_input_waveform(self):
+        """Needed by the dataset loader to know whether we should read a waveform
+        or the pre-computed features."""
+        return self.config.get("is_input_waveform", False)
+
+    @property
+    def waveform_sample_rate(self):
+        """Sample rate of the waveforms to read"""
+        return self.config.get("waveform_sample_rate", 16000)
 
 
 def is_npy_data(data: bytes) -> bool:
@@ -191,6 +213,26 @@ def get_features_or_waveform(path: str, need_waveform=False):
     return features_or_waveform
 
 
+def fbank_features_from_waveform(
+        waveform,
+        sample_rate: int,
+        n_mel_bins: int = 80,):
+    """
+    Takes a waveform and returns the filterbank features.
+    """
+    # for the sake of consistency with the rest of the code, we keep the multiplication
+    # here even though in preliminary experiments it seemed useless
+    _waveform = waveform * (2 ** 15)  # Kaldi compliance: 16-bit signed integers
+    features = _get_kaldi_fbank(_waveform, sample_rate, n_mel_bins)
+    if features is None:
+        features = _get_torchaudio_fbank(_waveform, sample_rate, n_mel_bins)
+    if features is None:
+        raise ImportError(
+            "Please install pyKaldi or torchaudio to enable fbank feature extraction"
+        )
+    return features
+
+
 def _collate_frames(
     frames: List[torch.Tensor], is_audio_input: bool = False
 ) -> torch.Tensor:
@@ -256,6 +298,8 @@ class SpeechToTextDataset(FairseqDataset):
         self.feature_transforms = CompositeAudioFeatureTransform.from_config_dict(
             self.data_cfg.get_feature_transforms(split, is_train_split)
         )
+        self.waveform_transforms = CompositeAudioFeatureTransform.from_config_dict(
+            self.data_cfg.get_waveform_transforms(split, is_train_split))
 
         self.pre_tokenizer = pre_tokenizer
         self.bpe_tokenizer = bpe_tokenizer
@@ -267,7 +311,8 @@ class SpeechToTextDataset(FairseqDataset):
             self.__class__.__name__
             + f'(split="{self.split}", n_samples={self.n_samples}, '
             f"prepend_tgt_lang_tag={self.data_cfg.prepend_tgt_lang_tag}, "
-            f"shuffle={self.shuffle}, transforms={self.feature_transforms})"
+            f"shuffle={self.shuffle}, transforms={self.feature_transforms}), "
+            f"waveform_transforms={self.waveform_transforms}"
         )
 
     @classmethod
@@ -294,11 +339,21 @@ class SpeechToTextDataset(FairseqDataset):
         self, index: int
     ) -> Tuple[int, torch.Tensor, Optional[torch.Tensor]]:
         source = get_features_or_waveform(
-            self.audio_paths[index], need_waveform=self.data_cfg.use_audio_input
-        )
+            self.audio_paths[index],
+            need_waveform=self.data_cfg.use_audio_input or self.data_cfg.is_input_waveform)
+        if self.waveform_transforms is not None:
+            assert self.data_cfg.use_audio_input or self.data_cfg.is_input_waveform
+            kwargs = {k: getattr(self, k)[index] for k in self.waveform_transforms.extra_args}
+            source = self.waveform_transforms(source, **kwargs)
+        if self.data_cfg.is_input_waveform and not self.data_cfg.use_audio_input:
+            source = fbank_features_from_waveform(
+                source.squeeze(),  # remove first dimension (channels) of numpy array
+                self.data_cfg.waveform_sample_rate,
+                n_mel_bins=self.data_cfg.input_feat_per_channel)
         if self.feature_transforms is not None:
             assert not self.data_cfg.use_audio_input
-            source = self.feature_transforms(source)
+            kwargs = {k: getattr(self, k)[index] for k in self.feature_transforms.extra_args}
+            source = self.feature_transforms(source, **kwargs)
         source = torch.from_numpy(source).float()
 
         target = None

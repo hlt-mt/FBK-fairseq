@@ -12,6 +12,7 @@ from tempfile import NamedTemporaryFile
 from typing import Tuple
 
 import pandas as pd
+import numpy as np
 import soundfile as sf
 import torch
 from torch import Tensor
@@ -93,19 +94,35 @@ def process(args):
         print(f"{data_dir.as_posix()} does not exist. Skipped.")
 
     # Extract features
+    store_wavs = getattr(args, "store_waveform", False)
+    dataset_sample_rate = None
+    feature_name = "wavs" if store_wavs else "fbank"
     if not args.no_filterbank_extraction:
-        feature_root = save_root / "fbank"
+        feature_root = save_root / feature_name
         feature_root.mkdir(exist_ok=True)
         for split in args.splits:
             print(f"Fetching split {split}...")
             dataset = YamlDataset(data_dir.as_posix(), args.wav_dir, split, args.src_lang, args.tgt_lang)
-            print("Extracting log mel filter bank features...")
-            for waveform, sample_rate, _, _, _, utt_id in tqdm(dataset):
-                extract_fbank_features(
-                    waveform, sample_rate, feature_root / f"{utt_id}.npy", args.n_mel_bins
-                )
+            if store_wavs:
+                print("Extracting waveforms...")
+                for waveform, sample_rate, _, _, _, utt_id in tqdm(dataset):
+                    if dataset_sample_rate is None:
+                        dataset_sample_rate = sample_rate
+                    else:
+                        assert dataset_sample_rate == sample_rate, \
+                            "Found different sample rates among the audios: " \
+                            f"{dataset_sample_rate} and {sample_rate}. This is not supported " \
+                            "for waveform features. Please first convert all audios to the same " \
+                            "sample rate."
+                    np.save((feature_root / f"{utt_id}.npy").as_posix(), waveform.numpy())
+            else:
+                print("Extracting log mel filter bank features...")
+                for waveform, sample_rate, _, _, _, utt_id in tqdm(dataset):
+                    extract_fbank_features(
+                        waveform, sample_rate, feature_root / f"{utt_id}.npy", args.n_mel_bins
+                    )
     # Pack features into ZIP
-    zip_path = save_root / "fbank.zip"
+    zip_path = save_root / f"{feature_name}.zip"
     if not args.no_filterbank_extraction:
         print("ZIPing features...")
         create_zip(feature_root, zip_path)
@@ -180,6 +197,8 @@ def process(args):
         yaml_filename=f"config_{args.task}.yaml",
         specaugment_policy="ld",
         n_mel_bins=args.n_mel_bins,
+        store_wavs=store_wavs,
+        sample_rate=dataset_sample_rate
     )
     # Clean up
     if not args.no_filterbank_extraction:
@@ -206,6 +225,8 @@ def main():
                         help="absolute path to fairseq source vocabulary file [.txt]")
     parser.add_argument("--no-filterbank-extraction", action="store_true",
                         help="no mel filterbanks feature extraction")
+    parser.add_argument("--store-waveform", action="store_true",
+                        help="if set, waveforms will be stored instead of filterbank features")
     args = parser.parse_args()
 
     process(args)

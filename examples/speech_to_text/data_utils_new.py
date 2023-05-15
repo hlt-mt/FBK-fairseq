@@ -170,6 +170,8 @@ def gen_config_yaml_with_src(
     sampling_alpha: float = 1.0,
     audio_root: str = "",
     n_mel_bins=80,
+    store_wavs=False,
+    sample_rate=16000,
 ):
     manifest_root = manifest_root.absolute()
     writer = S2TDataConfigWriter(manifest_root / yaml_filename)
@@ -177,6 +179,9 @@ def gen_config_yaml_with_src(
     writer.set_vocab_filename_src((manifest_root / spm_filename_src.replace(".model", ".txt")).as_posix())
     writer.set_input_channels(1)
     writer.set_input_feat_per_channel(n_mel_bins)
+    if store_wavs:
+        writer.set_is_input_waveform(True)
+        writer.set_waveform_sample_rate(sample_rate)
     specaugment_setters = {
         "lb": writer.set_specaugment_lb_policy,
         "ld": writer.set_specaugment_ld_policy,
@@ -296,6 +301,12 @@ class S2TDataConfigWriter(object):
 
     def set_audio_root(self, audio_root=""):
         self.config["audio_root"] = audio_root
+
+    def set_is_input_waveform(self, is_input_waveform=False):
+        self.config["is_input_waveform"] = is_input_waveform
+
+    def set_waveform_sample_rate(self, waveform_sample_rate=16000):
+        self.config["waveform_sample_rate"] = waveform_sample_rate
 
     def set_vocab_filename(self, vocab_filename: str = "dict.txt"):
         self.config["vocab_filename"] = vocab_filename
