@@ -4,3 +4,4 @@
 # LICENSE file in the root directory of this source tree.
 
 from . import tasks, criterions, models, modules  # noqa
+from .data import waveform_transforms

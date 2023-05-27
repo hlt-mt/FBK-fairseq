@@ -200,7 +200,7 @@ def get_features_or_waveform(path: str, need_waveform=False):
 
     if len(extra) == 0:
         if need_waveform:
-            return get_waveform(_path)
+            return get_waveform(_path)[0]
         return get_features_from_npy_or_audio(_path)
     elif len(extra) == 2:
         extra = [int(i) for i in extra]
