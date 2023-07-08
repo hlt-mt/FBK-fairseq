@@ -33,8 +33,10 @@ def add_eol_eob(text):
      'First line <eol> second line. <eob>'
      >>> add_eol_eob("First line\\nsecond line.  ")
      'First line <eol> second line. <eob>'
+     >>> add_eol_eob("First line\\n  ")
+     'First line <eob>'
     """
-    return re.sub(r"\s*\n\s*", " <eol> ", text).strip() + " <eob>"
+    return re.sub(r"\s*\n\s*", " <eol> ", re.sub(r"\s*$", "", text)).strip() + " <eob>"
 
 
 def main():
