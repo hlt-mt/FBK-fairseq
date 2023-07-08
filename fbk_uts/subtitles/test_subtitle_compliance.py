@@ -71,7 +71,7 @@ class TestSubtitleCompliance(unittest.TestCase):
  "stdev": 7.11,
  "total": 8.00,
  "compliant": 1.00,
- "version": "1.0"
+ "version": "1.1"
 }""")
         self.assertEqual(cpl_metric.score_string(2), "CPL: 12.50%")
 
@@ -101,6 +101,22 @@ class TestSubtitleCompliance(unittest.TestCase):
         self.assertEqual(cpl.num_compliant, 3)
         self.assertEqual(cpl_nobrackets.mean, 20.5)
         self.assertEqual(cpl.mean, 24.75)
+
+    def test_confidence_interval(self):
+        subtitles = self.get_example_content("sample_de_01.srt")
+        stats = SubtitleComplianceStats.from_subtitles(subtitles)
+        cpl_metric = stats.metric("cpl", 21, ci=True)
+        self.assertEqual(cpl_metric.ci.mu, 0.127)
+        self.assertEqual(cpl_metric.ci.var, 0.1875)
+        self.assertEqual(cpl_metric.json_string(2), """{
+ "metric": "CPL <= 21",
+ "score": "12.50% (μ = 12.70 ± 18.75)",
+ "mean": 32.50,
+ "stdev": 7.11,
+ "total": 8.00,
+ "compliant": 1.00,
+ "version": "1.1"
+}""")
 
 
 if __name__ == '__main__':

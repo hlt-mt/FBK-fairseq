@@ -14,17 +14,21 @@
 import argparse
 import os
 import re
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Optional
 
 import numpy as np
 
 _SUPPORTED_METRICS = ['cps', 'cpl', 'lpb']
-_VERSION = "1.0"
-_CITATION = r"""@misc{papi2022direct,
+_VERSION = "1.1"
+_CITATION = r"""@article{papi-etal-2023-direct,
       title={{Direct Speech Translation for Automatic Subtitling}}, 
       author={Sara Papi and Marco Gaido and Alina Karakanta and Mauro Cettolo and Matteo Negri and Marco Turchi},
-      year={2022}
+      journal = "Transactions of the Association for Computational Linguistics",
+      address = "Cambridge, MA",
+      publisher = "MIT Press",
+      year={2023}
 }"""
+_BOOTSTRAP_NUM_SAMPLES = int(os.getenv("BOOTSTRAP_NUM_SAMPLES", 1000))
 
 
 try:
@@ -32,6 +36,42 @@ try:
 except ImportError:
     print("Please install the srt package with 'pip install srt' and try again.")
     exit(1)
+
+
+class ConfidenceInterval(NamedTuple):
+    mu: float
+    var: float
+
+    def formatted_string(self, precision: float) -> str:
+        mu_str = '{:.{}f}'.format(self.mu * 100, precision)
+        var_str = '{:.{}f}'.format(self.var * 100, precision)
+        return f'μ = {mu_str} ± {var_str}'
+
+    @staticmethod
+    def __bootstrap_idxs(size):
+        """
+        Samples `n_samples` sets of size `size` for bootstrap resampling.
+        Method taken from sacrebleu implementation of bootstrap resampling.
+        """
+        seed = int(os.environ.get('BOOTSTRAP_RESAMPLE_SEED', '12345'))
+        rng = np.random.default_rng(seed)
+        return rng.choice(size, size=(_BOOTSTRAP_NUM_SAMPLES, size), replace=True)
+
+    @classmethod
+    def from_stats(cls, stats: np.ndarray, upperbound: float):
+        """
+        Implementation of CI estimation taken from sacrebleu.
+        """
+        stats_size = len(stats)
+        idxs = cls.__bootstrap_idxs(stats_size)
+        scores = [np.sum(_s <= upperbound) / stats_size for _s in stats[idxs]]
+        # Sort the scores
+        scores = sorted(scores)
+        # Get CI bounds (95%, i.e. 1/40 from left)
+        lower_idx = _BOOTSTRAP_NUM_SAMPLES // 40
+        upper_idx = _BOOTSTRAP_NUM_SAMPLES - lower_idx - 1
+        ci = 0.5 * (scores[upper_idx] - scores[lower_idx])
+        return ConfidenceInterval(sum(scores) / _BOOTSTRAP_NUM_SAMPLES, ci)
 
 
 class ComplianceMetric(NamedTuple):
@@ -42,6 +82,7 @@ class ComplianceMetric(NamedTuple):
     maximum: float
     total: int
     num_compliant: int
+    ci: Optional[ConfidenceInterval] = None
 
     @property
     def score(self):
@@ -51,14 +92,20 @@ class ComplianceMetric(NamedTuple):
     def _format_number(num: float, precision: int):
         return '{:.{}f}'.format(num, precision)
 
+    def formatted_score(self, precision: int):
+        score_str = self._format_number(self.score * 100, precision) + '%'
+        if self.ci is not None:
+            score_str += f' ({self.ci.formatted_string(precision)})'
+        return score_str
+
     def score_string(self, precision: int):
-        return f"{self.name.upper()}: {self._format_number(self.score * 100, precision)}%"
+        return f"{self.name.upper()}: {self.formatted_score(precision)}"
 
     def json_string(self, precision: int):
         return os.linesep.join([
             '{',
             f' "metric": "{self.name.upper()} <= {self.upperbound}",',
-            f' "score": "{self._format_number(self.score * 100, precision)}%",',
+            f' "score": "{self.formatted_score(precision)}",',
             f' "mean": {self._format_number(self.mean, precision)},',
             f' "stdev": {self._format_number(self.stdev, precision)},',
             f' "total": {self._format_number(self.total, precision)},',
@@ -128,9 +175,13 @@ class SubtitleComplianceStats:
             lpb.extend(stats.lpb)
         return cls(cps, cpl, lpb)
 
-    def metric(self, name: str, upperbound: float) -> ComplianceMetric:
+    def metric(self, name: str, upperbound: float, ci: bool = False) -> ComplianceMetric:
         assert name in _SUPPORTED_METRICS, f"Unsupported metric '{name}'"
         stats = np.array(getattr(self, name))
+        if ci:
+            confidence_interval = ConfidenceInterval.from_stats(stats, upperbound)
+        else:
+            confidence_interval = None
         return ComplianceMetric(
             name,
             upperbound,
@@ -138,10 +189,11 @@ class SubtitleComplianceStats:
             np.std(stats),
             np.max(stats),
             len(stats),
-            np.sum(stats <= upperbound))
+            np.sum(stats <= upperbound),
+            confidence_interval)
 
-    def report(self, metric: str, upperbound: float, precision: int, quiet: bool) -> str:
-        compliance_metric = self.metric(metric, upperbound)
+    def report(self, metric: str, upperbound: float, precision: int, quiet: bool, ci: bool) -> str:
+        compliance_metric = self.metric(metric, upperbound, ci)
         if quiet:
             return compliance_metric.score_string(precision)
         else:
@@ -178,15 +230,16 @@ def main(args):
         if not args.quiet and len(args.srt_file) > 1:
             print(f"Compliance metrics for {srt_file}")
             for m in args.metrics:
+                max_value = getattr(args, f'max_{m}')
                 print(subtitle_stats.report(
-                    m, getattr(args, f'max_{m}'), args.width, args.quiet))
+                    m, max_value, args.width, args.quiet, args.confidence_intervals))
     if not args.quiet:
         print(f"Overall compliance metrics")
 
     overall_subtitle_stats = SubtitleComplianceStats.merge(all_stats)
     for m in args.metrics:
         print(overall_subtitle_stats.report(
-            m, getattr(args, f'max_{m}'), args.width, args.quiet))
+            m, getattr(args, f'max_{m}'), args.width, args.quiet, args.confidence_intervals))
 
 
 if __name__ == '__main__':
@@ -227,8 +280,13 @@ if __name__ == '__main__':
     parser.add_argument(
         '--width', '-w', type=int, default=1,
         help='floating point width.')
+    parser.add_argument(
+        '--confidence-intervals', '-ci',  default=False, action='store_true',
+        help='confidence intervals with 95% confidence level using bootstrap resampling '
+             f'({_BOOTSTRAP_NUM_SAMPLES} samples). The number of samples can be customized by '
+             'setting the environment variable BOOTSTRAP_NUM_SAMPLES.')
 
-    # Text preprocessing:
+    # Text preprocessing
     parser.add_argument(
         "--remove-parenthesis-content", default=False, action='store_true',
         help="if set, content in parenthesis is removed before computing the score.")
