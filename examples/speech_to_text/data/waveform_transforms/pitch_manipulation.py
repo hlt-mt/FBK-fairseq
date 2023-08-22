@@ -31,7 +31,9 @@ class PitchScalingBase(AudioFeatureTransform):
     """
     Base class to perform pitch (F0 and formants) scaling.
     """
-    def __init__(self, gender_tsv: str, sampling_rate: int):
+    def __init__(self, manipulation_type: str, gender_tsv: str, sampling_rate: int):
+        assert manipulation_type in ["pitch", "formant"], "Invalid manipulation_type"
+        self.manipulation_type = manipulation_type
         assert gender_tsv is not None, "The path of MuST-Speaker file must be provided in the config file"
         with open(gender_tsv, 'r') as speakers_f:
             speakers_reader = csv.DictReader(
@@ -98,9 +100,9 @@ class PitchScalingBase(AudioFeatureTransform):
         return new_median_f0
 
     def _pitch_estimation(
-            self, sound_object: parselmouth.Sound,
-            from_male: bool,
-            ids: str = None) -> Tuple[np.array, np.array]:
+            self,
+            sound_object: parselmouth.Sound,
+            from_male: bool) -> Tuple[np.array, np.array]:
         """
         Returns the F0 estimation of the original audio.
         """
@@ -110,7 +112,9 @@ class PitchScalingBase(AudioFeatureTransform):
             pitch_ceiling=pitch_ceiling,
             time_step=0.8 / pitch_floor)
         f0_np = f0.selected_array['frequency']
-        return f0, np.median(f0_np[f0_np != 0]).item()
+        f0_np = f0_np[f0_np != 0]
+        f0_median = np.NaN if len(f0_np) == 0 else np.median(f0_np).item()
+        return f0, f0_median
 
     def _manipulate(
             self,
@@ -167,14 +171,15 @@ class PitchScalingRandom(PitchScalingBase):
     to a random gender (either Male or Female). In case of scaling between
     the same gender, only the median F0 will be changed.
     """
-    def __init__(self, gender_tsv: str, sampling_rate: int, p: float):
-        super().__init__(gender_tsv, sampling_rate)
+    def __init__(self, manipulation_type: str, gender_tsv: str, sampling_rate: int, p: float):
+        super().__init__(manipulation_type, gender_tsv, sampling_rate)
         self.p = p
 
     @classmethod
     def from_config_dict(cls, config=None):
         _config = {} if config is None else config
         return PitchScalingRandom(
+            _config.get("manipulation_type", "formant"),
             _config.get("gender_tsv", None),
             _config.get("sampling_rate", 16000),
             _config.get("p", 0.5))
@@ -195,7 +200,7 @@ class PitchScalingRandom(PitchScalingBase):
             return False
 
     def get_factor(self, from_male: bool, to_male: bool) -> float:
-        if (from_male and to_male) or (not from_male and not to_male):
+        if (from_male and to_male) or (not from_male and not to_male) or self.manipulation_type == "pitch":
             return 1.0
         else:
             if from_male:
@@ -210,8 +215,8 @@ class PitchScalingOpposite(PitchScalingBase):
     Class to perform pitch scaling from Male to Female or from Female to Male
     based on the original gender of the speaker.
     """
-    def __init__(self, gender_tsv: str, sampling_rate: int, p_male: float, p_female: float):
-        super().__init__(gender_tsv, sampling_rate)
+    def __init__(self, manipulation_type: str, gender_tsv: str, sampling_rate: int, p_male: float, p_female: float):
+        super().__init__(manipulation_type, gender_tsv, sampling_rate)
         self.p_male = p_male
         self.p_female = p_female
 
@@ -219,6 +224,7 @@ class PitchScalingOpposite(PitchScalingBase):
     def from_config_dict(cls, config=None):
         _config = {} if config is None else config
         return PitchScalingOpposite(
+            _config.get("manipulation_type", "formant"),
             _config.get("gender_tsv", None),
             _config.get("sampling_rate", 16000),
             _config.get("p_male", 0.7),
@@ -241,7 +247,32 @@ class PitchScalingOpposite(PitchScalingBase):
             return True
 
     def get_factor(self, from_male: bool, *kwargs) -> float:
-        if from_male:
-            return 1.2
+        if self.manipulation_type == "formant":
+            if from_male:
+                return 1.2
+            else:
+                return 0.8
         else:
-            return 0.8
+            return 1.0
+
+
+@register_audio_feature_transform("same_pitch")
+class PitchScalingSame(PitchScalingOpposite):
+    """
+    Class to perform pitch scaling from Male to Male or from Female to Female
+    based on the original gender of the speaker.
+    """
+    def __init__(self, gender_tsv: str, sampling_rate: int, p_male: float, p_female: float):
+        super().__init__("pitch", gender_tsv, sampling_rate, p_male, p_female)
+
+    @classmethod
+    def from_config_dict(cls, config=None):
+        _config = {} if config is None else config
+        return PitchScalingSame(
+            _config.get("gender_tsv", None),
+            _config.get("sampling_rate", 16000),
+            _config.get("p_male", 0.5),
+            _config.get("p_female", 0.5))
+
+    def get_target_gender(self, from_male: bool) -> bool:
+        return from_male
