@@ -16,6 +16,18 @@ import sys
 from examples.speech_to_text.utils.levenshtein_alignment import levenshtein_alignment
 
 
+def avoid_insertion_at_the_end(distance_string):
+    """
+    Ensures that the given Levenshtein alignment string ends with the block
+    character instead of with insertion/deletions. If not, it fixes the problem.
+    """
+    if distance_string[-1] == 'B':
+        return distance_string
+    last_b_idx = distance_string.rfind('B')
+    assert all(c == "-" for c in distance_string[last_b_idx + 1:])
+    return distance_string[:last_b_idx] + distance_string[last_b_idx + 1:] + 'B'
+
+
 def generate_target_timestamp(caption, subtitle, timeinterval):
     # Clean text from <eol> and split at <eob>
     caption_cleanl = caption.strip().replace(" <eol>", "").\
@@ -34,6 +46,12 @@ def generate_target_timestamp(caption, subtitle, timeinterval):
 
     # Compute textual alignment between caption and subtitle
     align_cap, align_sub = levenshtein_alignment(masked_cap, masked_sub)
+
+    # Ensure the last character is the block character on both sides.
+    # This may not be true if there is an extra block at the end of one side,
+    # which is considered a list of insertions after the last block on the other.
+    align_cap = avoid_insertion_at_the_end(align_cap)
+    align_sub = avoid_insertion_at_the_end(align_sub)
 
     # Compute timestamp from alignment
     # Set equal initial time

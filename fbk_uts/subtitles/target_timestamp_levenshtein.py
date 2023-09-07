@@ -59,6 +59,13 @@ class TargetTimestampTestCase(unittest.TestCase):
         timestamp = generate_target_timestamp(caption, subtitle, time)
         self.assertEqual(timestamp, "0.19-0.61 0.61-1.8699999999999999 1.8699999999999999-6.07")
 
+    def test_caption_extra_eob(self):
+        caption = 'And that was a time when I first ask myself, "Why? <eob>'
+        subtitle = 'Und das war die Zeit, <eol> in der ich mich zum ersten Mal fragte: <eob> "Warum? <eob>'
+        time = [[0.08, 3.44]]
+        timestamp = generate_target_timestamp(caption, subtitle, time)
+        self.assertEqual("0.08-3.088955223880597 3.088955223880597-3.44", timestamp)
+
 
 if __name__ == '__main__':
     unittest.main()
