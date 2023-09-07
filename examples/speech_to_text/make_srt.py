@@ -74,7 +74,9 @@ if __name__ == '__main__':
             # From each utterance, extract the audio offset, the timestamps and the text for each block
             audio_offset = float(audio["offset"])
             time_list = time.split(" ")
-            block_list = sub.split("<eob>")
+            block_list = [x for x in sub.split("<eob>") if x.strip()]
+            assert len(time_list) == len(block_list), \
+                f"Cannot create SRT with {len(time_list)} times for {len(block_list)} blocks."
             for timestamp, block in zip(time_list, block_list):
                 start_time, end_time = timestamp.split("-")
                 formatted_start_time = formatted_absolute_time(start_time, audio_offset)
