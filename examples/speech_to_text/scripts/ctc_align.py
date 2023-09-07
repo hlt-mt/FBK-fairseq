@@ -264,7 +264,17 @@ def main(cfg):
                 lpz = lprob[i][:ctc_lengths[i].item()].cpu().detach().numpy()
                 if len(ground_truth_mat) > lpz.shape[0]:
                     timings = []
-                    segments = [(0.0, ctc_lengths[i].item() * cfg.task.feature_duration)]
+                    total_duration = ctc_lengths[i].item() * cfg.task.feature_duration
+                    if len(token_splits) < 2:
+                        segments = [(0.0, total_duration)]
+                    else:
+                        # split in even parts the segment
+                        segment_duration = float(total_duration) / len(token_splits)
+                        segments = []
+                        curr_time = 0.0
+                        for segm_i in range(len(token_splits)):
+                            segments.append((curr_time, curr_time + segment_duration))
+                            curr_time += segment_duration
                     logging.warning("Attention: the text is longer than audio and cannot be aligned.")
                 else:
                     timings, char_probs, state_list = ctc_segmentation(ctc_config, lpz, ground_truth_mat)
