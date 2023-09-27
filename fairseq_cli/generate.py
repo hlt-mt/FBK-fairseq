@@ -347,6 +347,17 @@ def _main(cfg: DictConfig, output_file):
                             ),
                             file=output_file,
                         )
+                        if len(hypo["ctc_batch_predicted"]) > 0:
+                            ctc_batch_predicted = ",".join(
+                                str(ctc_pred[1]) for ctc_pred in hypo["ctc_batch_predicted"])
+                            # prints the CTC compression blocks that are needed to know to how many
+                            # (hence which) source vectors each encoder output element corresponds to.
+                            # E.g., "CTC-XXX 3,1,2" means that the first encoder output vector corresponds
+                            # to the first three inputs (which have been merged together), the second encoder
+                            # output corresponds to the 4th input, and so on.
+                            print(
+                                "CTC-{}\t{}".format(sample_id, ctc_batch_predicted),
+                                file=output_file)
 
                     if cfg.generation.print_step:
                         print(

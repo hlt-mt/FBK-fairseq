@@ -4,10 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
+from itertools import groupby
 from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 from fairseq import search, utils
 from fairseq.data import data_utils
 from fairseq.models import FairseqIncrementalDecoder
@@ -417,6 +419,7 @@ class SequenceGenerator(nn.Module):
                     attn,
                     src_lengths,
                     max_len,
+                    encoder_outs,
                 )
                 num_remaining_sent -= len(finalized_sents)
 
@@ -592,6 +595,7 @@ class SequenceGenerator(nn.Module):
         attn: Optional[Tensor],
         src_lengths,
         max_len: int,
+        encoder_outs: Optional[List[Dict[str, Tensor]]] = None,
     ):
         """Finalize hypothesis, store finalized information in `finalized`, and change `finished` accordingly.
         A sentence is finalized when {beam_size} finished items have been collected for it.
@@ -616,6 +620,20 @@ class SequenceGenerator(nn.Module):
             if attn is not None
             else None
         )
+
+        ctc_batch_predicted = None
+        if encoder_outs is not None and len(encoder_outs) == 1 and "ctc_out" in encoder_outs[0]:
+            ctc_out_clone = encoder_outs[0]["ctc_out"].index_select(1, bbsz_idx)
+            ctc_lengths = encoder_outs[0]["ctc_lengths"].index_select(0, bbsz_idx)
+            ctc_batch_predicted = []
+            prob_ctc = F.softmax(ctc_out_clone, dim=-1).transpose(0, 1)  # T x B x D to B x T x D
+            for b in range(prob_ctc.shape[0]):
+                predicted = prob_ctc[b][: ctc_lengths[b]].argmax(-1).tolist()
+                if self.model.models[0].encoder.ctc_compress_method != "none":
+                    ctc_batch_predicted.append(
+                        [(p[0], len(list(p[1]))) for p in groupby(predicted)])
+                else:
+                    ctc_batch_predicted.append([(p, 1) for p in predicted])
 
         # compute scores per token position
         pos_scores = scores.index_select(0, bbsz_idx)[:, : step + 1]
@@ -672,6 +690,11 @@ class SequenceGenerator(nn.Module):
                 else:
                     hypo_attn = torch.empty(0)
 
+                if ctc_batch_predicted is not None:
+                    hypo_ctc_batch_predicted = ctc_batch_predicted[i]
+                else:
+                    hypo_ctc_batch_predicted = []
+
                 finalized[sent].append(
                     {
                         "tokens": tokens_clone[i],
@@ -679,6 +702,7 @@ class SequenceGenerator(nn.Module):
                         "attention": hypo_attn,  # src_len x tgt_len
                         "alignment": torch.empty(0),
                         "positional_scores": pos_scores[i],
+                        "ctc_batch_predicted": hypo_ctc_batch_predicted
                     }
                 )
 
