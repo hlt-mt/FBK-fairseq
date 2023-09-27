@@ -28,7 +28,7 @@ The output will be saved in `--output`.
 
 ```bash
 simuleval \
-    --agent ${FBK_FAIRSEQ_ROOT}/examples/speech_to_text/simultaneous_translation/agents/simul_offline_alignatt.py \
+    --agent ${FBK_FAIRSEQ_ROOT}/examples/speech_to_text/simultaneous_translation/agents/v1_0/simul_offline_alignatt.py \
     --source ${SRC_LIST_OF_AUDIO} \
     --target ${TGT_FILE} \
     --data-bin ${DATA_ROOT} \

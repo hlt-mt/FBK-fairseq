@@ -2,7 +2,7 @@
 
 Agent for the paper: [Does Simultaneous Speech Translation need Simultaneous Models?](https://arxiv.org/abs/2204.03783)
 
-To run the agent, please make sure that [SimulEval](https://github.com/facebookresearch/SimulEval) is installed and set `--port` accordingly. 
+To run the agent, please make sure that [SimulEval 1.0.2](https://github.com/facebookresearch/SimulEval) (commit [d1a8b2f](https://github.com/facebookresearch/SimulEval/commit/d1a8b2f0b13fe5204f3dcb4935cae9c73dbfc285)) is installed and set `--port` accordingly. 
 
 Set `--source`, `--target`, and `--config` as described in the [Fairseq Simultaneous Translation repository](https://github.com/facebookresearch/fairseq/blob/main/examples/speech_to_text/docs/simulst_mustc_example.md#inference--evaluation).
 `--model-path` is the offline ST model checkpoint, 
@@ -12,7 +12,7 @@ The simultaneous output will be saved in `--output`.
 ## Fixed Word Detection
 ```bash
 simuleval \
-    --agent ${FBK_FAIRSEQ_ROOT}/examples/speech_to_text/simultaneous_translation/agents/simul_offline_waitk.py \
+    --agent ${FBK_FAIRSEQ_ROOT}/examples/speech_to_text/simultaneous_translation/agents/v1_0/simul_offline_waitk.py \
     --source ${SRC_LIST_OF_AUDIO} \
     --target ${TGT_FILE} \
     --data-bin ${DATA_ROOT} \
@@ -28,7 +28,7 @@ simuleval \
 ## Adaptive Word Detection
 ```bash
 simuleval \
-    --agent ${FBK_FAIRSEQ_ROOT}/examples/speech_to_text/simultaneous_translation/agents/simul_offline_waitk.py \
+    --agent ${FBK_FAIRSEQ_ROOT}/examples/speech_to_text/simultaneous_translation/agents/v1_0/simul_offline_waitk.py \
     --source ${SRC_LIST_OF_AUDIO} \
     --target ${TGT_FILE} \
     --data-bin ${DATA_ROOT} \

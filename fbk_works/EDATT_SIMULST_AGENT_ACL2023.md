@@ -2,7 +2,7 @@
 Code for the paper: ["Attention as a Guide for Simultaneous Speech Translation"](https://arxiv.org/pdf/2212.07850.pdf) published at ACL 2023.
 
 ## 📎 Requirements
-To run the agent, please make sure that [SimulEval v1.0.2](https://github.com/facebookresearch/SimulEval) is installed 
+To run the agent, please make sure that [SimulEval v1.0.2](https://github.com/facebookresearch/SimulEval) (commit [d1a8b2f](https://github.com/facebookresearch/SimulEval/commit/d1a8b2f0b13fe5204f3dcb4935cae9c73dbfc285)) is installed 
 and set `--port` accordingly.
 
 ## 📌 Pre-trained offline models
@@ -20,7 +20,7 @@ The output will be saved in `--output`.
 
 ```bash
 simuleval \
-    --agent ${FBK_FAIRSEQ_ROOT}/examples/speech_to_text/simultaneous_translation/agents/simul_offline_edatt.py \
+    --agent ${FBK_FAIRSEQ_ROOT}/examples/speech_to_text/simultaneous_translation/agents/v1_0/simul_offline_edatt.py \
     --source ${SRC_LIST_OF_AUDIO} \
     --target ${TGT_FILE} \
     --data-bin ${DATA_ROOT} \

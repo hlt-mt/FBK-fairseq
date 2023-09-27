@@ -8,6 +8,7 @@ Dedicated README for each work can be found in the `fbk_works` directory.
  - [[INTERSPEECH 2023] **AlignAtt: Using Attention-based Audio-Translation Alignments as a Guide for Simultaneous Speech Translation**](fbk_works/ALIGNATT_SIMULST_AGENT_INTERSPEECH2023.md)
  - [[INTERSPEECH 2023] **Joint Speech Translation and Named Entity Recognition**](fbk_works/JOINT_ST_NER2023.md)
  - [[ACL 2023] **Attention as a Guide for Simultaneous Speech Translation**](fbk_works/EDATT_SIMULST_AGENT_ACL2023.md)
+ - [[IWSLT 2023] **Direct Models for Simultaneous Translation and Automatic Subtitling: FBK@IWSLT2023**](fbk_works/IWSLT_2023.md)
  - [**Reproducibility is Nothing Without Correctness: The Importance of Testing Code in NLP**](fbk_works/BUGFREE_CONFORMER.md)
 
  ### 2022
