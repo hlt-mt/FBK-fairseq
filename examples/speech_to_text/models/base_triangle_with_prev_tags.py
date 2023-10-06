@@ -61,7 +61,7 @@ class BaseTrianglePreviousTags(BaseTriangle):
         encoder = cls.encoder_parent_model.build_encoder(args, src_dict if src_dict is not None else tgt_dict)
         decoder = TriangleTransformerDecoderWithTags(args, tgt_dict, target_embed_tokens, task.data_cfg.tags)
         auxiliary_decoder = TransformerDecoderWithTags(args, src_dict, src_embed_tokens, task.data_cfg.tags)
-        return cls(encoder, decoder, auxiliary_decoder)
+        return cls(encoder, decoder, auxiliary_decoder, args)
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens, prev_transcript_tokens, **kwargs):
         prev_transcript_tags = kwargs.get('prev_transcript_tags', None)

@@ -41,6 +41,7 @@ class BaseTriangle(MultiTaskModel):
     def add_args(parser):
         parser.add_argument('--auxiliary-decoder-embed-path', type=str, metavar='STR',
                             help='path to pre-trained decoder embedding')
+        MultiTaskModel.add_args(parser)
 
     @classmethod
     def build_model(cls, args, task):
@@ -69,7 +70,7 @@ class BaseTriangle(MultiTaskModel):
         encoder = cls.encoder_parent_model.build_encoder(args, src_dict if src_dict is not None else tgt_dict)
         decoder = TriangleTransformerDecoder(args, tgt_dict, target_embed_tokens)
         auxiliary_decoder = TransformerDecoderScriptable(args, src_dict, src_embed_tokens)
-        return cls(encoder, decoder, auxiliary_decoder)
+        return cls(encoder, decoder, auxiliary_decoder, args)
 
     # In "speech_translation_with_transcription" the transcripts are read into
     # "transcript_target". Not the most elegant solution, but it allows

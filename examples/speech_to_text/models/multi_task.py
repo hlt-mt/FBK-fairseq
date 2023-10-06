@@ -37,9 +37,28 @@ logger = logging.getLogger(__name__)
 
 
 class MultiTaskModel(FairseqEncoderDecoderModel):
-    def __init__(self, encoder, decoder, auxiliary_decoder):
+
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument('--pretrained-model', type=str, default=None,
+                            help='path to a pretrained ST model')
+        parser.add_argument('--freeze-model', action='store_true', default=False,
+                            help='if set, the base model is freezed')
+
+    def __init__(self, encoder, decoder, auxiliary_decoder, args):
         super().__init__(encoder, decoder)
         self.auxiliary_decoder = auxiliary_decoder
+        self._freeze_base = False
+        if getattr(args, "pretrained_model", None):
+            self.encoder = checkpoint_utils.load_pretrained_component_from_model(
+                component=self.encoder, checkpoint=args.pretrained_model,
+                allow_partial_encoder_loading=False, )
+            self.decoder = checkpoint_utils.load_pretrained_component_from_model(
+                component=self.decoder, checkpoint=args.pretrained_model,
+                allow_partial_encoder_loading=False, )
+            logger.info(f"loaded pretrained model from: {args.pretrained_model}")
+        if getattr(args, "freeze_model", False):
+            self.freeze_base_model()
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
         encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
@@ -53,28 +72,6 @@ class MultiTaskModel(FairseqEncoderDecoderModel):
 
     def get_auxiliary_target(self, sample, auxiliary_output):
         return sample["auxiliary_target"]
-
-
-class MultiTaskClassifierModel(MultiTaskModel):
-
-    def __init__(self, encoder, decoder, auxiliary_decoder):
-        super().__init__(encoder, decoder, auxiliary_decoder)
-        self.__freeze_base = False
-        self.__freeze_classifier = False
-
-    @staticmethod
-    def add_args(parser):
-        parser.add_argument("--reverted-classifier", action='store_true', default=False,
-                            help="if set, the gradient of the classifier is inverted")
-        parser.add_argument("--reverted-lambda", type=float, required=False,
-                            help="if set, the gradient reversal factor is fixed and set to this value")
-        parser.add_argument("--reverted-gamma", type=float, required=False, default=10,
-                            help="if --reverted-classifier is used, and --reverted-lambda is not set "
-                                 "it controls how fast the gradient scaling factor increase")
-        parser.add_argument('--pretrained-model', type=str, default=None,
-                            help='path to a pretrained ST model')
-        parser.add_argument('--freeze-model', action='store_true', default=False,
-                            help='if set, the base model is freezed')
 
     def freeze_base_model(self, update_weights=False):
         """
@@ -92,7 +89,37 @@ class MultiTaskClassifierModel(MultiTaskModel):
                     module.train()
                 else:
                     module.eval()
-        self.__freeze_base = not update_weights
+        self._freeze_base = not update_weights
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        # set BatchNorm layers in eval mode to avoid changes when they have
+        # to be freezed. This is required as train() is called on the model
+        # before each epoch starts and after begin_epoch() is called on the
+        # task.
+        if self._freeze_base and mode:
+            for module in [*self.encoder.modules(), *self.decoder.modules()]:
+                if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+                    module.eval()
+        return self
+
+
+class MultiTaskClassifierModel(MultiTaskModel):
+
+    def __init__(self, encoder, decoder, auxiliary_decoder, args):
+        super().__init__(encoder, decoder, auxiliary_decoder, args)
+        self.__freeze_classifier = False
+
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument("--reverted-classifier", action='store_true', default=False,
+                            help="if set, the gradient of the classifier is inverted")
+        parser.add_argument("--reverted-lambda", type=float, required=False,
+                            help="if set, the gradient reversal factor is fixed and set to this value")
+        parser.add_argument("--reverted-gamma", type=float, required=False, default=10,
+                            help="if --reverted-classifier is used, and --reverted-lambda is not set "
+                                 "it controls how fast the gradient scaling factor increase")
+        MultiTaskModel.add_args(parser)
 
     def freeze_classifier(self, update_weights=False):
         """
@@ -109,10 +136,6 @@ class MultiTaskClassifierModel(MultiTaskModel):
         # to be freezed. This is required as train() is called on the model
         # before each epoch starts and after begin_epoch() is called on the
         # task.
-        if self.__freeze_base and mode:
-            for module in [*self.encoder.modules(), *self.decoder.modules()]:
-                if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
-                    module.eval()
         if self.__freeze_classifier and mode:
             for module in self.auxiliary_decoder.modules():
                 if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
@@ -126,20 +149,7 @@ class MultiTaskClassifierModel(MultiTaskModel):
             auxiliary_decoder = RevertedFFNDecoderClassifier(args, num_outputs)
         else:
             auxiliary_decoder = FFNDecoderClassifier(args, num_outputs)
-        encoder = base_model.encoder
-        decoder = base_model.decoder
-        if getattr(args, "pretrained_model", None):
-            encoder = checkpoint_utils.load_pretrained_component_from_model(
-                component=encoder, checkpoint=args.pretrained_model,
-                allow_partial_encoder_loading=False, )
-            decoder = checkpoint_utils.load_pretrained_component_from_model(
-                component=decoder, checkpoint=args.pretrained_model,
-                allow_partial_encoder_loading=False, )
-            logger.info(f"loaded pretrained model from: {args.pretrained_model}")
-        model = cls(encoder, decoder, auxiliary_decoder)
-        if getattr(args, "freeze_model", False):
-            model.freeze_base_model()
-        return model
+        return cls(base_model.encoder, base_model.decoder, auxiliary_decoder, args)
 
 
 class ClassifierDecoder(nn.Module):
