@@ -4,6 +4,7 @@ This repository contains the open source code by the MT unit of FBK.
 Dedicated README for each work can be found in the `fbk_works` directory.
 
  ### 2023
+ - [[ASRU 2023] **No Pitch Left Behind: Addressing Gender Unbalance in Automatic Speech Recognition Through Pitch Manipulation**](fbk_works/PITCH_MANIPULATION_ASR.md)
  - [[TACL 2023] **Direct Speech Translation for Automatic Subtitling**](fbk_works/DIRECT_SUBTITLING.md)
  - [[INTERSPEECH 2023] **AlignAtt: Using Attention-based Audio-Translation Alignments as a Guide for Simultaneous Speech Translation**](fbk_works/ALIGNATT_SIMULST_AGENT_INTERSPEECH2023.md)
  - [[INTERSPEECH 2023] **Joint Speech Translation and Named Entity Recognition**](fbk_works/JOINT_ST_NER2023.md)
