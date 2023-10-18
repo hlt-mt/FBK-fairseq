@@ -195,6 +195,7 @@ if __name__ == '__main__':
     
     Version: 1.1
     """
+    print("mustshe_gender_accuracy v1.1")
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', required=True, type=str, metavar='FILE',
                         help='Input file to be used to compute accuracies (it must be tokenized).')

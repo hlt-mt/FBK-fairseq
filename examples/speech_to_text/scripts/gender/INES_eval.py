@@ -168,6 +168,7 @@ if __name__ == '__main__':
 
     Version: 1.0
     """
+    print("INES_eval v1.0")
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', required=True, type=str, metavar='FILE',
                         help='Input file to be used to compute scores (it must be tokenized).')
