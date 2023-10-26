@@ -5,6 +5,7 @@ Dedicated README for each work can be found in the `fbk_works` directory.
 
  ### 2023
 
+ - [[CLiC-IT 2023] **How To Build Competitive Multi-gender Speech Translation Models For Controlling Speaker Gender Translation**](fbk_works/MULTIGENDER_CLIC_2023.md)
  - [[EMNLP 2023] **Integrating Language Models into Direct Speech Translation: An Inference-Time Solution to Control Gender Inflection**](fbk_works/SHALLOW_FUSION_GENDER_BIAS.md)
  - [[WMT 2023] **Test Suites Task: Evaluation of Gender Fairness in MT with MuST-SHE and INES**](fbk_works/INES_eval.md)
  - [[ASRU 2023] **No Pitch Left Behind: Addressing Gender Unbalance in Automatic Speech Recognition Through Pitch Manipulation**](fbk_works/PITCH_MANIPULATION_ASR.md)
