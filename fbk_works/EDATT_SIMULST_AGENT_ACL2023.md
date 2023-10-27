@@ -28,7 +28,7 @@ simuleval \
     --model-path ${ST_SAVE_DIR}/checkpoint_avg7.pt \
     --extract-attn-from-layer 3 \
     --frame-num 2 --attn-threshold $ALPHA \
-    --speech-segment-factor 8 \
+    --speech-segment-factor 20 \
     --output ${OUT_DIR} \
     --port ${PORT} \
     --gpu \
