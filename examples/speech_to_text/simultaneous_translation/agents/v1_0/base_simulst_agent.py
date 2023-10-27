@@ -112,7 +112,7 @@ class FairseqSimulSTAgent(SpeechAgent, BaseSimulSTAgent):
             if self.prefix_token_idx is not None and index == self.prefix_token_idx:
                 units.pop()
             token = self.tgtdict[index]
-            if token.startswith(BOW_PREFIX) or token != DEFAULT_EOS:
+            if token.startswith(BOW_PREFIX) or token == DEFAULT_EOS:
                 if len(segment) == 0:
                     if token != DEFAULT_EOS:
                         segment.append(token.replace(BOW_PREFIX, ""))
