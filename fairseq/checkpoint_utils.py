@@ -605,8 +605,10 @@ def prune_state_dict(state_dict, model_cfg: Optional[DictConfig]):
 
 
 def load_pretrained_component_from_model(
-    component: Union[FairseqEncoder, FairseqDecoder], checkpoint: str,
-        allow_partial_encoder_loading: bool,
+    component: Union[FairseqEncoder, FairseqDecoder],
+    checkpoint: str,
+    allow_partial_encoder_loading: bool = False,
+    allow_extra_decoder_tokens: bool = False,
 ):
     """
     Load a pretrained FairseqEncoder or FairseqDecoder from checkpoint into the
@@ -621,6 +623,11 @@ def load_pretrained_component_from_model(
         component_type = "encoder"
     elif isinstance(component, FairseqDecoder):
         component_type = "decoder"
+        if allow_extra_decoder_tokens:
+            update_weights_to_extra_tokens(
+                component, "decoder.embed_tokens.weight", state["model"])
+            update_weights_to_extra_tokens(
+                component, "decoder.output_projection.weight", state["model"])
     else:
         raise ValueError(
             "component to load must be either a FairseqEncoder or "
@@ -639,6 +646,22 @@ def load_pretrained_component_from_model(
     if len(incompatible_keys.missing_keys) > 0:
         logger.info("Loaded checkpoint misses the parameters: {}".format(incompatible_keys.missing_keys))
     return component
+
+
+def update_weights_to_extra_tokens(module, weight, state_dict):
+    loaded_dict_size = state_dict[weight].size(0)
+    if len(module.dictionary) != loaded_dict_size:
+        num_toks_to_add = len(module.dictionary) - loaded_dict_size
+        embed_dim = state_dict[weight].size(1)
+        new_toks_embed_to_add = torch.zeros(num_toks_to_add, embed_dim)
+        torch.nn.init.normal_(new_toks_embed_to_add, mean=0, std=embed_dim ** -0.5)
+        new_toks_embed_to_add = new_toks_embed_to_add.to(
+            dtype=state_dict[weight].dtype)
+        state_dict[weight] = torch.cat([
+            state_dict[weight], new_toks_embed_to_add])
+        logger.info(
+            f"{weight} increased from size {loaded_dict_size} to size "
+            f"{loaded_dict_size + num_toks_to_add}")
 
 
 def verify_checkpoint_directory(save_dir: str) -> None:

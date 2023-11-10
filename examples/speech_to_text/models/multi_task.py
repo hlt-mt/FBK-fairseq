@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 import logging
-from typing import Optional
+from typing import Optional, Tuple, Dict, List
 
 import torch
 from torch import nn, Tensor
@@ -55,7 +55,8 @@ class MultiTaskModel(FairseqEncoderDecoderModel):
                 allow_partial_encoder_loading=False, )
             self.decoder = checkpoint_utils.load_pretrained_component_from_model(
                 component=self.decoder, checkpoint=args.pretrained_model,
-                allow_partial_encoder_loading=False, )
+                allow_partial_encoder_loading=False,
+                allow_extra_decoder_tokens=getattr(args, "allow_extra_tokens", False))
             logger.info(f"loaded pretrained model from: {args.pretrained_model}")
         if getattr(args, "freeze_model", False):
             self.freeze_base_model()
@@ -72,6 +73,19 @@ class MultiTaskModel(FairseqEncoderDecoderModel):
 
     def get_auxiliary_target(self, sample, auxiliary_output):
         return sample["auxiliary_target"]
+
+    def get_normalized_probs(
+            self,
+            net_output: Tuple[Tensor, Optional[Dict[str, List[Optional[Tensor]]]]],
+            log_probs: bool,
+            sample: Optional[Dict[str, Tensor]] = None):
+        # Transformer decoder output is a (B, T, D) tensor.
+        # The most elegant solutions would be to set this in the Transformer decoder,
+        # but we want to avoid changes in the main fairseq code. So this is kind of
+        # hacky solution to avoid editing main fairseq code.
+        lprobs = self.get_normalized_probs_scriptable(net_output, log_probs, sample)
+        lprobs.batch_first = True
+        return lprobs
 
     def freeze_base_model(self, update_weights=False):
         """

@@ -65,10 +65,18 @@ class FakeDecoderModel(nn.Module):
         return self.model.auxiliary_decoder
 
     def get_auxiliary_target(self, sample, auxiliary_output):
-        return sample["transcript"]
+        return self.model.get_auxiliary_target(sample, auxiliary_output)
 
     def get_auxiliary_token_lens(self, sample):
-        return sample["transcript_lengths"]
+        return self.model.get_auxiliary_token_lens(sample)
+
+    # To support joint CTC decoding
+    def get_auxiliary_input_lens(self, sample, net_output):
+        return self.model.get_auxiliary_input_lens(sample, net_output)
+
+    @property
+    def auxiliary_dict(self):
+        return self.model.auxiliary_dict
 
 
 class BaseCTCLoss(CtcCriterion):

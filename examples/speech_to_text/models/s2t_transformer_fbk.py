@@ -22,7 +22,7 @@ from torch import Tensor
 from examples.speech_to_text.modules.ctc_support import CtcSupport
 from examples.speech_to_text.modules.encoder_pretraining_support import EncoderPretrainingSupport
 from examples.speech_to_text.modules.transformer_layer_penalty import TransformerEncoderLayerPenalty
-from fairseq import utils
+from fairseq import utils, checkpoint_utils
 from fairseq.data.data_utils import lengths_to_padding_mask
 from fairseq.models import (
     FairseqEncoder,
@@ -206,28 +206,13 @@ class S2TTransformerModel(FairseqEncoderDecoderModel, EncoderPretrainingSupport)
         model.args = args
         return model
 
-    def update_weights_to_extra_tokens(self, weight, state_dict):
-        loaded_dict_size = state_dict[weight].size(0)
-        if len(self.decoder.dictionary) != loaded_dict_size:
-            num_toks_to_add = len(self.decoder.dictionary) - loaded_dict_size
-            embed_dim = state_dict[weight].size(1)
-            new_toks_embed_to_add = torch.zeros(num_toks_to_add, embed_dim)
-            nn.init.normal_(new_toks_embed_to_add, mean=0, std=embed_dim ** -0.5)
-            new_toks_embed_to_add = new_toks_embed_to_add.to(
-                dtype=state_dict[weight].dtype)
-            state_dict[weight] = torch.cat([
-                state_dict[weight], new_toks_embed_to_add])
-            logger.info(
-                f"{weight} increased from size {loaded_dict_size} to size "
-                f"{loaded_dict_size + num_toks_to_add}")
-
     def upgrade_state_dict_named(self, state_dict, name):
         super().upgrade_state_dict_named(state_dict, name)
         if getattr(self.args, "allow_extra_tokens", False):
-            self.update_weights_to_extra_tokens(
-                "decoder.embed_tokens.weight", state_dict)
-            self.update_weights_to_extra_tokens(
-                "decoder.output_projection.weight", state_dict)
+            checkpoint_utils.update_weights_to_extra_tokens(
+                self.decoder, "decoder.embed_tokens.weight", state_dict)
+            checkpoint_utils.update_weights_to_extra_tokens(
+                self.decoder, "decoder.output_projection.weight", state_dict)
 
     def get_normalized_probs(
             self,

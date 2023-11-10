@@ -21,6 +21,7 @@ from argparse import Namespace
 
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import SpeechToTextDatasetWithSrc
 from examples.speech_to_text.models.s2t_transformer_fbk import s2t_transformer_s, S2TTransformerModel
+from fairseq import checkpoint_utils
 from fbk_uts.base_utilities import BaseSpeechTestCase
 
 
@@ -81,7 +82,8 @@ class UpdateWeightsToExtraTokensTestCase(unittest.TestCase, BaseSpeechTestCase):
             "decoder.output_projection.weight": torch.rand((10, 4))}
         # The following must update only the named weights passed as argument
         # that is embed_tokens and not the output_projection ones.
-        model.update_weights_to_extra_tokens("decoder.embed_tokens.weight", state_dict)
+        checkpoint_utils.update_weights_to_extra_tokens(
+            model.decoder, "decoder.embed_tokens.weight", state_dict)
         self.assertEqual(len(model.decoder.dictionary), 12)
         self.assertEqual(list(state_dict["decoder.embed_tokens.weight"].shape), [12, 4])
         self.assertEqual(list(state_dict["decoder.output_projection.weight"].shape), [10, 4])

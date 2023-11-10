@@ -25,6 +25,7 @@ from ctc_segmentation import CtcSegmentationParameters, ctc_segmentation, \
 from torch.nn import functional as F
 
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import S2TDataConfigSrc
+from examples.speech_to_text.models.joint_ctc_multitask import JointCtcMultiTaskModel
 from fairseq import utils, options, tasks, checkpoint_utils
 from fairseq.data import Dictionary, encoders
 from fairseq.data.audio.speech_to_text_dataset import SpeechToTextDatasetCreator, SpeechToTextDataset
@@ -56,19 +57,36 @@ def read_data(cfg, task, logger):
         )
         audio_paths = []
         n_frames = []
+        tgt_langs = []
         for e in reader:
             audio_paths.append(e[SpeechToTextDatasetCreator.KEY_AUDIO])
             n_frames.append(int(e[SpeechToTextDatasetCreator.KEY_N_FRAMES]))
+            if SpeechToTextDatasetCreator.KEY_TGT_LANG in e:
+                tgt_langs.append(e[SpeechToTextDatasetCreator.KEY_TGT_LANG])
+        if len(tgt_langs) == 0:
+            tgt_langs = None
 
     with open(cfg.task.text_file) as f:
         forced_strings = f.readlines()
 
-    # Source dict
-    source_dict_path = op.join(cfg.task.data, data_cfg.vocab_filename_src)
-    src_dict = Dictionary.load(source_dict_path)
-    src_dict.add_symbol(CTC_BLANK)
+    # load dict
+    if cfg.task.use_target_text:
+        vocab_filename = data_cfg.vocab_filename
+        bpe_tokenizer = data_cfg.bpe_tokenizer
+    else:
+        vocab_filename = data_cfg.vocab_filename_src
+        bpe_tokenizer = data_cfg.bpe_tokenizer_src
+        # disable language tag pre-pending for multilingual target
+        # as we are using the source
+        tgt_langs = None
+        if data_cfg.prepend_tgt_lang_tag:
+            data_cfg.config["prepend_tgt_lang_tag"] = False
+
+    dict_path = op.join(cfg.task.data, vocab_filename)
+    dictionary = Dictionary.load(dict_path)
+    dictionary.add_symbol(CTC_BLANK)
     logger.info(
-        f"source dictionary size ({data_cfg.vocab_filename_src}): " f"{len(src_dict):,}"
+        f"dictionary size ({vocab_filename}): " f"{len(dictionary):,}"
     )
     dataset = SpeechToTextDataset(
         cfg.dataset.gen_subset,
@@ -76,9 +94,10 @@ def read_data(cfg, task, logger):
         data_cfg,
         audio_paths,
         n_frames,
-        tgt_dict=src_dict,
+        tgt_dict=dictionary,
         tgt_texts=forced_strings,
-        bpe_tokenizer=encoders.build_bpe(argparse.Namespace(**data_cfg.bpe_tokenizer_src)))
+        tgt_langs=tgt_langs,
+        bpe_tokenizer=encoders.build_bpe(argparse.Namespace(**bpe_tokenizer)))
 
     # return a batch iterator
     itr = task.get_batch_iterator(
@@ -184,8 +203,11 @@ def main(cfg):
     )
     assert len(models) == 1, "only 1 model is currently supported"
     model = models[0]
-    assert isinstance(model, FairseqEncoderDecoderModel)
-    assert model.encoder.ctc_flag, "encoder should be CTC-aware"
+    if cfg.task.ctc_method == "multiloss":
+        assert isinstance(model, FairseqEncoderDecoderModel)
+        assert model.encoder.ctc_flag, "encoder should be CTC-aware"
+    elif cfg.task.ctc_method == "auxiliary":
+        assert isinstance(model, JointCtcMultiTaskModel)
     if cfg.common.fp16:
         model.half()
     if use_cuda and not cfg.distributed_training.pipeline_model_parallel:
@@ -210,9 +232,22 @@ def main(cfg):
     for sample in itr:
         sample = utils.move_to_cuda(sample) if use_cuda else sample
         encoder_out = encoder(**sample["net_input"])
-        ctc_out = encoder_out["ctc_out"]
-        ctc_lengths = encoder_out["ctc_lengths"]
-        lprob = F.log_softmax(ctc_out, dim=-1).transpose(0, 1)
+        if cfg.task.ctc_method == "multiloss":
+            ctc_lengths = encoder_out["ctc_lengths"]
+            lprob = F.log_softmax(encoder_out["ctc_out"], dim=-1).transpose(0, 1)
+        elif cfg.task.ctc_method == "auxiliary":
+            lang_embeds = None
+            if cfg.generation.prefix_size > 0:
+                assert cfg.generation.prefix_size == 1, "prefix_size > 1 is not supported"
+                # the prev_output_tokens contain <bos> <lang> and then the sentence
+                # so the 2nd column corresponds to the language embeddings
+                lang_embeds = model.decoder.embed_tokens(sample["net_input"]["prev_output_tokens"][:, 1:2])
+                # remove target language token
+                sample["target"] = sample["target"][:, 1:]
+                sample["target_lengths"] = sample["target_lengths"] - 1
+            auxiliary_out = model.auxiliary_decoder(encoder_out, lang_embeds=lang_embeds)
+            lprob = F.log_softmax(auxiliary_out[0], dim=-1).transpose(0, 1)
+            ctc_lengths = model.get_auxiliary_input_lens(sample, auxiliary_out)
         for i, sample_id in enumerate(sample["id"].tolist()):
             tgt_len = sample["target_lengths"][i].item()
             tgt_tokens = sample["target"][i][:tgt_len - 1].tolist()
@@ -248,4 +283,10 @@ if __name__ == '__main__':
                         help="tokens used to split the utterances")
     parser.add_argument('--feature-duration', type=float, default=0.040,
                         help="the time (in seconds) a single output of the CTC corresponds to")
+    parser.add_argument('--use-target-text', action="store_true", default=False,
+                        help="if set, the text to be aligned is assumed to be in the target lang")
+    parser.add_argument('--ctc-method', choices=["multiloss", "auxiliary"], default="multiloss",
+                        help="the CTC method used by the model. Currently we support:\n"
+                             " 1. `multiloss`: for CTC trained with ctc_multi_loss;"
+                             " 2. `auxiliary`: for CTC auxiliary decoder of multitask models.")
     main(options.parse_args_and_arch(parser))

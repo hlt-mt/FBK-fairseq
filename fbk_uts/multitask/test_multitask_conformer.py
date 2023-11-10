@@ -65,6 +65,7 @@ class MultiTaskConformerTestCase(AuxiliaryClassificationDatasetSetup, unittest.T
         model_out = model(**samples["net_input"])
         assert len(model_out) == 2
         assert list(model_out[1].shape) == [3, 2]
+        self.assertTrue(model.get_normalized_probs(model_out[0], True).batch_first)
 
     @patch('fairseq.data.audio.speech_to_text_dataset.get_features_or_waveform')
     def test_ctc(self, mock_get_features_or_waveform):
