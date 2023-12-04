@@ -812,3 +812,44 @@ class DiverseSiblingsSearch(Search):
             final_indices[i] = indices[i][final_indices[i]]
 
         return final_scores, final_indices, final_beams
+
+
+class BeamSearchNoRepeatedEobEol(BeamSearch):
+    """
+    Search class that forbids two consecutive <eob> and <eol>.
+    It also avoids that <eob> and <eol> are predicted at the beginning of the sentence.
+    """
+    def __init__(self, tgt_dict):
+        super().__init__(tgt_dict)
+        self.eob = tgt_dict.index("<eob>")
+        self.eol = tgt_dict.index("<eol>")
+        self.space = tgt_dict.index("\u2581")
+
+    def step(
+        self,
+        step: int,
+        lprobs,
+        scores: Optional[Tensor],
+        prev_output_tokens: Optional[Tensor] = None,
+        original_batch_idxs: Optional[Tensor] = None,
+    ):
+        bsz, beam_size, vocab_size = lprobs.size()
+        if step == 0:
+            # avoid starting with <eob> and <eol>
+            lprobs[:, :, self.eob] = -math.inf
+            lprobs[:, :, self.eol] = -math.inf
+        else:
+            # avoid consecutive <eob> and <eol>
+            candidates_prefix_ends_in_eob_eol = \
+                (prev_output_tokens[:, -1] == self.eob) | (prev_output_tokens[:, -1] == self.eol)
+            # avoid <eob> and <eol> separated by space
+            if prev_output_tokens.shape[-1] > 1:
+                ending_in_space = prev_output_tokens[:, -1] == self.space
+                previous_eob_eol = \
+                    (prev_output_tokens[:, -2] == self.eob) | (prev_output_tokens[:, -2] == self.eol)
+                candidates_prefix_ends_in_eob_eol |= (previous_eob_eol & ending_in_space)
+            lprobs = lprobs.view(bsz * beam_size, vocab_size)
+            lprobs[candidates_prefix_ends_in_eob_eol, self.eob] = -math.inf
+            lprobs[candidates_prefix_ends_in_eob_eol, self.eol] = -math.inf
+            lprobs = lprobs.view(bsz, beam_size, vocab_size)
+        return super().step(step, lprobs, scores, prev_output_tokens, original_batch_idxs)

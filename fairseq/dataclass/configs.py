@@ -718,6 +718,10 @@ class GenerationConfig(FairseqDataclass):
         default=False,
         metadata={"help": "sample hypotheses instead of using beam search"},
     )
+    avoid_repeated_eob_eol: bool = field(
+        default=False,
+        metadata={"help": "forbid two consecutive <eob> or <eol> (subtitle delimiters)"},
+    )
     sampling_topk: int = field(
         default=-1,
         metadata={"help": "sample from top K likely next words instead of all words"},

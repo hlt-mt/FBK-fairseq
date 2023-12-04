@@ -467,7 +467,7 @@ class TestIncrementalDecoder(FairseqIncrementalDecoder):
         args.max_decoder_positions = getattr(args, "max_decoder_positions", 100)
         self.args = args
 
-    def forward(self, prev_output_tokens, encoder_out=None, incremental_state=None):
+    def forward(self, prev_output_tokens, encoder_out=None, incremental_state=None, alignment_layer=None):
         if incremental_state is not None:
             prev_output_tokens = prev_output_tokens[:, -1:]
         bbsz = prev_output_tokens.size(0)

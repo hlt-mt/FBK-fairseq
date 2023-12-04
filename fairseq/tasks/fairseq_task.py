@@ -324,6 +324,7 @@ class FairseqTask(object):
         diversity_rate = getattr(args, "diversity_rate", -1)
         constrained = getattr(args, "constraints", False)
         prefix_allowed_tokens_fn = getattr(args, "prefix_allowed_tokens_fn", None)
+        avoid_repeated_eob_eol = getattr(args, "avoid_repeated_eob_eol", False)
         if (
             sum(
                 int(cond)
@@ -332,6 +333,7 @@ class FairseqTask(object):
                     diverse_beam_groups > 0,
                     match_source_len,
                     diversity_rate > 0,
+                    avoid_repeated_eob_eol,
                 ]
             )
             > 1
@@ -371,6 +373,8 @@ class FairseqTask(object):
             search_strategy = search.PrefixConstrainedBeamSearch(
                 self.target_dictionary, prefix_allowed_tokens_fn
             )
+        elif avoid_repeated_eob_eol:
+            search_strategy = search.BeamSearchNoRepeatedEobEol(self.target_dictionary)
         else:
             search_strategy = search.BeamSearch(self.target_dictionary)
 
