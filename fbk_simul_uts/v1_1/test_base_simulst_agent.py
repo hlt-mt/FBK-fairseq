@@ -26,6 +26,15 @@ from fairseq.data import Dictionary
 class MockedLoadModelVocab:
     def load_model_vocab(self):
         self.model = torch.rand((1, 1))
+        self.eos = "<s>"
+        self.eos_idx = 0
+        self.prefix_token_idx = None
+        self.tgtdict = Dictionary()
+        self.tgtdict.add_symbol(BOW_PREFIX + "I")
+        self.tgtdict.add_symbol(BOW_PREFIX + "am")
+        self.tgtdict.add_symbol(BOW_PREFIX + "a")
+        self.tgtdict.add_symbol(BOW_PREFIX + "quokka")
+        self.tgtdict.add_symbol(".")
 
 
 class BaseSTAgentTestCaseV2:
@@ -59,30 +68,22 @@ class BaseSTAgentTestCaseV2:
         self.agent = self.create_agent()
         self.initialize_agent(self.agent, self.args)
         self.states = SpeechStates(self.agent)
-        self.agent.initialize_states(self.states)
+        self.agent.states = self.states
+        self.agent.reset()
 
     @staticmethod
     def initialize_agent(agent, args):
         agent.feature_extractor = OnlineFeatureExtractor(args)
-        agent.eos = "<s>"
-        agent.eos_idx = 0
-        agent.prefix_token_idx = None
-        agent.tgtdict = Dictionary()
-        agent.tgtdict.add_symbol(BOW_PREFIX + "I")
-        agent.tgtdict.add_symbol(BOW_PREFIX + "am")
-        agent.tgtdict.add_symbol(BOW_PREFIX + "a")
-        agent.tgtdict.add_symbol(BOW_PREFIX + "quokka")
-        agent.tgtdict.add_symbol(".")
 
     def test_empty_encoder_states(self):
         self.states.encoder_states = None
-        self.assertIsInstance(FairseqSimulSTAgent.policy(self.agent, self.states), ReadAction)
+        self.assertIsInstance(self.agent.policy(self.states), ReadAction)
 
     def test_finish_read(self):
         self.states.encoder_states = "Dummy"
         self.states.source_finished = True
-        self.assertIsInstance(FairseqSimulSTAgent.policy(self.agent, self.states), WriteAction)
+        self.assertIsInstance(self.agent.policy(self.states), WriteAction)
 
     def test_no_new_input(self):
         self.states.new_segment = None
-        self.assertIsInstance(FairseqSimulSTAgent.policy(self.agent, self.states), ReadAction)
+        self.assertIsInstance(self.agent.policy(self.states), ReadAction)

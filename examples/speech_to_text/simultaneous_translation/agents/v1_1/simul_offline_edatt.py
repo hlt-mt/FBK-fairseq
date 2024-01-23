@@ -101,6 +101,7 @@ class EDAttSTAgent(FairseqSimulSTAgent):
         it is returned ReadAction().
         """
         hypo, prefix_len = self._get_hypo_and_prefix(states)
+        states.current_hypo = hypo  # put current hypo in states for streaming ST
         # select new partial hypothesis (without the already emitted tokens)
         new_hypo = hypo['tokens'][prefix_len:].int()
         # Remove prefix_token_idx attention score in case of multilingual generation

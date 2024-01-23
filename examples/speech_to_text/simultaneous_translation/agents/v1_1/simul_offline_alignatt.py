@@ -39,6 +39,7 @@ class AlignAttSTAgent(EDAttSTAgent):
         through *self.predict*, otherwise ReadAction().
         """
         hypo, prefix_len = self._get_hypo_and_prefix(states)
+        states.current_hypo = hypo  # put current hypo in states for streaming ST
         # Select new partial hypothesis (without the already emitted tokens)
         # with the relative attention scores and remove end of sentence and
         # the last attention score
