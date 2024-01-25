@@ -19,7 +19,7 @@ import torch
 from examples.speech_to_text.simultaneous_translation.agents.v1_1.streaming.streaming_st_agent import StreamingSTAgent, \
     get_class_from_string
 from examples.speech_to_text.simultaneous_translation.agents.v1_1.streaming.text_first_history_selection import \
-    PunctuationHistorySelection
+    PunctuationHistorySelection, FixedAudioHistorySelection
 from simuleval.agents import ReadAction, WriteAction
 
 from fbk_simul_uts.v1_1.test_base_simulst_agent import BaseSTAgentTestCaseV2, MockedLoadModelVocab
@@ -217,6 +217,57 @@ class StreamAttSTPolicyTestCase(BaseSTAgentTestCaseV2, unittest.TestCase):
         self.assertEqual(action.content, "a")
         # Check first no frame discarded
         self.assertEqual(len(self.states.source[0]), 24)
+
+    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_1.'
+           'simul_offline_alignatt.AlignAttSTAgent._get_hypo_and_prefix')
+    def test_fixed_audio_selection(self, get_hypo_and_prefix):
+        hypo = {
+            "tokens": torch.tensor([4, 5, 7, 8, 0]),  # I am quokka.
+            "attention": torch.tensor([
+                [0.5, 0.05, 0.05, 0.05, 0.05, 0.3],  # first frame mostly attended
+                [0.0, 0.6, 0.05, 0.03, 0.02, 0.3],  # second frame mostly attended
+                [0.05, 0.5, 0.05, 0.05, 0.05, 0.3],  # second frame mostly attended
+                [0.0, 0.6, 0.05, 0.03, 0.02, 0.3],  # second frame mostly attended
+                [0.05, 0.05, 0.05, 0.5, 0.05, 0.3],  # last frame mostly attended
+            ]).transpose(0, 1)
+        }
+
+        self.args.history_words = 1
+        self.agent.history_selection_method = FixedAudioHistorySelection(
+            self.agent.simulst_agent.tgtdict, self.agent.simulst_agent.args)
+
+        # No prefix
+        get_hypo_and_prefix.return_value = hypo, 0
+        self.states.target_indices = []
+        self.states.source = [torch.rand(280 // 10 * 4)]
+        action = self.agent.policy(self.states)
+        self.assertIsInstance(action, WriteAction)
+        self.assertEqual(action.content, "I am")
+        # "I am" should be written but only "am" should be retained as textual history (since
+        # history_words is set to 1), therefore 280ms (corresponding to one word) should be
+        # discarded
+        self.assertEqual(len(self.states.source[0]), 280 // 10 * 3)
+
+        # History len 1: "I"
+        get_hypo_and_prefix.return_value = hypo, 1
+        self.states.target_indices = [4]
+        self.states.source = [torch.rand(280 // 10 * 4)]
+        action = self.agent.policy(self.states)
+        self.assertIsInstance(action, WriteAction)
+        self.assertEqual(action.content, "am")
+        # "am" should be written and retained as textual history (since history_words is set to 1)
+        # while "I" should be discarded, therefore 280ms (corresponding to one word) should be
+        # discarded
+        self.assertEqual(len(self.states.source[0]), 280 // 10 * 3)
+
+        # History len 1: "am"
+        get_hypo_and_prefix.return_value = hypo, 2
+        self.agent.states.target_indices = [5]
+        self.states.source = [torch.rand(280 // 10 * 4)]
+        action = self.agent.policy(self.states)
+        self.assertIsInstance(action, ReadAction)
+        # Check no frame discarded
+        self.assertEqual(len(self.states.source[0]), 280 // 10 * 4)
 
     @patch('examples.speech_to_text.simultaneous_translation.agents.v1_1.'
            'simul_offline_alignatt.AlignAttSTAgent._get_hypo_and_prefix')

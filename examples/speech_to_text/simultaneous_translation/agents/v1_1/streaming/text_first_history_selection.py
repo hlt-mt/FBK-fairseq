@@ -16,7 +16,7 @@ from typing import List
 
 import torch
 
-from examples.speech_to_text.simultaneous_translation.agents.speech_utils import BOW_PREFIX
+from examples.speech_to_text.simultaneous_translation.agents.speech_utils import BOW_PREFIX, SHIFT_SIZE
 from examples.speech_to_text.simultaneous_translation.agents.v1_1.streaming.history_selection import HistorySelection
 from fairseq.data import Dictionary
 from fairseq.data.audio.speech_to_text_dataset import SpeechToTextDataset
@@ -194,3 +194,37 @@ class PunctuationHistorySelection(AudioAttentionHistorySelectionBase):
                     f"{self.history_max_len}")
             new_history = new_history[-self.history_max_len:]
         return new_history
+
+
+class FixedAudioHistorySelection(FixedWordsHistorySelection):
+    """
+    Audio history selection method that assign to each token of the textual history a fixed
+     duration of *FIXED_WORD_DURATION* and cut the audio history, stored in *states.source*,
+     accordingly. The history for the next decoding step is defined as follows:
+     - First, a pre-defined number of words (*history_words*) is retained as textual history from
+      the textual history of the previous decoding step and the *current_hypo* that is determined
+      by the SimulST agent and added to *states.target_indices*;
+     - Second, the new audio history is selected by discarding the audio frames corresponding to
+     the number of words discarded from the textual history multiplied by *FIXED_WORD_DURATION*.
+
+     The implementation works only for SentencePiece up to now.
+    """
+    FIXED_WORD_DURATION = 280   # duration of a word (in ms) as per (Ma et al., 2021)
+
+    def audio_history(self, action: Action, states: AgentStates, new_text_history: List[int]):
+        # Compute the number of words discarded from textual history
+        n_discarded_tokens = len(states.target_indices) - len(new_text_history)
+
+        # If no discarded tokens, return the original audio
+        if n_discarded_tokens == 0:
+            return states.source[0]
+
+        discarded_tokens = states.target_indices[:n_discarded_tokens]
+
+        n_discarded_words = len(self.tgt_dict.string(
+            discarded_tokens).strip(BOW_PREFIX).split(BOW_PREFIX))
+
+        # Recover the original number of frames considering that each audio feature corresponds
+        # to 10ms (SHIFT_SIZE)
+        frames_to_discard = n_discarded_words * self.FIXED_WORD_DURATION // SHIFT_SIZE
+        return states.source[0][frames_to_discard:]
