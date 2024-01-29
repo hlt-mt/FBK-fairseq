@@ -2,7 +2,10 @@ torchaudio
 ctc_segmentation
 srt
 praat-parselmouth
+scikit-image
+h5py
 pangolinn
 soundfile
 pandas
 sentencepiece
+
