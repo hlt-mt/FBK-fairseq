@@ -81,7 +81,7 @@ class BaseSimulSTAgent:
                             help="Subword splitter type for target text")
         parser.add_argument("--tgt-splitter-path", type=str, default=None,
                             help="Subword splitter model path for target text")
-        parser.add_argument("--user-dir", type=str, default="examples/simultaneous_translation",
+        parser.add_argument("--user-dir", type=str, default=None,
                             help="User directory for simultaneous translation")
         parser.add_argument("--max-len", type=int, default=200,
                             help="Max length of translation")
@@ -130,7 +130,10 @@ class BaseSimulSTAgent:
         if self.args.config is not None:
             task_args.config_yaml = self.args.config
 
-        import_user_module(state["cfg"].common)
+        if self.args.user_dir is not None:
+            import_user_module(self.args.user_dir)
+        else:
+            import_user_module(state["cfg"].common)
 
         self.task = tasks.setup_task(task_args)
 
