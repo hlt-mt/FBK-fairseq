@@ -54,7 +54,6 @@ class FairseqSimulSTAgent(SpeechToTextAgent, BaseSimulSTAgent):
         self.to_device(self.model)
 
         self.feature_extractor = OnlineFeatureExtractorV1_1(args)
-        self.max_len = self.args.max_len
 
     def reset(self):
         """

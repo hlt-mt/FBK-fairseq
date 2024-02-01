@@ -131,10 +131,6 @@ class FixedWordsHistorySelection(AudioAttentionHistorySelectionBase):
     def text_history(self, action: Action, states: AgentStates):
         current_text = states.target_indices
 
-        # Handle multilingual case
-        if self.prefix_token_idx:
-            current_text = current_text[1:]
-
         words_to_keep = self.history_words
         new_history = []
         for idx in reversed(current_text):
@@ -149,9 +145,6 @@ class FixedWordsHistorySelection(AudioAttentionHistorySelectionBase):
                     break
         new_history.reverse()
 
-        if self.prefix_token_idx:
-            # Handle the multilingual case, the textual history has to contain the prepended idx
-            new_history = [states.target_indices[0]] + new_history
         return new_history
 
 
@@ -191,10 +184,6 @@ class PunctuationHistorySelection(AudioAttentionHistorySelectionBase):
                 break
             new_history.append(idx)
         new_history.reverse()
-
-        if self.prefix_token_idx:
-            # Handle the multilingual case, the prefix has to contain the prepended idx
-            new_history = [states.target_indices[0]] + new_history
 
         if len(new_history) > self.history_max_len:
             # If history does not contain punctuation and is longer thant HISTORY_MAX_LENGTH

@@ -42,6 +42,7 @@ class BaseSimulSTAgent:
         self.gpu = getattr(args, "gpu", False)
 
         self.args = args
+        self.max_len = self.args.max_len
 
         self.load_model_vocab()
 
@@ -62,7 +63,6 @@ class BaseSimulSTAgent:
                 }
 
         self.feature_extractor = OnlineFeatureExtractor(args)
-        self.max_len = args.max_len
 
         torch.set_grad_enabled(False)
 
@@ -150,6 +150,7 @@ class BaseSimulSTAgent:
         if self.args.prefix_token != "":
             lang_tag = SpeechToTextDataset.LANG_TAG_TEMPLATE.format(self.args.prefix_token)
             self.prefix_token_idx = self.tgtdict.index(lang_tag)
+            self.max_len = self.max_len - 1
 
         self.eos_idx = self.tgtdict.index(DEFAULT_EOS)
 

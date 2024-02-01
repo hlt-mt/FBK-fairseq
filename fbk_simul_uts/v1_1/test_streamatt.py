@@ -256,33 +256,6 @@ class StreamAttSTPolicyTestCase(BaseSTAgentTestCaseV2, unittest.TestCase):
         self.assertIsInstance(self.agent.policy(self.states), ReadAction)
 
     @patch('examples.speech_to_text.simultaneous_translation.agents.v1_1.'
-           'simul_offline_alignatt.AlignAttSTAgent._get_hypo_and_prefix')
-    def test_multilingual_emission(self, get_hypo_and_prefix):
-        hypo = {
-            "tokens": torch.tensor([1, 4, 5, 6, 7, 0]),  # <LID> I am a quokka
-            "attention": torch.tensor([
-                [0.2, 0.2, 0.2, 0.2, 0.2, 0.0],          # language ID attention (to be ignored)
-                [0.5, 0.05, 0.05, 0.05, 0.05, 0.3],      # first frame mostly attended
-                [0.0, 0.6, 0.05, 0.03, 0.02, 0.3],       # second frame mostly attended
-                [0.05, 0.5, 0.05, 0.05, 0.05, 0.3],      # second frame mostly attended
-                [0.0, 0.6, 0.05, 0.03, 0.02, 0.3],       # second frame mostly attended
-                [0.05, 0.05, 0.05, 0.5, 0.05, 0.3],      # last frame mostly attended
-            ]).transpose(0, 1)}
-
-        # Prefix len 3: "<LID> I am"
-        get_hypo_and_prefix.return_value = hypo, 3
-        self.states.target_indices = [1, 4, 5]
-        # Set language id
-        self.agent.history_selection_method.prefix_token_idx = 1
-        action = self.agent.policy(self.states)
-        self.assertIsInstance(action, WriteAction)
-        self.assertEqual(action.content, "a")
-        # Check textual history is language ID + "am a"
-        self.assertEqual(self.states.target_indices, [1, 5, 6])
-        # Check first 4 frames (corresponding to the first feature) discarded
-        self.assertEqual(len(self.states.source[0]), 20)
-
-    @patch('examples.speech_to_text.simultaneous_translation.agents.v1_1.'
            'simul_offline_alignatt.AlignAttSTAgent._emit_remaining_tokens')
     def test_finish_read(self, mock_emit_remaining_tokens):
         mock_emit_remaining_tokens.return_values = None
