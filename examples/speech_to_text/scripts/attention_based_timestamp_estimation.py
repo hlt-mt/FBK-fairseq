@@ -183,8 +183,6 @@ class DTWMedianFilterAttentionAligner(AttentionMatrixProcessor):
         trace = -np.ones((output_length + 1, input_length + 1), dtype=np.float32)
 
         cost[0, 0] = 0
-        next_boundary_idx = 0
-        prev_boundary = 1
         for j in range(1, input_length + 1):
             for i in range(1, output_length + 1):
                 c0 = cost[i - 1, j - 1]
@@ -199,22 +197,21 @@ class DTWMedianFilterAttentionAligner(AttentionMatrixProcessor):
                     c, t = c2, 2
 
                 cost[i, j] = - self.attention[i - 1, j - 1] + c
-                # Forbids that a block is assigned 0 length
-                if next_boundary_idx < len(boundaries):
-                    if i - 1 == boundaries[next_boundary_idx]:
-                        cost[i, prev_boundary] = np.inf
-                        prev_boundary = j + 1
-                        next_boundary_idx += 1
                 trace[i, j] = t
 
         # backtrace
         i = trace.shape[0] - 1
         j = trace.shape[1] - 1
-        trace[0, :] = 2
-        trace[:, 0] = 1
         # ensure at least one time step per block
-        for b_idx in boundaries:
+        trace[2:, 1] = 1
+        for i_b, b_idx in enumerate(boundaries):
+            trace[b_idx + 1:, i_b + 2] = 1
             trace[b_idx + 1, :] = 0
+
+        # force finishing the time dimension
+        trace[0, :] = 2
+        # force finishing the text dimension
+        trace[:, 0] = 1
 
         text_indices = []
         time_indices = []

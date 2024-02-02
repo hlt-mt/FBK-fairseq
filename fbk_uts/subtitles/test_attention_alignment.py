@@ -46,16 +46,22 @@ class TestAttentionAligners(unittest.TestCase):
         self.assertGreater(time_idxs[0], 0)
         self.assertGreater(time_idxs[1], time_idxs[0])
 
-    def test_dwt_zero_size_not_starting_block(self):
-        path = os.path.join(os.path.dirname(__file__), "resources/attn_string_sample.txt")
+    def dwt_assert_nonzero_block(self, attn_file, boundaries):
+        path = os.path.join(os.path.dirname(__file__), attn_file)
         with open(path) as f:
             norm_attn = f.read().strip()
         attn_aligner = DTWMedianFilterAttentionAligner(norm_attn)
-        time_idxs = attn_aligner.aligns([3, 8, 12])
-        self.assertEqual(len(time_idxs), 3)
+        time_idxs = attn_aligner.aligns(boundaries)
+        self.assertEqual(len(time_idxs), len(boundaries))
         self.assertGreater(time_idxs[0], 0)
-        self.assertGreater(time_idxs[1], time_idxs[0])
-        self.assertGreater(time_idxs[2], time_idxs[1])
+        for i in range(len(boundaries) - 1):
+            self.assertGreater(time_idxs[i + 1], time_idxs[i])
+
+    def test_dwt_zero_size_not_starting_block(self):
+        self.dwt_assert_nonzero_block("resources/attn_string_sample.txt", [3, 8, 12])
+
+    def test_dwt_zero_size_not_starting_block_2(self):
+        self.dwt_assert_nonzero_block("resources/attn_string_sample_2.txt", [3, 8, 18])
 
 
 if __name__ == '__main__':
