@@ -290,7 +290,7 @@ if __name__ == '__main__':
         help='floating point width.')
     parser.add_argument(
         '--confidence-intervals', '-ci',  default=False, action='store_true',
-        help='confidence intervals with 95% confidence level using bootstrap resampling '
+        help='confidence intervals with 95%% confidence level using bootstrap resampling '
              f'({_BOOTSTRAP_NUM_SAMPLES} samples). The number of samples can be customized by '
              'setting the environment variable BOOTSTRAP_NUM_SAMPLES.')
     parser.add_argument(
