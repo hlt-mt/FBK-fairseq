@@ -71,7 +71,7 @@ class TestSubtitleCompliance(unittest.TestCase):
  "stdev": 7.11,
  "total": 8.00,
  "compliant": 1.00,
- "version": "1.1"
+ "version": "1.2"
 }""")
         self.assertEqual(cpl_metric.score_string(2), "CPL: 12.50%")
 
@@ -115,8 +115,20 @@ class TestSubtitleCompliance(unittest.TestCase):
  "stdev": 7.11,
  "total": 8.00,
  "compliant": 1.00,
- "version": "1.1"
+ "version": "1.2"
 }""")
+
+    def test_report_scores(self):
+        subtitles = self.get_example_content("sample_de_01.srt")
+        stats = SubtitleComplianceStats.from_subtitles(subtitles)
+        reported_cpls = list(stats.report_stats("cpl", 2))
+        self.assertEqual(len(reported_cpls), 8)
+        self.assertEqual(reported_cpls[0], "40.00")
+        self.assertEqual(reported_cpls[7], "39.00")
+        reported_cpss = list(stats.report_stats("cps", 2))
+        self.assertEqual(len(reported_cpss), 4)
+        self.assertEqual(reported_cpss[0], "13.79")
+        self.assertEqual(reported_cpss[3], "16.59")
 
 
 if __name__ == '__main__':

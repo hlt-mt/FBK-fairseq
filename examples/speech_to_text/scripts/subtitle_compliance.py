@@ -19,7 +19,7 @@ from typing import List, NamedTuple, Optional
 import numpy as np
 
 _SUPPORTED_METRICS = ['cps', 'cpl', 'lpb']
-_VERSION = "1.1"
+_VERSION = "1.2"
 _CITATION = r"""@article{papi-etal-2023-direct,
       title={{Direct Speech Translation for Automatic Subtitling}}, 
       author={Sara Papi and Marco Gaido and Alina Karakanta and Mauro Cettolo and Matteo Negri and Marco Turchi},
@@ -199,6 +199,10 @@ class SubtitleComplianceStats:
         else:
             return compliance_metric.json_string(precision)
 
+    def report_stats(self, metric: str, precision: int):
+        for stat in getattr(self, metric):
+            yield ComplianceMetric._format_number(stat, precision)
+
 
 def main(args):
     """
@@ -226,6 +230,10 @@ def main(args):
 
         subtitle_stats = SubtitleComplianceStats.from_subtitles(
             subtitles, args.remove_parenthesis_content)
+        if args.sentence_level:
+            for m in args.metrics:
+                for stat in subtitle_stats.report_stats(m, args.width):
+                    print(stat)
         all_stats.append(subtitle_stats)
         if not args.quiet and len(args.srt_file) > 1:
             print(f"Compliance metrics for {srt_file}")
@@ -285,6 +293,9 @@ if __name__ == '__main__':
         help='confidence intervals with 95% confidence level using bootstrap resampling '
              f'({_BOOTSTRAP_NUM_SAMPLES} samples). The number of samples can be customized by '
              'setting the environment variable BOOTSTRAP_NUM_SAMPLES.')
+    parser.add_argument(
+        '--sentence-level', '-sl', action='store_true', default=False,
+        help='Print metrics for each sentence. Added in v1.2.')
 
     # Text preprocessing
     parser.add_argument(
@@ -301,5 +312,8 @@ if __name__ == '__main__':
     if not (srt_files_specified or parsed_args.cite):
         print("--srt-file is required")
         parser.print_usage()
+        exit(1)
+    if parsed_args.sentence_level and len(parsed_args.metrics) > 1:
+        print("Only one metric can be used in sentence-level mode.")
         exit(1)
     main(parsed_args)
