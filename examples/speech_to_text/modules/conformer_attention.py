@@ -215,12 +215,17 @@ class MultiHeadedSelfAttentionModule(nn.Module):
         self.attention = RelativeMultiHeadAttention(d_model, num_heads, dropout_p, batch_unsafe_relative_shift)
         self.dropout = FairseqDropout(p=dropout_p, module_name=self.__class__.__name__)
 
-    def forward(self, x: Tensor, mask: Optional[Tensor] = None):
+    def forward(self, x: Tensor, encoder_padding_mask: Optional[Tensor] = None):
         batch_size, seq_length, _ = x.size()
         pos_embedding = self.positional_encoding(seq_length)
         pos_embedding = pos_embedding.repeat(batch_size, 1, 1)
+        # we need attention padding mask (attn_mask) to be applied during the attention calculation,
+        # we obtain it from the encoder_padding_mask (B x T) by repeating it T times (x.shape[1]) and
+        # taking the logical or to correctly mask both T x T dimensions
+        att_mask = encoder_padding_mask.unsqueeze(1).repeat([1, x.shape[1], 1])
+        att_mask = att_mask.logical_or(att_mask.transpose(1, 2))  # B x T x T
 
         x = self.layer_norm(x)
-        outputs = self.attention(x, x, x, pos_embedding=pos_embedding, mask=mask)
+        outputs = self.attention(x, x, x, pos_embedding=pos_embedding, mask=att_mask)
 
         return self.dropout(outputs)

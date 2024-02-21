@@ -75,12 +75,7 @@ class ConformerEncoderLayer(nn.Module):
             dropout_p=self.feed_forward_dropout_p,
         )
 
-        self.attention = MultiHeadedSelfAttentionModule(
-            d_model=self.encoder_dim,
-            num_heads=self.num_attention_heads,
-            dropout_p=self.attention_dropout_p,
-            batch_unsafe_relative_shift=self.batch_unsafe_relative_shift,
-        )
+        self.attention = self.build_attention(args)
 
         self.conv_module = ConformerConvModule(
             in_channels=self.encoder_dim,
@@ -98,16 +93,19 @@ class ConformerEncoderLayer(nn.Module):
 
         self.layernorm = nn.LayerNorm(self.encoder_dim)
 
+    def build_attention(self, args):
+        return MultiHeadedSelfAttentionModule(
+            d_model=self.encoder_dim,
+            num_heads=self.num_attention_heads,
+            dropout_p=self.attention_dropout_p,
+            batch_unsafe_relative_shift=self.batch_unsafe_relative_shift,
+        )
+
     def forward(self, x: Tensor, encoder_padding_mask: Tensor) -> Tensor:
         x = x.transpose(0, 1)  # B x T x C
         new_x = self.first_feed_forward(x)
         x = new_x * self.feed_forward_residual_factor + x
-        # we need attention padding mask (attn_mask) to be applied during the attention calculation,
-        # we obtain it from the encoder_padding_mask (B x T) by repeating it T times (x.shape[1]) and
-        # taking the logical or to correctly mask both T x T dimensions
-        att_mask = encoder_padding_mask.unsqueeze(1).repeat([1, x.shape[1], 1])
-        att_mask = att_mask.logical_or(att_mask.transpose(1, 2))    # B x T x T
-        new_x = self.attention(x, att_mask)
+        new_x = self.attention(x, encoder_padding_mask)
         x = new_x + x
         new_x = self.conv_module(x, encoder_padding_mask)
         x = new_x + x
