@@ -3,6 +3,10 @@
 This repository contains the open source code by the MT unit of FBK.
 Dedicated README for each work can be found in the `fbk_works` directory.
 
+ ### 2024
+
+ - [[LREC-COLING 2024] **How do Hyenas deal with Human Speech? Speech Recognition and Translation with ConfHyena**](fbk_works/HYENA_COLING2024.md)
+
  ### 2023
 
  - [[CLiC-IT 2023] **How To Build Competitive Multi-gender Speech Translation Models For Controlling Speaker Gender Translation**](fbk_works/MULTIGENDER_CLIC_2023.md)
