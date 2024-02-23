@@ -22,7 +22,7 @@ import torch
 from examples.speech_to_text.data.occlusion_dataset import OccludedSpeechToTextDataset
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import SpeechToTextDatasetWithSrc
 from examples.speech_to_text.occlusion_explanation.aggregator import Aggregator, decode_line
-from examples.speech_to_text.occlusion_explanation.encoder_perturbator import OcclusionFbankPerturbatorContinuous
+from examples.speech_to_text.occlusion_explanation.perturbators.encoder_perturbator import OcclusionFbankPerturbatorContinuous
 from fairseq.data import ConcatDataset
 from fairseq.data.audio.speech_to_text_dataset import SpeechToTextDataset
 from fbk_uts.occlusion_explanation.test_occlusion_dataset import MockDataConfig, MockDictionary

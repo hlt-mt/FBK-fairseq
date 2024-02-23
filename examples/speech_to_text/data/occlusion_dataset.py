@@ -19,7 +19,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from examples.speech_to_text.occlusion_explanation.encoder_perturbator import OcclusionFbankPerturbator
+from examples.speech_to_text.occlusion_explanation.perturbators.encoder_perturbator import OcclusionFbankPerturbator
 from fairseq.data import ConcatDataset, BaseWrapperDataset, Dictionary
 from fairseq.data.audio.speech_to_text_dataset import _collate_frames, SpeechToTextDataset
 from fairseq.data import data_utils

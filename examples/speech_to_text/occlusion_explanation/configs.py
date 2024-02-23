@@ -18,12 +18,11 @@ from typing import Union
 from dataclasses import dataclass, field
 import yaml
 
-from examples.speech_to_text.occlusion_explanation import (
+from examples.speech_to_text.occlusion_explanation.perturbators import (
     get_perturbator,
     OcclusionFbankPerturbator,
-    OcclusionDecoderEmbeddingsPerturbator,
-    get_scorer,
-    Scorer)
+    OcclusionDecoderEmbeddingsPerturbator)
+from examples.speech_to_text.occlusion_explanation.scorers import get_scorer, Scorer
 from fairseq.dataclass import FairseqDataclass
 
 from fairseq.dataclass.utils import gen_parser_from_dataclass

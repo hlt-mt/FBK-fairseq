@@ -16,7 +16,7 @@ from typing import Optional, List, Tuple, Dict
 
 from torch import Tensor, LongTensor
 
-from examples.speech_to_text.occlusion_explanation.decoder_perturbator import \
+from examples.speech_to_text.occlusion_explanation.perturbators import \
     OcclusionDecoderEmbeddingsPerturbator
 from fairseq.data import Dictionary
 from fairseq.models.speech_to_text import TransformerDecoderScriptable

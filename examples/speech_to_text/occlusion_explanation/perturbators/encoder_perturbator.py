@@ -21,7 +21,7 @@ from skimage.segmentation import slic
 import torch
 from torch import Tensor
 
-from examples.speech_to_text.occlusion_explanation import \
+from examples.speech_to_text.occlusion_explanation.perturbators import \
     register_perturbator, OcclusionFbankPerturbator
 
 

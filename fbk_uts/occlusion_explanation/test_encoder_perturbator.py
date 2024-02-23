@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 import torch
 
-from examples.speech_to_text.occlusion_explanation.encoder_perturbator import \
+from examples.speech_to_text.occlusion_explanation.perturbators.encoder_perturbator import \
     OcclusionFbankPerturbatorContinuous, OcclusionFbankPerturbatorDiscreteFrequency, \
     OcclusionFbankPerturbatorDiscreteTime, SlicOcclusionFbankPerturbator
 

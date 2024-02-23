@@ -20,7 +20,7 @@ from torch import Tensor, tensor
 
 from examples.speech_to_text.data.occlusion_dataset import OccludedSpeechToTextDataset
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import SpeechToTextDatasetWithSrc
-from examples.speech_to_text.occlusion_explanation.encoder_perturbator import OcclusionFbankPerturbatorContinuous, \
+from examples.speech_to_text.occlusion_explanation.perturbators.encoder_perturbator import OcclusionFbankPerturbatorContinuous, \
     SlicOcclusionFbankPerturbator
 from fairseq.data import Dictionary, ConcatDataset
 from fairseq.data.audio.speech_to_text_dataset import SpeechToTextDataset

@@ -17,7 +17,7 @@ from typing import Tuple
 import torch
 from torch import Tensor
 
-from examples.speech_to_text.occlusion_explanation import (
+from examples.speech_to_text.occlusion_explanation.perturbators import (
     register_perturbator,
     OcclusionDecoderEmbeddingsPerturbator)
 

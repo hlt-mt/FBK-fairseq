@@ -1,4 +1,4 @@
-# Copyright 2023 FBK
+# Copyright 2024 FBK
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 
-from typing import Dict, Tuple
-
 import torch
 from torch import Tensor
 
-from examples.speech_to_text.occlusion_explanation import register_scorer, Scorer
+from examples.speech_to_text.occlusion_explanation.scorers import register_scorer, Scorer
 
 
 @register_scorer("predicted_token_diff")
@@ -38,20 +36,3 @@ class PredictedTokenDifferenceScorer(Scorer):
         token_orig_probs = torch.take_along_dim(orig_probs, target.unsqueeze(-1), dim=2)
         token_perturb_probs = torch.take_along_dim(perturb_probs, target.unsqueeze(-1), dim=2)
         return token_orig_probs - token_perturb_probs
-
-
-@register_scorer("KL")
-class KLScorer(PredictedTokenDifferenceScorer):
-    """
-    Compute the difference between the original and perturbed probability distributions,
-    using KL divergence.
-    """
-    def get_prob_diff(
-            self,
-            orig_probs: Tensor,
-            perturb_probs: Tensor,
-            *args) -> Tensor:
-        """
-        Compute KL divergence between the two probabiity distributions.
-        """
-        return (orig_probs * orig_probs.log() - orig_probs * perturb_probs.log()).sum(dim=2).unsqueeze(-1)

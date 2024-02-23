@@ -19,7 +19,7 @@ import torch
 
 from examples.speech_to_text.occlusion_explanation.occlusion_transformer_decoder import \
     OcclusionTransformerDecoderScriptable
-from examples.speech_to_text.occlusion_explanation.decoder_perturbator import (
+from examples.speech_to_text.occlusion_explanation.perturbators.decoder_perturbator import (
     OcclusionDecoderEmbeddingsPerturbatorContinuous,
     OcclusionDecoderEmbeddingsPerturbatorDiscrete)
 from fairseq.models.transformer import base_architecture
