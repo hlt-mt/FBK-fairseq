@@ -53,8 +53,8 @@ class Scorer:
         """
         batch_size, max_length, vocab_size = perturb_probs.size()
         batched_orig_probs = torch.zeros(
-            (batch_size, max_length, vocab_size), dtype=torch.long, device=perturb_probs.device)
-        batched_perturb_probs = batched_orig_probs
+            (batch_size, max_length, vocab_size), dtype=torch.float, device=perturb_probs.device)
+        batched_perturb_probs = batched_orig_probs.clone()
         for i in range(batch_size):
             single_orig_prob = orig_probs[str(orig_indices[i].item())]
             single_perturb_prob = perturb_probs[i, :target_lengths[i].item(), :]

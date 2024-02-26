@@ -96,6 +96,19 @@ class TestScorer(unittest.TestCase):
         self.assertTrue(torch.equal(batched_orig_probs, expected_batched_probs))
         self.assertTrue(torch.equal(batched_perturb_probs, expected_batched_probs))
 
+    # Test that float probs are preserved in get_padded_probs()
+    def test_get_padded_probs_type(self):
+        orig_probs = {
+            "0": torch.full((6, 10), 3.1416),
+            "1": torch.full((7, 10), 3.1416),
+            "3": torch.full((9, 10), 3.1416)}
+        perturb_probs = torch.full((3, 9, 10), 3.0)
+        batched_orig_probs, batched_perturb_probs = self.scorer.get_padded_probs(
+            orig_probs, perturb_probs, self.sample["orig_id"], self.sample["net_input"]["target_lengths"])
+        self.assertTrue(3.1416 in batched_orig_probs)
+        self.assertTrue(3.0 in batched_perturb_probs)
+        self.assertFalse(torch.equal(batched_orig_probs, batched_perturb_probs))
+
     def test_get_prob_diff_single(self):
         orig_probs = torch.tensor(
             [
