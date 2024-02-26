@@ -50,14 +50,16 @@ class PerturbConfig(object):
             self,
             occlusion_choice
         ) -> Union[OcclusionFbankPerturbator, OcclusionDecoderEmbeddingsPerturbator]:
-        assert occlusion_choice == "fbank_occlusion" or occlusion_choice == "decoder_occlusion"
         if occlusion_choice == "fbank_occlusion":
             category = "continuous_fbank"
+            if "fbank_occlusion" not in self.perturb_cfg:
+                LOGGER.info("'fbank_occlusion' not in yaml file. Default values will be used.")
         elif occlusion_choice == "decoder_occlusion":
             category = "continuous_embed"
+            if "decoder_occlusion" not in self.perturb_cfg:
+                LOGGER.info("'decoder_occlusion' not in yaml file. Default values will be used.")
         else:
-            raise ValueError(
-                "Invalid value for 'occlusion_choice'. Must be one of ['fbank_occlusion', 'decoder_occlusion'].")
+            raise ValueError("Invalid value for 'occlusion_choice'.")
         perturbation_category = self.perturb_cfg.get(occlusion_choice, {}).get("category", category)
         perturbation_class = get_perturbator(perturbation_category)
         return perturbation_class.from_config_dict(self.perturb_cfg)
