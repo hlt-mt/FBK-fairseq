@@ -43,7 +43,7 @@ class OccludedSpeechToTextDataset(BaseWrapperDataset):
                 "Datasets must be an instance of SpeechToTextDataset."
         self.perturbator = perturbator
         self.tgt_dict = tgt_dict
-        self.n_masks = self.perturbator.n_masks
+        self.n_masks = int(self.perturbator.n_masks)
 
     def _original_index(self, perturb_index: int) -> int:
         """
