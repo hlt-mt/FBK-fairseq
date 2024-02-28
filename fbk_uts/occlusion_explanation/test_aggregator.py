@@ -168,6 +168,66 @@ class TestAggregator(unittest.TestCase):
         self.assertTrue(torch.all(self.aggregator.final_masks[0]["tgt_embed_mask"] == 2))
         self.assertEqual(self.aggregator.final_masks[0]["src_text"], "source text 1")
 
+    # test _update_heatmaps() with continuous heatmaps for filterbanks and
+    # discrete heatmaps for target embeddings (last dimension is 1)
+    def test_update_heatmaps_discrete_tgt(self):
+        previous_fbank_heatmap = torch.zeros(4, 7, 10)  # (seq_len, time, channels)
+        previous_tgt_embed_heatmap = torch.zeros(4, 4, 1)
+        previous_fbank_mask = torch.zeros(1, 7, 10)  # (1, time, channels)
+        previous_tgt_embed_mask = torch.zeros(1, 4, 1)
+        self.aggregator.final_masks = {1: {
+            "fbank_heatmap": previous_fbank_heatmap,
+            "tgt_embed_heatmap": previous_tgt_embed_heatmap,
+            "fbank_mask": previous_fbank_mask,
+            "tgt_embed_mask": previous_tgt_embed_mask,
+            "n_masks": 2}}
+        self.aggregator._update_heatmaps(
+            self.collated_data_batch1,
+            torch.ones(3, 4, 7, 10),
+            torch.ones(3, 1, 7, 10),
+            torch.ones(3, 4, 4, 1),
+            torch.ones(3, 1, 4, 1))
+        # check if size of heatmaps is preserved
+        self.assertEqual(self.aggregator.final_masks[0]["fbank_heatmap"].shape, (3, 6, 10))
+        self.assertEqual(self.aggregator.final_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 1))
+        self.assertEqual(self.aggregator.final_masks[1]["fbank_heatmap"].shape, (4, 7, 10))
+        self.assertEqual(self.aggregator.final_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 1))
+        # check if size of masks is preserved
+        self.assertEqual(self.aggregator.final_masks[0]["fbank_mask"].shape, (1, 6, 10))
+        self.assertEqual(self.aggregator.final_masks[0]["tgt_embed_mask"].shape, (1, 3, 1))
+        self.assertEqual(self.aggregator.final_masks[1]["fbank_mask"].shape, (1, 7, 10))
+        self.assertEqual(self.aggregator.final_masks[1]["tgt_embed_mask"].shape, (1, 4, 1))
+
+    # test _update_heatmaps() with discrete heatmaps for filterbanks (last dimension is 1)
+    # and continuous heatmaps for target embeddings.
+    def test_update_heatmaps_discrete_fbank(self):
+        previous_fbank_heatmap = torch.zeros(4, 7, 1)  # (seq_len, time, 1)
+        previous_tgt_embed_heatmap = torch.zeros(4, 4, 24)
+        previous_fbank_mask = torch.zeros(1, 7, 1)  # (1, time, 1)
+        previous_tgt_embed_mask = torch.zeros(1, 4, 24)
+        self.aggregator.final_masks = {1: {
+            "fbank_heatmap": previous_fbank_heatmap,
+            "tgt_embed_heatmap": previous_tgt_embed_heatmap,
+            "fbank_mask": previous_fbank_mask,
+            "tgt_embed_mask": previous_tgt_embed_mask,
+            "n_masks": 2}}
+        self.aggregator._update_heatmaps(
+            self.collated_data_batch1,
+            torch.ones(3, 4, 7, 1),
+            torch.ones(3, 1, 7, 1),
+            torch.ones(3, 4, 4, 24),
+            torch.ones(3, 1, 4, 24))
+        # check if size of heatmaps is preserved
+        self.assertEqual(self.aggregator.final_masks[0]["fbank_heatmap"].shape, (3, 6, 1))
+        self.assertEqual(self.aggregator.final_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 24))
+        self.assertEqual(self.aggregator.final_masks[1]["fbank_heatmap"].shape, (4, 7, 1))
+        self.assertEqual(self.aggregator.final_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 24))
+        # check if size of masks is preserved
+        self.assertEqual(self.aggregator.final_masks[0]["fbank_mask"].shape, (1, 6, 1))
+        self.assertEqual(self.aggregator.final_masks[0]["tgt_embed_mask"].shape, (1, 3, 24))
+        self.assertEqual(self.aggregator.final_masks[1]["fbank_mask"].shape, (1, 7, 1))
+        self.assertEqual(self.aggregator.final_masks[1]["tgt_embed_mask"].shape, (1, 4, 24))
+
     # test _update_heatmaps() with two batches involved and different padding lengths
     def test_update_heatmaps_multiple_batch(self):
         self.aggregator._update_heatmaps(

@@ -69,27 +69,47 @@ class Scorer:
             fbank_masks: Tensor,
             tgt_embed_masks: Tensor) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """
-        Obtains heatmaps through element-wise multiplication between prob difference and masks.
+        Return 4D heatmaps and masks for both filterbanks and target embeddings.
+        Heatmaps are obtained through element-wise multiplication between scores and masks.
+        These tensors undergo (un)squeeze operations which make them broadcastable.
 
-        The shapes of the masks and probabilities Tensors are:
-            - fbank_masks: (batch size, time, channels)
-            - tgt_embed_masks: (batch size, sequence length, embedding dimension)
-            - probs: (batch size, sequence length, vocabulary size).
-        From probs, toke_probs with shape (batch size, sequence length, 1) is obtained.
-        In order to make these Tensors broadcastable and to obtain outputs with shape
-        (batch size, sequence length, time/sequence length, channels/embedding dimension),
-        namely single 2D heatmaps for each batch and for each token, their shapes become
-            - fbank_masks: (batch size, 1, time, channels)
-            - tgt_embed_masks: (batch size, 1, sequence length, embedding dimension)
-            - token_probs: (batch size, sequence length, 1, 1).
+        The shapes of the masks for the filterbank and the target embeddings can have various shapes.
+        If they are derived from continuous or slic-based perturbations they are:
+        - fbank_masks: (batch size, time, channels)
+        - tgt_embed_masks: (batch size, sequence length, embedding dimension)
+        If they are derived from discrete perturbations they are:
+        - fbank_masks: (batch size, time)
+        - tgt_embed_masks: (batch size, sequence length)
+        To account for this variability, an initial condition with an unsqueeze operation is made;
+        thus, the heatmaps are always 4D.
+
+        The tensor containing the scores to be assigned to the masks, instead, has shape
+        (batch size, sequence length, 1).
         """
-        # Making masks with shape (batch_size, 1, time/seq_length, channels/embedding_dim)
-        fbank_masks = 1 - fbank_masks
-        tgt_embed_masks = 1 - tgt_embed_masks
+        # Expand heatmaps with dimensions (batch_size, time/seq_length) to have an
+        # additional dimension (batch_size, time/seq_length, 1)
+        if len(fbank_masks.size()) < 3:
+            fbank_masks = fbank_masks.unsqueeze(-1)
+        if len(tgt_embed_masks.size()) < 3:
+            tgt_embed_masks = tgt_embed_masks.unsqueeze(-1)
+
+        # Expand heatmaps with dimensions (batch_size, time/seq_length, 1) or
+        # (batch_size, time/sequence_length, channels/embed_dim/1) to have an
+        # additional dimension (batch_size, 1, time/sequence_length, channels/embed_dim/1)
         fbank_masks = fbank_masks.unsqueeze(1)
         tgt_embed_masks = tgt_embed_masks.unsqueeze(1)
-        single_fbank_heatmaps = fbank_masks * scores.unsqueeze(-1)
-        single_tgt_embed_heatmaps = tgt_embed_masks * scores.unsqueeze(-1)
+
+        # logical negation as scores as assigned to zeroed out elements
+        fbank_masks = 1 - fbank_masks
+        tgt_embed_masks = 1 - tgt_embed_masks
+
+        # Expand scores with dimensions (batch size, sequence length, 1) to have an
+        # additional dimension (batch size, sequence length, 1, 1)
+        scores = scores.unsqueeze(-1)
+
+        single_fbank_heatmaps = fbank_masks * scores
+        single_tgt_embed_heatmaps = tgt_embed_masks * scores
+
         return single_fbank_heatmaps, fbank_masks, single_tgt_embed_heatmaps, tgt_embed_masks
 
     @staticmethod
@@ -98,8 +118,8 @@ class Scorer:
         Enforces causality in the tgt_embed_heatmaps by zeroing out the embeddings related
         to the tokens after the one that is being considered. This is needed because the
         masks are created for the entire sequence to be generated and used also for the
-        padded tokens; they have shape (batch, seq_len, seq_len, embed_dim), where seq_len
-        is the length of the longest sequence (the other sequences are padded).
+        padded tokens. Heatmaps have shape (batch, seq_len, seq_len, embed_dim/1), where
+        seq_len is the length of the longest sequence (the other sequences are padded).
         """
         sequence_length = heatmaps.shape[1]
         mask = torch.tril(torch.ones((sequence_length, sequence_length), device=heatmaps.device))

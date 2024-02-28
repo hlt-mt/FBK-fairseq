@@ -78,10 +78,10 @@ class Aggregator:
             # Strip padding
             src_length = collated_data["net_input"]["src_lengths"][i].item()
             target_length = collated_data["net_input"]["target_lengths"][i].item()
-            current_fbank_heatmap = fbank_heatmaps[i][:target_length, :src_length, :]
-            current_tgt_embed_heatmap = tgt_embed_heatmaps[i][:target_length, :target_length, :]
-            current_fbank_mask = fbank_masks[i][:target_length, :src_length, :]
-            current_tgt_embed_mask = tgt_embed_masks[i][:target_length, :target_length, :]
+            current_fbank_heatmap = fbank_heatmaps[i][:target_length, :src_length]
+            current_tgt_embed_heatmap = tgt_embed_heatmaps[i][:target_length, :target_length]
+            current_fbank_mask = fbank_masks[i][:target_length, :src_length]
+            current_tgt_embed_mask = tgt_embed_masks[i][:target_length, :target_length]
             if ind in self.final_masks.keys():
                 self.final_masks[ind]["n_masks"] += 1
                 self.final_masks[ind]["fbank_heatmap"] += current_fbank_heatmap
@@ -129,10 +129,10 @@ class Aggregator:
         Args:
             - sample: output of the collater;
             - fbank_heatmaps: Tensor: single heatmaps related to each filterbank of the
-            batch; the shape is (batch_size, sequence length, time, channels);
-            - tgt_embed_heatmaps: Tensor: single heatmaps related to each
-            filterbank of the batch; the shape is (batch_size, sequence length, sequence
-            length, embedding dimension);
+            batch; the shape is (batch_size, sequence length, time, channels) or
+            (batch_size, sequence length, time/channels, 1) depending on the type of perturbation;
+            - tgt_embed_heatmaps: Tensor: single heatmaps related to the embeddings of each
+            token; the shape is (batch_size, sequence length, sequence length, embedding dimension/1);
         Returns:
             - None
         """

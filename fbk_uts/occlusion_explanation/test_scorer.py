@@ -171,6 +171,7 @@ class TestScorer(unittest.TestCase):
         scores = scorer.get_prob_diff(orig_probs, perturb_probs, self.sample["net_input"]["target"])
         self.assertEqual(scores.size(), Size([3, 8, 1]))
 
+    # test make_heatmaps_causal() when the masking strategy is 'continuous', thus producing 2D heatmaps
     def test_make_heatmaps_causal(self):
         # Batch size, sequence length, sequence length, embedding dimension
         heatmaps = torch.ones((1, 3, 3, 5))
@@ -198,6 +199,21 @@ class TestScorer(unittest.TestCase):
         causality_heatmaps_empty = self.scorer._make_heatmaps_causal(heatmaps_empty)
         self.assertTrue(torch.equal(causality_heatmaps_empty, heatmaps_empty))
 
+    # test make_heatmaps_causal() when the masking strategy is 'discrete'
+    def test_make_heatmaps_causal_discrete(self):
+        heatmaps = torch.ones((2, 3, 3, 1))  # (Batch size, sequence length, sequence length, 1)
+        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps)
+        expected_heatmaps = torch.tensor(
+            [[[[1.], [0.], [0.]],
+              [[1.], [1.], [0.]],
+              [[1.], [1.], [1.]]],
+             [[[1.], [0.], [0.]],
+              [[1.], [1.], [0.]],
+              [[1.], [1.], [1.]]]])
+        self.assertTrue(torch.equal(causality_heatmaps, expected_heatmaps))
+
+    # test get_heatmaps() when the masking strategy is continuous for both filterbank and
+    # target embeddings, thus producing 2D heatmaps
     def test_get_heatmaps(self):
         _tgt_embed_masks = torch.zeros(3, 4, 6)
         scores = torch.tensor([[[1], [4], [0], [-1]], [[2], [3], [8], [1]], [[-1], [4], [-1], [-1]]])
@@ -383,6 +399,203 @@ class TestScorer(unittest.TestCase):
                         [-1, -1, -1, -1, -1, -1]]]])
         self.assertTrue(torch.equal(tgt_embed_masks, torch.ones(3, 4, 6).unsqueeze(1)))
         self.assertTrue(torch.equal(fbank_masks, torch.ones(3, 8, 7).unsqueeze(1)))
+        self.assertTrue(torch.equal(single_fbank_heatmaps, expected_single_fbank_heatmaps))
+        self.assertTrue(torch.equal(single_tgt_embed_heatmaps, expected_single_tgt_embed_heatmaps))
+
+    # test get_heatmaps() with continuous (2D) heatmaps for filterbanks and discrete (1D) heatmaps
+    # for target embeddings
+    def test_get_heatmaps_tgt_discrete_tgt_embed(self):
+        _tgt_embed_masks = torch.zeros(3, 4)
+        scores = torch.tensor([[[1], [4], [0], [-1]], [[2], [3], [8], [1]], [[-1], [4], [-1], [-1]]])
+        single_fbank_heatmaps, fbank_masks, single_tgt_embed_heatmaps, tgt_embed_masks = \
+            self.scorer.get_heatmaps(scores, self.sample["masks"], _tgt_embed_masks)
+        expected_single_fbank_heatmaps = torch.tensor(
+            [[[[1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1]],
+              [[4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4]],
+              [[0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0]],
+              [[-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1]]],
+             [[[2, 2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2, 2]],
+              [[3, 3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3, 3]],
+              [[8, 8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8, 8]],
+              [[1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1, 1]]],
+             [[[-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1]],
+              [[4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4, 4]],
+              [[-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1]],
+              [[-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1, -1]]]])
+        expected_single_tgt_embed_heatmaps = torch.tensor(
+            [[[[1], [1], [1], [1]],
+              [[4], [4], [4], [4]],
+              [[0], [0], [0], [0]],
+              [[-1], [-1], [-1], [-1]]],
+             [[[2], [2], [2], [2]],
+              [[3], [3], [3], [3]],
+              [[8], [8], [8], [8]],
+              [[1], [1], [1], [1]]],
+             [[[-1], [-1], [-1], [-1]],
+              [[4], [4], [4], [4]],
+              [[-1], [-1], [-1], [-1]],
+              [[-1], [-1], [-1], [-1]]]])
+        self.assertTrue(torch.equal(fbank_masks, torch.ones(3, 8, 7).unsqueeze(1)))
+        self.assertTrue(torch.equal(single_fbank_heatmaps, expected_single_fbank_heatmaps))
+        self.assertTrue(torch.equal(tgt_embed_masks, torch.ones(3, 1, 4, 1)))
+        self.assertTrue(torch.equal(single_tgt_embed_heatmaps, expected_single_tgt_embed_heatmaps))
+
+    # test get_heatmaps() with discrete (1D) heatmaps for filterbanks and continuous (2D) heatmaps
+    # for target embeddings
+    def test_get_heatmaps_tgt_discrete(self):
+        _tgt_embed_masks = torch.zeros(3, 4, 6)
+        scores = torch.tensor([[[1], [4], [0], [-1]], [[2], [3], [8], [1]], [[-1], [4], [-1], [-1]]])
+        self.sample["masks"] = torch.zeros(3, 8)
+        single_fbank_heatmaps, fbank_masks, single_tgt_embed_heatmaps, tgt_embed_masks = \
+            self.scorer.get_heatmaps(scores, self.sample["masks"], _tgt_embed_masks)
+        expected_single_fbank_heatmaps = torch.tensor(
+            [[[[1], [1], [1], [1], [1], [1], [1], [1]],
+              [[4], [4], [4], [4], [4], [4], [4], [4]],
+              [[0], [0], [0], [0], [0], [0], [0], [0]],
+              [[-1], [-1], [-1], [-1], [-1], [-1], [-1], [-1]]],
+             [[[2], [2], [2], [2], [2], [2], [2], [2]],
+              [[3], [3], [3], [3], [3], [3], [3], [3]],
+              [[8], [8], [8], [8], [8], [8], [8], [8]],
+              [[1], [1], [1], [1], [1], [1], [1], [1]]],
+             [[[-1], [-1], [-1], [-1], [-1], [-1], [-1], [-1]],
+              [[4], [4], [4], [4], [4], [4], [4], [4]],
+              [[-1], [-1], [-1], [-1], [-1], [-1], [-1], [-1]],
+              [[-1], [-1], [-1], [-1], [-1], [-1], [-1], [-1]]]])
+        expected_single_tgt_embed_heatmaps = torch.tensor(
+            [[[[1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1]],
+              [[4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4]],
+              [[0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0]],
+              [[-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1]]],
+             [[[2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2],
+               [2, 2, 2, 2, 2, 2]],
+              [[3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3],
+               [3, 3, 3, 3, 3, 3]],
+              [[8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8],
+               [8, 8, 8, 8, 8, 8]],
+              [[1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1, 1]]],
+             [[[-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1]],
+              [[4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4],
+               [4, 4, 4, 4, 4, 4]],
+              [[-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1]],
+              [[-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1],
+               [-1, -1, -1, -1, -1, -1]]]])
+        self.assertTrue(torch.equal(tgt_embed_masks, torch.ones(3, 4, 6).unsqueeze(1)))
+        self.assertTrue(torch.equal(fbank_masks, torch.ones(3, 8, 1).unsqueeze(1)))
         self.assertTrue(torch.equal(single_fbank_heatmaps, expected_single_fbank_heatmaps))
         self.assertTrue(torch.equal(single_tgt_embed_heatmaps, expected_single_tgt_embed_heatmaps))
 
