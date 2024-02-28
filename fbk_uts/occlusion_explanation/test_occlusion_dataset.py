@@ -20,8 +20,10 @@ from torch import Tensor, tensor
 
 from examples.speech_to_text.data.occlusion_dataset import OccludedSpeechToTextDataset
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import SpeechToTextDatasetWithSrc
-from examples.speech_to_text.occlusion_explanation.perturbators.encoder_perturbator import OcclusionFbankPerturbatorContinuous, \
-    SlicOcclusionFbankPerturbator
+from examples.speech_to_text.occlusion_explanation.perturbators.discrete_fbank import \
+    ContinuousOcclusionFbankPerturbator
+from examples.speech_to_text.occlusion_explanation.perturbators.slic_fbank import \
+    SlicOcclusionFbankPerturbatorFixedSegments
 from fairseq.data import Dictionary, ConcatDataset
 from fairseq.data.audio.speech_to_text_dataset import SpeechToTextDataset
 
@@ -70,7 +72,7 @@ class MockDataConfig:
 
 class TestOcclusionDataset(unittest.TestCase):
     def setUp(self):
-        self.mock_perturbator = OcclusionFbankPerturbatorContinuous(mask_probability=0.5, n_masks=5)
+        self.mock_perturbator = ContinuousOcclusionFbankPerturbator(mask_probability=0.5, n_masks=5)
         current_directory = os.path.dirname(__file__)
         relative_path1 = os.path.join('mock_fbanks', 'array1.npy')
         relative_path2 = os.path.join('mock_fbanks', 'array2.npy')
@@ -121,14 +123,18 @@ class TestOcclusionDataset(unittest.TestCase):
 
     # Check that n_masks is dynamically assigned based on the type of perturbator
     def test_attribute_n_masks(self):
-        mock_slic_perturbator = SlicOcclusionFbankPerturbator(
-            mask_probability=0.5, n_masks=5, segments_range=(2, 3), segments_step=1, slic_sigma=5)
+        mock_slic_perturbator = SlicOcclusionFbankPerturbatorFixedSegments(
+            n_masks=32,
+            mask_probability=0.5,
+            n_segments=(1, 4, 8),
+            slic_sigma=1,
+            compactness=0.1)
         slic_occlusion_dataset = OccludedSpeechToTextDataset(
             to_be_occluded_dataset=self.concat_datasets,
             perturbator=mock_slic_perturbator,
             tgt_dict=MockDictionary())
-        self.assertEqual(slic_occlusion_dataset.n_masks, 4)
-        self.assertTrue(self.occlusion_dataset.n_masks, 5)
+        self.assertEqual(slic_occlusion_dataset.n_masks, 30)
+        self.assertTrue(self.occlusion_dataset.n_masks, 30)
 
     def test_original_index(self):
         perturb_indices = [7, 6, 0]
@@ -227,7 +233,7 @@ class TestOcclusionDataset(unittest.TestCase):
         self.assertEqual(size_id7, (150, 1))
 
     def test_ordered_indices(self):
-        mock_perturbator = OcclusionFbankPerturbatorContinuous(mask_probability=0.5, n_masks=4)
+        mock_perturbator = ContinuousOcclusionFbankPerturbator(mask_probability=0.5, n_masks=4)
         mock_dataset = SpeechToTextDataset(
             split="mock_split",
             is_train_split=False,

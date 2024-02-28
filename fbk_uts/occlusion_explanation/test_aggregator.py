@@ -22,7 +22,7 @@ import torch
 from examples.speech_to_text.data.occlusion_dataset import OccludedSpeechToTextDataset
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import SpeechToTextDatasetWithSrc
 from examples.speech_to_text.occlusion_explanation.aggregator import Aggregator, decode_line
-from examples.speech_to_text.occlusion_explanation.perturbators.encoder_perturbator import OcclusionFbankPerturbatorContinuous
+from examples.speech_to_text.occlusion_explanation.perturbators.discrete_fbank import ContinuousOcclusionFbankPerturbator
 from fairseq.data import ConcatDataset
 from fairseq.data.audio.speech_to_text_dataset import SpeechToTextDataset
 from fbk_uts.occlusion_explanation.test_occlusion_dataset import MockDataConfig, MockDictionary
@@ -34,7 +34,7 @@ class TestAggregator(unittest.TestCase):
         current_directory = os.path.dirname(__file__)
         self.args.save_file = current_directory + "/file"
         self.mock_dict = MockDictionary()
-        self.mock_perturbator = OcclusionFbankPerturbatorContinuous(mask_probability=0.5, n_masks=2)
+        self.mock_perturbator = ContinuousOcclusionFbankPerturbator(mask_probability=0.5, n_masks=2)
         self.mock_dataset = SpeechToTextDataset(
             split="mock_split",
             is_train_split=False,
