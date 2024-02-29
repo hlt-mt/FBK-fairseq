@@ -21,7 +21,6 @@ import logging
 import os
 import sys
 from argparse import Namespace
-from itertools import chain
 from dataclasses import dataclass, field
 
 import h5py
@@ -98,7 +97,7 @@ def _main(cfg: DictConfig, output_file, save_file):
         dataset=task.dataset(cfg.dataset.gen_subset),
         max_tokens=cfg.dataset.max_tokens,
         max_sentences=cfg.dataset.batch_size,
-        max_positions=utils.resolve_max_positions(task.max_positions(), * model.max_positions()),
+        max_positions=utils.resolve_max_positions(task.max_positions(), model.max_positions()),
         ignore_invalid_inputs=cfg.dataset.skip_invalid_size_inputs_valid_test,
         required_batch_size_multiple=cfg.dataset.required_batch_size_multiple,
         seed=cfg.common.seed,
