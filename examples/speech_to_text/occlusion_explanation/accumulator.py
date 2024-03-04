@@ -39,10 +39,9 @@ def decode_line(
     return decoded_sentence
 
 
-class Aggregator:
+class Accumulator:
     """
-    Class that aggregates the single heatmaps for each sample,
-    performs saving, and cleans the cache.
+    Accumulates the single heatmaps for each sample, performs saving, and cleans the cache.
     """
     def __init__(
             self,
@@ -124,8 +123,8 @@ class Aggregator:
             target_embedding_heatmaps: Tensor,
             tgt_embed_masks) -> None:
         """
-        Aggregates the single heatmaps to obtain the final attribution maps,
-        then saves them. Aggregation consists in a sort of normalization.
+        Accumulates the single heatmaps to obtain the final attribution maps,
+        then saves them. Accumulation consists in a sort of normalization.
         Args:
             - sample: output of the collater;
             - fbank_heatmaps: Tensor: single heatmaps related to each filterbank of the
@@ -139,7 +138,7 @@ class Aggregator:
         self._update_heatmaps(
             samples, fbank_heatmaps, fbank_masks, target_embedding_heatmaps, tgt_embed_masks)
 
-        # Create an HDF5 file to store aggregated data
+        # Create an HDF5 file to store accumulated data
         save_file_hdf5 = self.save_file + ".h5"
         with h5py.File(save_file_hdf5, "a") as f:
             for orig_ind in list(self.final_masks):

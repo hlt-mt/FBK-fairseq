@@ -32,7 +32,7 @@ from omegaconf import DictConfig
 from examples.speech_to_text.data.occlusion_dataset import OccludedSpeechToTextDataset
 from examples.speech_to_text.occlusion_explanation.occlusion_transformer_decoder import \
     OcclusionTransformerDecoderScriptable
-from examples.speech_to_text.occlusion_explanation.aggregator import Aggregator
+from examples.speech_to_text.occlusion_explanation.accumulator import Accumulator
 from examples.speech_to_text.occlusion_explanation.configs import \
     PerturbConfig, add_occlusion_perturbation_args
 from fairseq import options, utils, tasks, checkpoint_utils
@@ -116,7 +116,7 @@ def _main(cfg: DictConfig, output_file):
 
     scorer = perturb_config.get_scorer_from_config()
 
-    aggregator = Aggregator(cfg.task, occluded_dataset)
+    accumulator = Accumulator(cfg.task, occluded_dataset)
 
     # Load dataset (possibly sharded)
     itr = task.get_batch_iterator(
@@ -170,7 +170,7 @@ def _main(cfg: DictConfig, output_file):
         gen_timer.stop(batch_size)
         logger.info(f"Generated {batch_size} single heatmaps for {num_entries} entries")
 
-        aggregator(sample, single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks)
+        accumulator(sample, single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks)
 
 
 def cli_main():

@@ -14,3 +14,4 @@
 
 from . import perturbators
 from . import scorers
+from . import aggregators
