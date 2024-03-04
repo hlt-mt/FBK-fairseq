@@ -103,7 +103,7 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
         class_args["n_segments"] = fbank_occlusion.get("n_segments", (40, 80, 160, 320, 640))
         class_args["slic_sigma"] = fbank_occlusion.get("slic_sigma", 1)
         class_args["compactness"] = fbank_occlusion.get("compactness", 0.1)
-        assert 0. < class_args["mask_probability"] <= 1.
+        assert 0. <= class_args["mask_probability"] < 1.
         assert type(class_args["n_segments"]) == tuple
         # add arguments useful to the child class
         add_config = cls._parse_custom_args(fbank_occlusion)

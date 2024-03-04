@@ -57,7 +57,7 @@ class OcclusionDecoderEmbeddingsPerturbator(ABC):
             decoder_occlusion = _config.get("decoder_occlusion", {})
             no_position_occlusion = decoder_occlusion.get("no_position_occlusion", True)
             p = decoder_occlusion.get("p", 0.5)
-            assert 0. < p <= 1.
+            assert 0. <= p < 1.
             return cls(no_position_occlusion, p)
 
     @abstractmethod

@@ -43,7 +43,7 @@ class ContinuousOcclusionFbankPerturbator(OcclusionFbankPerturbator):
             config = {}
         fbank_occlusion = config.get("fbank_occlusion", {})
         mask_probability = fbank_occlusion.get("p", 0.5)
-        assert 0. < mask_probability <= 1.
+        assert 0. <= mask_probability < 1.
         n_masks = fbank_occlusion.get("n_masks", 8000)
         return cls(mask_probability=mask_probability, n_masks=n_masks)
 
