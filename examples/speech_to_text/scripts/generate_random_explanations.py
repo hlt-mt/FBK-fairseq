@@ -104,7 +104,7 @@ if __name__ == "__main__":
              "output tokens, otherwise explanations will fit the target embedding dimension.")
     parser.add_argument(
         "--decoder-embed-dim",
-        typ=int,
+        type=int,
         default=512,
         help="Embedding dimension of previous output tokens. Default is 512.")
     args = options.parse_args_and_arch(parser)
