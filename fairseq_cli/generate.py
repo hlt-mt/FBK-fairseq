@@ -216,6 +216,9 @@ def _main(cfg: DictConfig, output_file):
         gen_timer.stop(num_generated_tokens)
 
         for i, sample_id in enumerate(sample["id"].tolist()):
+            if hasattr(task, "customize_sample_id"):
+                sample_id = task.customize_sample_id(i, sample_id, sample)
+
             has_target = sample["target"] is not None
 
             # Remove padding
