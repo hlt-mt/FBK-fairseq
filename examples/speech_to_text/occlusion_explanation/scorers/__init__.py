@@ -41,9 +41,9 @@ class Scorer:
             target_lengths: Tensor) -> Tuple[Tensor, Tensor]:
         """
         Pad the original probabilities to the max sequence lengths of the perturbed probabilities,
-        since the original probabilities stored in orig_probs have always a sequence length lesser or equal
-        to that of the probabilities in perturb_probs. It also set probabilities of <pad> set to 0 in
-        the perturbed probabilities.
+        since the original probabilities stored in orig_probs have always a sequence length lesser
+        or equal to that of the probabilities in perturb_probs. It also set probabilities of <pad>
+        set to 0 in the perturbed probabilities.
 
         Args:
             - orig_probs: dictionary in the form {"id": Tensor (padded_seq_len, dict_len)}
@@ -52,16 +52,24 @@ class Scorer:
             - target_lengths: Tensor of size (batch_size)
         """
         batch_size, max_length, vocab_size = perturb_probs.size()
+        seq_range = torch.arange(max_length, device=perturb_probs.device)
+        mask = seq_range.unsqueeze(0) >= target_lengths.unsqueeze(1)
+        perturb_probs[mask] = 0  # set padded regions to 0 in batched_perturb_probs
+
+        unique_indices, counts = torch.unique_consecutive(orig_indices, return_counts=True)
         batched_orig_probs = torch.zeros(
             (batch_size, max_length, vocab_size), dtype=torch.float, device=perturb_probs.device)
-        batched_perturb_probs = batched_orig_probs.clone()
-        for i in range(batch_size):
-            single_orig_prob = orig_probs[str(orig_indices[i].item())]
-            single_perturb_prob = perturb_probs[i, :target_lengths[i].item(), :]
-            if single_orig_prob.numel() > 0 and single_perturb_prob.numel():  # Check if not empty
-                batched_orig_probs[i, :single_orig_prob.size(0), :] = single_orig_prob
-                batched_perturb_probs[i, :single_perturb_prob.size(0), :] = single_perturb_prob
-        return batched_orig_probs, batched_perturb_probs
+        prev_count = 0
+        for orig_ind, count in zip(unique_indices, counts):
+            single_orig_prob = orig_probs[str(orig_ind.item())]
+            if single_orig_prob.numel() > 0:  # check if not empty
+                # assign the original probabilities to the corresponding
+                # batch items in the empty padded matrix
+                batched_orig_probs[prev_count:prev_count + count, : single_orig_prob.size(0), :] = \
+                    single_orig_prob
+            prev_count += count
+
+        return batched_orig_probs, perturb_probs
 
     @staticmethod
     def get_heatmaps(

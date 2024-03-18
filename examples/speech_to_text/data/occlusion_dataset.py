@@ -107,10 +107,7 @@ class OccludedSpeechToTextDataset(BaseWrapperDataset):
     @property
     def sizes(self):
         base_sizes = super().sizes
-        occluded_sizes = []
-        for s in base_sizes:
-            occluded_sizes.extend([s for _ in range(self.n_masks)])
-        return np.array(occluded_sizes)
+        return np.repeat(base_sizes, self.n_masks)
 
     def num_tokens(self, index):
         original_index = self._original_index(index)
@@ -120,14 +117,14 @@ class OccludedSpeechToTextDataset(BaseWrapperDataset):
         original_index = self._original_index(index)
         return self.dataset.size(original_index)
 
+    def _expand_indices(self, indices):
+        offsets = np.repeat(indices * self.n_masks, self.n_masks)
+        ranges = np.tile(np.arange(self.n_masks), len(indices))
+        return offsets + ranges
+
     def ordered_indices(self):
         base_order_indices = super().ordered_indices()
-        occluded_order_indices = []
-        # Define ordered indices for the occlusion dataset starting from the ordered indices of
-        # the original dataset
-        for value in base_order_indices:
-            occluded_order_indices.extend(value * self.n_masks + n for n in range(self.n_masks))
-        return np.array(occluded_order_indices)
+        return self._expand_indices(base_order_indices)
 
     def attr(self, attr: str, index: int):
         original_index = self._original_index(index)
@@ -148,21 +145,18 @@ class OccludedSpeechToTextDataset(BaseWrapperDataset):
             fixed_shapes=None)
 
     def filter_indices_by_size(
-            self, indices: np.array, max_sizes: Union[int, List[int], Tuple[int]]) -> Tuple[np.array, List]:
+            self,
+            indices: np.array,
+            max_sizes: Union[int, List[int], Tuple[int, int]]) -> Tuple[np.array, List]:
         """
         Returns:
             np.array: filtered sample array
             list: list of removed indices
         """
-        if isinstance(max_sizes, float) or isinstance(max_sizes, int):
-            if hasattr(self, "sizes") and isinstance(self.sizes, np.ndarray):
-                ignored = indices[self.sizes[indices] > max_sizes].tolist()
-                indices = indices[self.sizes[indices] <= max_sizes]
-            elif hasattr(self, "sizes") and isinstance(self.sizes, list) and len(self.sizes) == 1:
-                ignored = indices[self.sizes[0][indices] > max_sizes].tolist()
-                indices = indices[self.sizes[0][indices] <= max_sizes]
-            else:
-                indices, ignored = data_utils._filter_by_size_dynamic(indices, self.size, max_sizes)
-        else:
-            indices, ignored = data_utils._filter_by_size_dynamic(indices, self.size, max_sizes)
+        # Get ordered indices of the parent dataset used to eventually apply _filter_by_size_dynamic()
+        base_order_indices = super().ordered_indices()
+        orig_indices, orig_ignored = data_utils._filter_by_size_dynamic(
+            base_order_indices, self.size, max_sizes)
+        indices = self._expand_indices(orig_indices)
+        ignored = self._expand_indices(np.array(orig_ignored)).tolist()
         return indices, ignored

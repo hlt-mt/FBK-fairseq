@@ -124,8 +124,8 @@ class TestAccumulator(unittest.TestCase):
             self.fbank_masks_batch1,
             self.tgt_embed_heatmaps_batch1,
             self.tgt_embed_masks_batch1)
-        self.assertEqual(accumulator.final_masks[0]["src_text"], ['</s>', '_lui', '<unk>'])
-        self.assertEqual(accumulator.final_masks[1]["src_text"], ['</s>', '<unk>', '_lui', 'ava'])
+        self.assertEqual(accumulator.accumulated_masks[0]["src_text"], ['</s>', '_lui', '<unk>'])
+        self.assertEqual(accumulator.accumulated_masks[1]["src_text"], ['</s>', '<unk>', '_lui', 'ava'])
 
     # test _update_heatmaps() with a single batch involved
     def test_update_heatmaps_single_batch(self):
@@ -133,7 +133,7 @@ class TestAccumulator(unittest.TestCase):
         previous_tgt_embed_heatmap = torch.zeros(4, 4, 24)
         previous_fbank_mask = torch.zeros(1, 7, 10)
         previous_tgt_embed_mask = torch.zeros(1, 4, 24)
-        self.accumulator.final_masks = {1: {
+        self.accumulator.accumulated_masks = {1: {
             "fbank_heatmap": previous_fbank_heatmap,
             "tgt_embed_heatmap": previous_tgt_embed_heatmap,
             "fbank_mask": previous_fbank_mask,
@@ -146,28 +146,28 @@ class TestAccumulator(unittest.TestCase):
             self.tgt_embed_heatmaps_batch1,
             self.tgt_embed_masks_batch1)
         # check if size of heatmaps is preserved
-        self.assertEqual(self.accumulator.final_masks[0]["fbank_heatmap"].shape, (3, 6, 10))
-        self.assertEqual(self.accumulator.final_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 24))
-        self.assertEqual(self.accumulator.final_masks[1]["fbank_heatmap"].shape, (4, 7, 10))
-        self.assertEqual(self.accumulator.final_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["fbank_heatmap"].shape, (3, 6, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["fbank_heatmap"].shape, (4, 7, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 24))
         # check if size of masks is preserved
-        self.assertEqual(self.accumulator.final_masks[0]["fbank_mask"].shape, (1, 6, 10))
-        self.assertEqual(self.accumulator.final_masks[0]["tgt_embed_mask"].shape, (1, 3, 24))
-        self.assertEqual(self.accumulator.final_masks[1]["fbank_mask"].shape, (1, 7, 10))
-        self.assertEqual(self.accumulator.final_masks[1]["tgt_embed_mask"].shape, (1, 4, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["fbank_mask"].shape, (1, 6, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["tgt_embed_mask"].shape, (1, 3, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["fbank_mask"].shape, (1, 7, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["tgt_embed_mask"].shape, (1, 4, 24))
         # check if existing entries are updated
-        self.assertEqual(self.accumulator.final_masks[1]["n_masks"], 3)
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["fbank_heatmap"] == 1))
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["tgt_embed_heatmap"] == 1))
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["fbank_mask"] == 1))
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["tgt_embed_mask"] == 1))
-        self.assertEqual(len(self.accumulator.final_masks), 2)
-        self.assertEqual(self.accumulator.final_masks[0]["n_masks"], 2)
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["fbank_heatmap"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["tgt_embed_heatmap"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["fbank_mask"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["tgt_embed_mask"] == 2))
-        self.assertEqual(self.accumulator.final_masks[0]["src_text"], "source text 1")
+        self.assertEqual(self.accumulator.accumulated_masks[1]["n_masks"], 3)
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["fbank_heatmap"] == 1))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["tgt_embed_heatmap"] == 1))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["fbank_mask"] == 1))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["tgt_embed_mask"] == 1))
+        self.assertEqual(len(self.accumulator.accumulated_masks), 2)
+        self.assertEqual(self.accumulator.accumulated_masks[0]["n_masks"], 2)
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["fbank_heatmap"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["tgt_embed_heatmap"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["fbank_mask"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["tgt_embed_mask"] == 2))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["src_text"], "source text 1")
 
     # test _update_heatmaps() with continuous heatmaps for filterbanks and
     # discrete heatmaps for target embeddings (last dimension is 1)
@@ -176,7 +176,7 @@ class TestAccumulator(unittest.TestCase):
         previous_tgt_embed_heatmap = torch.zeros(4, 4, 1)
         previous_fbank_mask = torch.zeros(1, 7, 10)  # (1, time, channels)
         previous_tgt_embed_mask = torch.zeros(1, 4, 1)
-        self.accumulator.final_masks = {1: {
+        self.accumulator.accumulated_masks = {1: {
             "fbank_heatmap": previous_fbank_heatmap,
             "tgt_embed_heatmap": previous_tgt_embed_heatmap,
             "fbank_mask": previous_fbank_mask,
@@ -189,15 +189,15 @@ class TestAccumulator(unittest.TestCase):
             torch.ones(3, 4, 4, 1),
             torch.ones(3, 1, 4, 1))
         # check if size of heatmaps is preserved
-        self.assertEqual(self.accumulator.final_masks[0]["fbank_heatmap"].shape, (3, 6, 10))
-        self.assertEqual(self.accumulator.final_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 1))
-        self.assertEqual(self.accumulator.final_masks[1]["fbank_heatmap"].shape, (4, 7, 10))
-        self.assertEqual(self.accumulator.final_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 1))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["fbank_heatmap"].shape, (3, 6, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 1))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["fbank_heatmap"].shape, (4, 7, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 1))
         # check if size of masks is preserved
-        self.assertEqual(self.accumulator.final_masks[0]["fbank_mask"].shape, (1, 6, 10))
-        self.assertEqual(self.accumulator.final_masks[0]["tgt_embed_mask"].shape, (1, 3, 1))
-        self.assertEqual(self.accumulator.final_masks[1]["fbank_mask"].shape, (1, 7, 10))
-        self.assertEqual(self.accumulator.final_masks[1]["tgt_embed_mask"].shape, (1, 4, 1))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["fbank_mask"].shape, (1, 6, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["tgt_embed_mask"].shape, (1, 3, 1))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["fbank_mask"].shape, (1, 7, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["tgt_embed_mask"].shape, (1, 4, 1))
 
     # test _update_heatmaps() with discrete heatmaps for filterbanks (last dimension is 1)
     # and continuous heatmaps for target embeddings.
@@ -206,7 +206,7 @@ class TestAccumulator(unittest.TestCase):
         previous_tgt_embed_heatmap = torch.zeros(4, 4, 24)
         previous_fbank_mask = torch.zeros(1, 7, 1)  # (1, time, 1)
         previous_tgt_embed_mask = torch.zeros(1, 4, 24)
-        self.accumulator.final_masks = {1: {
+        self.accumulator.accumulated_masks = {1: {
             "fbank_heatmap": previous_fbank_heatmap,
             "tgt_embed_heatmap": previous_tgt_embed_heatmap,
             "fbank_mask": previous_fbank_mask,
@@ -219,15 +219,15 @@ class TestAccumulator(unittest.TestCase):
             torch.ones(3, 4, 4, 24),
             torch.ones(3, 1, 4, 24))
         # check if size of heatmaps is preserved
-        self.assertEqual(self.accumulator.final_masks[0]["fbank_heatmap"].shape, (3, 6, 1))
-        self.assertEqual(self.accumulator.final_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 24))
-        self.assertEqual(self.accumulator.final_masks[1]["fbank_heatmap"].shape, (4, 7, 1))
-        self.assertEqual(self.accumulator.final_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["fbank_heatmap"].shape, (3, 6, 1))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["fbank_heatmap"].shape, (4, 7, 1))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 24))
         # check if size of masks is preserved
-        self.assertEqual(self.accumulator.final_masks[0]["fbank_mask"].shape, (1, 6, 1))
-        self.assertEqual(self.accumulator.final_masks[0]["tgt_embed_mask"].shape, (1, 3, 24))
-        self.assertEqual(self.accumulator.final_masks[1]["fbank_mask"].shape, (1, 7, 1))
-        self.assertEqual(self.accumulator.final_masks[1]["tgt_embed_mask"].shape, (1, 4, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["fbank_mask"].shape, (1, 6, 1))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["tgt_embed_mask"].shape, (1, 3, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["fbank_mask"].shape, (1, 7, 1))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["tgt_embed_mask"].shape, (1, 4, 24))
 
     # test _update_heatmaps() with two batches involved and different padding lengths
     def test_update_heatmaps_multiple_batch(self):
@@ -244,44 +244,44 @@ class TestAccumulator(unittest.TestCase):
             self.tgt_embed_heatmaps_batch2,
             self.tgt_embed_masks_batch2)
         # check if size of heatmaps is preserved, with padding stripped correctly
-        self.assertEqual(self.accumulator.final_masks[0]["fbank_heatmap"].shape, (3, 6, 10))
-        self.assertEqual(self.accumulator.final_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 24))
-        self.assertEqual(self.accumulator.final_masks[1]["fbank_heatmap"].shape, (4, 7, 10))
-        self.assertEqual(self.accumulator.final_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 24))
-        self.assertEqual(self.accumulator.final_masks[2]["fbank_heatmap"].shape, (5, 9, 10))
-        self.assertEqual(self.accumulator.final_masks[2]["tgt_embed_heatmap"].shape, (5, 5, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["fbank_heatmap"].shape, (3, 6, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["tgt_embed_heatmap"].shape, (3, 3, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["fbank_heatmap"].shape, (4, 7, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["tgt_embed_heatmap"].shape, (4, 4, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[2]["fbank_heatmap"].shape, (5, 9, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[2]["tgt_embed_heatmap"].shape, (5, 5, 24))
         # check if size of masks is preserved, with padding stripped correctly
-        self.assertEqual(self.accumulator.final_masks[0]["fbank_mask"].shape, (1, 6, 10))
-        self.assertEqual(self.accumulator.final_masks[0]["tgt_embed_mask"].shape, (1, 3, 24))
-        self.assertEqual(self.accumulator.final_masks[1]["fbank_mask"].shape, (1, 7, 10))
-        self.assertEqual(self.accumulator.final_masks[1]["tgt_embed_mask"].shape, (1, 4, 24))
-        self.assertEqual(self.accumulator.final_masks[2]["fbank_mask"].shape, (1, 9, 10))
-        self.assertEqual(self.accumulator.final_masks[2]["tgt_embed_mask"].shape, (1, 5, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["fbank_mask"].shape, (1, 6, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[0]["tgt_embed_mask"].shape, (1, 3, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["fbank_mask"].shape, (1, 7, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[1]["tgt_embed_mask"].shape, (1, 4, 24))
+        self.assertEqual(self.accumulator.accumulated_masks[2]["fbank_mask"].shape, (1, 9, 10))
+        self.assertEqual(self.accumulator.accumulated_masks[2]["tgt_embed_mask"].shape, (1, 5, 24))
         # check if n. masks are correctly updated
-        self.assertEqual(self.accumulator.final_masks[0]["n_masks"], 2)
-        self.assertEqual(self.accumulator.final_masks[1]["n_masks"], 3)
-        self.assertEqual(self.accumulator.final_masks[2]["n_masks"], 2)
+        self.assertEqual(self.accumulator.accumulated_masks[0]["n_masks"], 2)
+        self.assertEqual(self.accumulator.accumulated_masks[1]["n_masks"], 3)
+        self.assertEqual(self.accumulator.accumulated_masks[2]["n_masks"], 2)
         # check if heatmaps and masks are correctly updated
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["fbank_heatmap"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["tgt_embed_heatmap"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["fbank_heatmap"] == 3))
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["tgt_embed_heatmap"] == 3))
-        self.assertTrue(torch.all(self.accumulator.final_masks[2]["fbank_heatmap"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[2]["tgt_embed_heatmap"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["fbank_mask"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["tgt_embed_mask"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["fbank_mask"] == 3))
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["tgt_embed_mask"] == 3))
-        self.assertTrue(torch.all(self.accumulator.final_masks[2]["fbank_mask"] == 2))
-        self.assertTrue(torch.all(self.accumulator.final_masks[2]["tgt_embed_mask"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["fbank_heatmap"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["tgt_embed_heatmap"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["fbank_heatmap"] == 3))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["tgt_embed_heatmap"] == 3))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[2]["fbank_heatmap"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[2]["tgt_embed_heatmap"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["fbank_mask"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["tgt_embed_mask"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["fbank_mask"] == 3))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["tgt_embed_mask"] == 3))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[2]["fbank_mask"] == 2))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[2]["tgt_embed_mask"] == 2))
         # check src_texts
-        self.assertEqual(self.accumulator.final_masks[0]["src_text"], "source text 1")
-        self.assertEqual(self.accumulator.final_masks[1]["src_text"], "source text 2")
-        self.assertEqual(self.accumulator.final_masks[2]["src_text"], "source text 3")
+        self.assertEqual(self.accumulator.accumulated_masks[0]["src_text"], "source text 1")
+        self.assertEqual(self.accumulator.accumulated_masks[1]["src_text"], "source text 2")
+        self.assertEqual(self.accumulator.accumulated_masks[2]["src_text"], "source text 3")
         # check tgt_texts
-        self.assertEqual(self.accumulator.final_masks[0]["tgt_text"], ['</s>', '_lui', '<unk>'])
-        self.assertEqual(self.accumulator.final_masks[1]["tgt_text"], ['</s>', '<unk>', '_lui', 'ava'])
-        self.assertEqual(self.accumulator.final_masks[2]["tgt_text"], ['</s>', 'ava', '<unk>', '_lui', '_and'])
+        self.assertEqual(self.accumulator.accumulated_masks[0]["tgt_text"], ['</s>', '_lui', '<unk>'])
+        self.assertEqual(self.accumulator.accumulated_masks[1]["tgt_text"], ['</s>', '<unk>', '_lui', 'ava'])
+        self.assertEqual(self.accumulator.accumulated_masks[2]["tgt_text"], ['</s>', 'ava', '<unk>', '_lui', '_and'])
 
     def test_normalize(self):
         self.accumulator._update_heatmaps(
@@ -299,23 +299,23 @@ class TestAccumulator(unittest.TestCase):
         self.accumulator._normalize(0)
         self.accumulator._normalize(1)
         self.accumulator._normalize(2)
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["fbank_heatmap"] == 1))
-        self.assertTrue(torch.all(self.accumulator.final_masks[0]["tgt_embed_heatmap"] == 1))
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["fbank_heatmap"] == 1))
-        self.assertTrue(torch.all(self.accumulator.final_masks[1]["tgt_embed_heatmap"] == 1))
-        self.assertTrue(torch.all(self.accumulator.final_masks[2]["fbank_heatmap"] == 1))
-        self.assertTrue(torch.all(self.accumulator.final_masks[2]["tgt_embed_heatmap"] == 1))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["fbank_heatmap"] == 1))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[0]["tgt_embed_heatmap"] == 1))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["fbank_heatmap"] == 1))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[1]["tgt_embed_heatmap"] == 1))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[2]["fbank_heatmap"] == 1))
+        self.assertTrue(torch.all(self.accumulator.accumulated_masks[2]["tgt_embed_heatmap"] == 1))
 
     def test_normalize_division_by_zero(self):
-        self.accumulator.final_masks = {0: {}}
-        self.accumulator.final_masks[0]["fbank_heatmap"] = torch.ones(3, 4, 5)
-        self.accumulator.final_masks[0]["tgt_embed_heatmap"] = torch.ones(3, 3, 12)
-        self.accumulator.final_masks[0]["fbank_mask"] = torch.tensor(
+        self.accumulator.accumulated_masks = {0: {}}
+        self.accumulator.accumulated_masks[0]["fbank_heatmap"] = torch.ones(3, 4, 5)
+        self.accumulator.accumulated_masks[0]["tgt_embed_heatmap"] = torch.ones(3, 3, 12)
+        self.accumulator.accumulated_masks[0]["fbank_mask"] = torch.tensor(
             [[[2, 1, 0, 1, 2],
               [2, 2, 0, 1, 1],
               [2, 0, 1, 0, 1],
               [2, 2, 2, 1, 1]]])
-        self.accumulator.final_masks[0]["tgt_embed_mask"] = torch.tensor(
+        self.accumulator.accumulated_masks[0]["tgt_embed_mask"] = torch.tensor(
             [[[2, 1, 0, 1, 2, 1, 2, 2, 1, 2, 0, 0],
               [2, 2, 0, 1, 2, 1, 1, 1, 0, 0, 1, 1],
               [2, 0, 1, 0, 2, 2, 2, 0, 1, 1, 1, 1]]])
@@ -344,12 +344,12 @@ class TestAccumulator(unittest.TestCase):
             [0.5, 0, 1, 0, 0.5, 0.5, 0.5, 0, 1, 1, 1, 1]]])
         self.accumulator._normalize(0)
         self.assertTrue(torch.equal(
-            self.accumulator.final_masks[0]["fbank_heatmap"], expected_fbank_heatmap))
+            self.accumulator.accumulated_masks[0]["fbank_heatmap"], expected_fbank_heatmap))
         self.assertTrue(torch.equal(
-            self.accumulator.final_masks[0]["tgt_embed_heatmap"], expected_tgt_heatmap))
+            self.accumulator.accumulated_masks[0]["tgt_embed_heatmap"], expected_tgt_heatmap))
 
     def test_call_method(self):
-        file_path = self.accumulator.save_file + ".h5"
+        file_path = self.accumulator.save_file_hdf5
         try:
             self.accumulator.__call__(
                 self.collated_data_batch1,

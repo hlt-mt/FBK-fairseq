@@ -15,6 +15,7 @@
 import os
 import unittest
 
+import numpy as np
 import torch
 from torch import Tensor, tensor
 
@@ -233,7 +234,7 @@ class TestOcclusionDataset(unittest.TestCase):
         self.assertEqual(size_id7, (150, 1))
 
     def test_ordered_indices(self):
-        mock_perturbator = ContinuousOcclusionFbankPerturbator(mask_probability=0.5, n_masks=4)
+        mock_perturbator = ContinuousOcclusionFbankPerturbator(mask_probability=0.5, n_masks=5)
         mock_dataset = SpeechToTextDataset(
             split="mock_split",
             is_train_split=False,
@@ -255,13 +256,27 @@ class TestOcclusionDataset(unittest.TestCase):
             perturbator=mock_perturbator,
             tgt_dict=MockDictionary())
         expected_ordered_indices = occlusion_dataset.ordered_indices()
-        self.assertEqual(expected_ordered_indices.tolist(), [0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15])
+        self.assertEqual(
+            expected_ordered_indices.tolist(),
+            [0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 5, 6, 7, 8, 9, 15, 16, 17, 18, 19])
 
     def test_attr(self):
         shuffle_config_id0 = self.occlusion_dataset.attr("shuffle", 0)
         shuffle_config_id7 = self.occlusion_dataset.attr("shuffle", 7)
         self.assertEqual(shuffle_config_id0, False)
         self.assertEqual(shuffle_config_id7, False)
+
+    def test_filter_indices_by_size_no_ignored(self):
+        indices = self.occlusion_dataset_with_src.ordered_indices()
+        indices, ignored = self.occlusion_dataset_with_src.filter_indices_by_size(indices=indices, max_sizes=(120, 120))
+        self.assertEqual(len(ignored), 0)
+        self.assertEqual(indices.tolist(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+    def test_filter_indices_by_size_all_ignored(self):
+        indices = self.occlusion_dataset_with_src.ordered_indices()
+        indices, ignored = self.occlusion_dataset_with_src.filter_indices_by_size(indices=indices, max_sizes=(120, 1))
+        self.assertEqual(indices.size, 0)
+        self.assertEqual(ignored, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
 
 if __name__ == '__main__':
