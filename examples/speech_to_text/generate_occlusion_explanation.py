@@ -16,7 +16,7 @@
 Generates and stores the saliency maps for a given test set and trained model using
 occlusion-based techniques.
 """
-import multiprocessing
+
 from os import path as op
 import ast
 import logging
@@ -142,27 +142,6 @@ def _main(cfg: DictConfig, output_file):
         orig_probs = {  # len(orig_probs) = n_samples,
             key: torch.tensor(f[key][()]) for key in f.keys()}  # each value has shape (padded_seq_len, dict_len))
 
-    # Function to be executed in a separate CPU process for scoring and accumulation
-    def scorer_accumulator_process(scorer, accumulator, input_queue):
-        while True:
-            sample, orig_probs, perturb_probs, tgt_embed_masks = input_queue.get()
-            # Terminate the process if None is received
-            if sample is None:
-                break
-            single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks = scorer(
-                sample=sample,
-                orig_probs=orig_probs,
-                perturb_probs=perturb_probs,
-                tgt_embed_masks=tgt_embed_masks)
-            accumulator(
-                sample, single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks)
-
-    # Start scorer and accumulator processes
-    scorer_input_queue = multiprocessing.Queue()
-    scoring_accumulation_process = multiprocessing.Process(
-        target=scorer_accumulator_process, args=(scorer, accumulator, scorer_input_queue))
-    scoring_accumulation_process.start()
-
     gen_timer = StopwatchMeter()
     for sample in progress:
         sample = utils.move_to_cuda(sample) if use_cuda else sample
@@ -181,16 +160,17 @@ def _main(cfg: DictConfig, output_file):
             perturb_probs = model.get_normalized_probs(  # (batch_size, padded_seq_len, dict_len)
                 decoder_out, log_probs=False)
             assert torch.all((perturb_probs >= 0) & (perturb_probs <= 1))
+
+        single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks = scorer(
+            sample=sample,
+            orig_probs=orig_probs,
+            perturb_probs=perturb_probs,
+            tgt_embed_masks=tgt_embed_masks)
+
         gen_timer.stop(batch_size)
         logger.info(f"Generated {batch_size} single heatmaps for {num_entries} entries")
 
-        sample = utils.move_to_cpu(sample) if use_cuda else sample
-        scorer_input_queue.put(
-            (sample, orig_probs, perturb_probs.detach().cpu(), tgt_embed_masks.detach().cpu()))
-
-    # Signal the scorer and accumulator process to terminate
-    scorer_input_queue.put(None)
-    scoring_accumulation_process.join()
+        accumulator(sample, single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks)
 
 
 def cli_main():
