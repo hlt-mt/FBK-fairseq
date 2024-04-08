@@ -88,20 +88,22 @@ class TestMetricSpeechToTextDataset(unittest.TestCase):
         self.temp_files = [absolute_path1, absolute_path2]
 
         self.aggregated_fbank_heatmaps = {
-            0: (torch.tensor(
+            0: {"fbank_heatmap": torch.tensor(
                 [[20, 20, 2, 1, 5],
                  [16, 14, 12, 1, 0],
                  [2, 3, 1, 10, 12],
                  [12, 12, 12, 12, 20]], dtype=torch.float32),
-                torch.tensor([], dtype=torch.float32)),
-            1: (torch.tensor(
+                "tgt_embed_heatmap": torch.tensor([], dtype=torch.float32),
+                "tgt_text": []},
+            1: {"fbank_heatmap": torch.tensor(
                 [[20, 20, 2, 1, 5],  # 9
                  [16, 14, 12, 1, 0],  # 14
                  [2, 3, 1, 10, 12],  # 19
                  [12, 12, 12, 12, 20],  # 24
                  [2, 2, 1, 4, 0],  # 29
                  [5, 1, 4, 6, 0]], dtype=torch.float32),  # 34
-                torch.tensor([], dtype=torch.float32))}
+                "tgt_embed_heatmap": torch.tensor([], dtype=torch.float32),
+                "tgt_text": []}}
 
         self.mock_dataset = SpeechToTextDataset(
             split="mock_split",
@@ -332,10 +334,10 @@ class TestMetricSpeechToTextDataset(unittest.TestCase):
             bpe_tokenizer=None)
         concat_datasets = ConcatDataset([mock_dataset])
         aggregated_fbank_heatmaps = {
-            1: (torch.rand(2, 3), torch.rand(5, 2)),
-            2: (torch.rand(2, 3), torch.rand(5, 2)),
-            3: (torch.rand(2, 3), torch.rand(5, 2)),
-            4: (torch.rand(2, 3), torch.rand(5, 2))}
+            1: {"fbank_heatmap": torch.rand(2, 3), "tgt_embed_heatmap": torch.rand(5, 2), "tgt_text": []},
+            2: {"fbank_heatmap": torch.rand(2, 3), "tgt_embed_heatmap": torch.rand(5, 2), "tgt_text": []},
+            3: {"fbank_heatmap": torch.rand(2, 3), "tgt_embed_heatmap": torch.rand(5, 2), "tgt_text": []},
+            4: {"fbank_heatmap": torch.rand(2, 3), "tgt_embed_heatmap": torch.rand(5, 2), "tgt_text": []}}
         metric_dataset = FeatureAttributionEvaluationSpeechToTextDataset(
             original_dataset=concat_datasets,
             aggregated_fbank_heatmaps=aggregated_fbank_heatmaps,

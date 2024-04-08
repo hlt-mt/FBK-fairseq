@@ -46,7 +46,7 @@ class FeatureAttributionEvaluationTask(SpeechToTextCtcTask):
             help="Path of the h5 file where heatmaps are saved.")
         parser.add_argument(
             "--aggregator",
-            default="sentence_aggregator_no_norm",
+            default="sentence",
             choices=AGGREGATION_REGISTRY.keys(),
             help="Aggregator type to obtain sentence-level explanations.")
 

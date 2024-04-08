@@ -32,7 +32,7 @@ class FeatureAttributionEvaluationSpeechToTextDataset(BaseWrapperDataset):
     def __init__(
             self,
             original_dataset: ConcatDataset,
-            aggregated_fbank_heatmaps: Dict[int, Tuple[Tensor, Tensor]],
+            aggregated_fbank_heatmaps: Dict[int, Dict[str, Union[Tensor, List[str]]]],
             interval_size: int,
             num_intervals: int,
             metric: str):
@@ -65,7 +65,8 @@ class FeatureAttributionEvaluationSpeechToTextDataset(BaseWrapperDataset):
         Updates the 'id_to_ordered_indices' dictionary by associating each heatmap ID with
         the corresponding array of ordered indices used for deletion and insertion operations.
         """
-        ordered_indices = torch.argsort(self.aggregated_fbank_heatmaps[orig_index][0].flatten())
+        ordered_indices = torch.argsort(
+            self.aggregated_fbank_heatmaps[orig_index]["fbank_heatmap"].flatten())
         self.id_to_ordered_indices[orig_index] = ordered_indices
 
     def __getitem__(

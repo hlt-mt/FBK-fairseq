@@ -30,4 +30,6 @@ def read_feature_attribution_maps_from_h5(explanation_path: str) -> Dict[int, Di
                 group["fbank_heatmap"][()])
             explanations[int(key)]["tgt_embed_heatmap"] = torch.from_numpy(
                 group["tgt_embed_heatmap"][()])
+            tgt_txt = group["tgt_text"][()]
+            explanations[int(key)]["tgt_text"] = [x.decode('UTF-8') for x in tgt_txt.tolist()]
     return explanations

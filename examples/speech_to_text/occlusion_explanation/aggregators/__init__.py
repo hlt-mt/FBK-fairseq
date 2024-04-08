@@ -26,24 +26,20 @@ LOGGER = logging.getLogger(__name__)
 
 class Aggregator(ABC):
     """
-    Takes the explanation heatmaps at the generated token level as input and
-    returns aggregated explanations for each sentence.
-    The aggregation level (i.e., the granularity of the result of the aggregation)
-    depends on each subclass.
+    Aggregator classes take explanations and perform various types of aggregations.
+    The aggregation level, or the granularity of the aggregation result, varies for
+    each subclass.
     """
-
     def __call__(
             self, explanations: Dict[int, Dict[str, Union[Tensor, str, List[str]]]]
-    ) -> Dict[int, Tuple[Tensor, Tensor]]:
+    ) -> Dict[int, Dict[str, Union[Tensor, List[str]]]]:
         """
         Args:
             - explanations: dictionary containing a subdictionary for each sample_id.
-            Each subdictionary contains at least "fbank_heatmap" tensor and
-            "tgt_embed_heatmap" Tensor, and possibly also "src_texts" string and
-            "tgt_texts" list of strings.
+            Each subdictionary contains "fbank_heatmap" tensor, "tgt_embed_heatmap" Tensor,
+            "tgt_texts" list of strings, and possibly also "src_texts" string.
         Returns:
-            - aggregated_explanations: dictionary with sampled_id as key and the tuple composed
-            of aggregated filterbank explanations and aggregated tokens explanations as values.
+            - aggregated_explanations: same data structure of `explanations`.
         """
         raise NotImplementedError
 

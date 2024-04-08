@@ -15,6 +15,8 @@
 import os
 
 import unittest
+from typing import List
+
 from torch import Tensor
 
 from examples.speech_to_text.occlusion_explanation.utils import read_feature_attribution_maps_from_h5
@@ -34,10 +36,14 @@ class TestSentenceLevelExplanation(unittest.TestCase):
         self.assertTrue("fbank_heatmap" in explanations[2])
         self.assertTrue("tgt_embed_heatmap" in explanations[1])
         self.assertTrue("tgt_embed_heatmap" in explanations[2])
+        self.assertTrue("tgt_text" in explanations[1])
+        self.assertTrue("tgt_text" in explanations[2])
         self.assertTrue(isinstance(explanations[1]["fbank_heatmap"], Tensor))
         self.assertTrue(isinstance(explanations[1]["tgt_embed_heatmap"], Tensor))
         self.assertTrue(isinstance(explanations[2]["fbank_heatmap"], Tensor))
         self.assertTrue(isinstance(explanations[2]["tgt_embed_heatmap"], Tensor))
+        self.assertTrue(isinstance(explanations[2]["tgt_text"], List))
+        self.assertTrue(isinstance(explanations[2]["tgt_text"], List))
 
 
 if __name__ == '__main__':
