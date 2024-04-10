@@ -13,7 +13,7 @@
 # limitations under the License
 
 import logging
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List, Union
 
 import numpy as np
 import torch
@@ -42,7 +42,7 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
     def __init__(
             self,
             mask_probability: float,
-            n_masks: int,
+            n_masks: Union[int, List[int]],
             n_segments: list,
             slic_sigma: int,
             compactness: float):
@@ -50,10 +50,16 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
         LOGGER.info(f"Masking fbanks with probability of {self.mask_probability}.")
         # Parameters to define granularity
         self.n_segments = n_segments
-        # Adjust the number of masks to make it multiple of the number of segmentations to be performed
         self.n_segmentations = len(n_segments)
-        self.n_masks_per_segmentation = n_masks // self.n_segmentations
-        self.n_masks = self.n_masks_per_segmentation * self.n_segmentations
+        if isinstance(n_masks, int):
+            # Adjust the number of masks to make it multiple of the number of segmentations to be performed
+            self.n_masks_per_segmentation = n_masks // self.n_segmentations
+            self.n_masks = self.n_masks_per_segmentation * self.n_segmentations
+        elif isinstance(n_masks, list):
+            assert len(n_masks) == self.n_segmentations, \
+                "Each segmentation should have a number of masks associated."
+            self.n_masks_per_segmentation = n_masks
+            self.n_masks = sum(n_masks)
         # Parameters useful for SLIC. For more details, see
         # https://scikit-image.org/docs/dev/api/skimage.segmentation.html#skimage.segmentation.slic
         self.slic_sigma = slic_sigma
@@ -82,13 +88,15 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
         """
         Parsing of the config dictionary and initialization of class.
         The following parameters are configured:
-            - n_masks (int): Number of masks applied to each filterbank. Default is 8000.
+            - n_masks (int or list): Number of masks applied to each filterbank. If a single value is provided,
+            number of masks is equally divided over all the segmentation levels. Instead, if each level should
+            have a different number of masks, n_masks should be a list with length equal to n_segments.
+            Default is 8000.
             - mask_probability (float): Probability of each segment in the filterbank to be masked.
             Default is random.
             - n_segments (list): Number of segments to be obtained in each segmentation at different layers.
             Default is borrowed from the MFPP technique from which this approach is derived and is adapted to
             the average duration of MuST-C tst-COMMON (see https://arxiv.org/pdf/2006.02659.pdf).
-            - reference_duration: median number of frames of tst-COMMON segments from MuST-C.
             - slic_sigma (float): SLIC-specific parameter
             (see https://scikit-image.org/docs/dev/api/skimage.segmentation.html#skimage.segmentation.slic).
             Default is borrowed from the MFPP technique.
@@ -134,6 +142,24 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
                 channel_axis=None)
         return segment_dict
 
+    def get_granularity_level(self, perturb_index: int) -> int:
+        """
+        Returns which segmentation level the perturb_index corresponds to.
+        """
+        if isinstance(self.n_masks_per_segmentation, list):
+            current_mask_idx = perturb_index % self.n_masks
+            tot_mask = 0
+            for i, m in enumerate(self.n_masks_per_segmentation):
+                tot_mask += m
+                if current_mask_idx < tot_mask:
+                    return i
+        elif isinstance(self.n_masks_per_segmentation, int):
+            return perturb_index % self.n_masks // self.n_masks_per_segmentation
+        else:
+            raise ValueError(
+                "n_masks_per_segmentation should be a list or int, "
+                f"instead it is {type(self.n_masks_per_segmentation)}")
+
     def get_segments(self, fbank: Tensor, test_index: int, perturb_index: int) -> np.array:
         """
         Returns the segmentation for the given fbank if it is available,
@@ -147,10 +173,10 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
         Return:
             - np.array containing the various segmentations with different n. of segments
         """
+        # Add segmentation if not available
         if test_index not in self.test_index_to_segment.keys():
             self.test_index_to_segment[test_index] = self._do_segmentation(fbank)
-        # Determine which segmentation the perturb_index corresponds to
-        granularity_level = (perturb_index % self.n_masks) // self.n_masks_per_segmentation
+        granularity_level = self.get_granularity_level(perturb_index)
         # Update statistics and eventually clean cache
         if test_index not in self.perturbation_stats.keys():
             self.perturbation_stats[test_index] = 0
@@ -196,14 +222,19 @@ class SlicOcclusionFbankPerturbatorFixedSegments(SlicOcclusionFbankPerturbatorBa
     def __init__(
             self,
             mask_probability: float,
-            n_masks: int,
+            n_masks: Union[int, List[int]],
             n_segments: list,
             slic_sigma: int,
             compactness: float):
         super().__init__(mask_probability, n_masks, n_segments, slic_sigma, compactness)
-        LOGGER.info(
-            f"{self.n_masks} masks are used, with {int(self.n_masks_per_segmentation)} "
-            f"for each of the {int(self.n_segmentations)} segmentations.")
+        if isinstance(self.n_masks_per_segmentation, list):
+            LOGGER.info(
+                f"{self.n_masks} masks are used, with {self.n_masks_per_segmentation} masks "
+                f"for the segmentations with {self.n_masks} segments.")
+        else:
+            LOGGER.info(
+                f"{self.n_masks} masks are used, with {self.n_masks_per_segmentation} "
+                f"for each of the {int(self.n_segmentations)} segmentations.")
 
     def get_n_segments(self, n_frames: int, n_segments: int) -> int:
         """
@@ -229,10 +260,16 @@ class SlicOcclusionFbankPerturbatorDynamicSegments(SlicOcclusionFbankPerturbator
             reference_duration: int):
         super().__init__(mask_probability, n_masks, n_segments, slic_sigma, compactness)
         self.reference_duration = reference_duration
-        LOGGER.info(
-            f"{self.n_masks} masks are used, with {int(self.n_masks_per_segmentation)} "
-            f"for each of the {int(self.n_segmentations)} segmentations considering a reference "
-            f"duration of {(self.reference_duration * 10 + 25) / 1000} seconds.")
+        if isinstance(self.n_masks_per_segmentation, list):
+            LOGGER.info(
+                f"{self.n_masks} masks are used, with {self.n_masks_per_segmentation} masks "
+                f"for the segmentations with {self.n_masks} segments considering a reference "
+                f"duration of {(self.reference_duration * 10 + 25) / 1000} seconds.")
+        else:
+            LOGGER.info(
+                f"{self.n_masks} masks are used, with {self.n_masks_per_segmentation} "
+                f"for each of the {int(self.n_segmentations)} segmentations considering a reference "
+                f"duration of {(self.reference_duration * 10 + 25) / 1000} seconds.")
 
     @staticmethod
     def _parse_custom_args(fbank_occlusion_config: Dict) -> Dict:

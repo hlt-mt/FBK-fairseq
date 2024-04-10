@@ -43,6 +43,28 @@ class TestFixedSlicPerturbator(unittest.TestCase):
         with self.assertRaises(AttributeError):
             _ = self.perturbator.reference_duration
 
+    # Test get_granularity_level() with n_masks as int
+    def test_get_granularity_level_int(self):
+        perturb_indices = [34, 12, 23, 21]
+        expected = [1, 1, 0, 1]
+        for i, e in zip(perturb_indices, expected):
+            granularity_level = self.perturbator.get_granularity_level(i)
+            self.assertEqual(granularity_level, e)
+
+    # Test get_granularity_level() with n_masks as list
+    def test_get_granularity_level_list(self):
+        perturbator = SlicOcclusionFbankPerturbatorFixedSegments(
+            n_masks=[2, 8, 12],
+            mask_probability=0.2,
+            n_segments=[1, 4, 8],
+            slic_sigma=1,
+            compactness=0.1)
+        perturb_indices = [34, 1, 4, 21]
+        expected = [2, 0, 1, 2]
+        for i, e in zip(perturb_indices, expected):
+            granularity_level = perturbator.get_granularity_level(i)
+            self.assertEqual(granularity_level, e)
+
     def test_slic_fbank_do_segmentation(self):
         segment_dict = self.perturbator._do_segmentation(self.fbank)
         self.assertEqual(len(segment_dict), 2)
@@ -81,11 +103,29 @@ class TestFixedSlicPerturbator(unittest.TestCase):
         self.assertTrue(segmentations, self.perturbator.test_index_to_segment[test_index])
         self.assertTrue(np.array_equal(segmentations[0], segments))
 
-    def test_call(self):
+    # Test call() with n_masks as int
+    def test_call_int(self):
         test_index = 1
         perturb_index = 12
         torch.manual_seed(5)
         mask, masked_fbank = self.perturbator.__call__(self.fbank, test_index, perturb_index)
+        self.assertEqual(mask.shape, self.fbank.shape)
+        self.assertEqual(masked_fbank.shape, self.fbank.shape)
+        self.assertTrue(torch.any(masked_fbank == 0))
+        self.assertTrue(torch.any(masked_fbank == 1))
+
+    # Test call() with n_masks as list
+    def test_call_list(self):
+        perturbator = SlicOcclusionFbankPerturbatorFixedSegments(
+            n_masks=[2, 8, 12],
+            mask_probability=0.2,
+            n_segments=[1, 4, 8],
+            slic_sigma=1,
+            compactness=0.1)
+        test_index = 1
+        perturb_index = 25
+        torch.manual_seed(5)
+        mask, masked_fbank = perturbator.__call__(self.fbank, test_index, perturb_index)
         self.assertEqual(mask.shape, self.fbank.shape)
         self.assertEqual(masked_fbank.shape, self.fbank.shape)
         self.assertTrue(torch.any(masked_fbank == 0))
