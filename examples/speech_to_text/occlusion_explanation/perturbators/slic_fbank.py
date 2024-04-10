@@ -43,7 +43,7 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
             self,
             mask_probability: float,
             n_masks: int,
-            n_segments: tuple,
+            n_segments: list,
             slic_sigma: int,
             compactness: float):
         self.mask_probability = mask_probability
@@ -85,7 +85,7 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
             - n_masks (int): Number of masks applied to each filterbank. Default is 8000.
             - mask_probability (float): Probability of each segment in the filterbank to be masked.
             Default is random.
-            - n_segments (int): Number of segments to be obtained in each segmentation at different layers.
+            - n_segments (list): Number of segments to be obtained in each segmentation at different layers.
             Default is borrowed from the MFPP technique from which this approach is derived and is adapted to
             the average duration of MuST-C tst-COMMON (see https://arxiv.org/pdf/2006.02659.pdf).
             - reference_duration: median number of frames of tst-COMMON segments from MuST-C.
@@ -100,11 +100,11 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
         class_args = {}
         class_args["n_masks"] = fbank_occlusion.get("n_masks", 8000)
         class_args["mask_probability"] = fbank_occlusion.get("p", 0.5)
-        class_args["n_segments"] = fbank_occlusion.get("n_segments", (40, 80, 160, 320, 640))
+        class_args["n_segments"] = fbank_occlusion.get("n_segments", [40, 80, 160, 320, 640])
         class_args["slic_sigma"] = fbank_occlusion.get("slic_sigma", 1)
         class_args["compactness"] = fbank_occlusion.get("compactness", 0.1)
         assert 0. <= class_args["mask_probability"] < 1.
-        assert type(class_args["n_segments"]) == tuple
+        assert type(class_args["n_segments"]) == list
         # add arguments useful to the child class
         add_config = cls._parse_custom_args(fbank_occlusion)
         # merge class_args add_config
@@ -197,7 +197,7 @@ class SlicOcclusionFbankPerturbatorFixedSegments(SlicOcclusionFbankPerturbatorBa
             self,
             mask_probability: float,
             n_masks: int,
-            n_segments: tuple,
+            n_segments: list,
             slic_sigma: int,
             compactness: float):
         super().__init__(mask_probability, n_masks, n_segments, slic_sigma, compactness)
@@ -223,7 +223,7 @@ class SlicOcclusionFbankPerturbatorDynamicSegments(SlicOcclusionFbankPerturbator
             self,
             mask_probability: float,
             n_masks: int,
-            n_segments: tuple,
+            n_segments: list,
             slic_sigma: int,
             compactness: float,
             reference_duration: int):

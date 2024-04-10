@@ -26,7 +26,7 @@ class TestFixedSlicPerturbator(unittest.TestCase):
         self.perturbator = SlicOcclusionFbankPerturbatorFixedSegments(
             n_masks=23,
             mask_probability=0.2,
-            n_segments=(1, 4),
+            n_segments=[1, 4],
             slic_sigma=1,
             compactness=0.1)
         self.fbank = torch.tensor(
@@ -36,7 +36,7 @@ class TestFixedSlicPerturbator(unittest.TestCase):
              [30, 30, 30, 30, 30, 30, 243, 12, 43, 23, 34]])
 
     def test_attributes(self):
-        self.assertEqual(self.perturbator.n_segments, (1, 4))
+        self.assertEqual(self.perturbator.n_segments, [1, 4])
         self.assertEqual(self.perturbator.n_segmentations, 2)
         self.assertEqual(self.perturbator.n_masks_per_segmentation, 11)
         self.assertEqual(self.perturbator.n_masks, 22)
@@ -111,7 +111,7 @@ class TestDynamicSlicPerturbator(unittest.TestCase):
         self.perturbator = SlicOcclusionFbankPerturbatorDynamicSegments(
             n_masks=32,
             mask_probability=0.5,
-            n_segments=(1, 4, 8),
+            n_segments=[1, 4, 8],
             slic_sigma=1,
             compactness=0.1,
             reference_duration=10)
@@ -122,7 +122,7 @@ class TestDynamicSlicPerturbator(unittest.TestCase):
              [44, 32, 45, 30, 65, 90, 243, 12, 43, 23, 34]])
 
     def test_attributes(self):
-        self.assertEqual(self.perturbator.n_segments, (1, 4, 8))
+        self.assertEqual(self.perturbator.n_segments, [1, 4, 8])
         self.assertEqual(self.perturbator.reference_duration, 10)
         self.assertEqual(self.perturbator.n_segmentations, 3)
         self.assertEqual(self.perturbator.n_masks_per_segmentation, 10)
