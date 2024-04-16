@@ -30,6 +30,7 @@ class TestDeletionInsertionTask(unittest.TestCase):
         args.perc_interval = 5
         args.metric = "deletion"
         args.aggregator = "sentence"
+        args.normalizer = []
         current_directory = os.path.dirname(__file__)
         relative_path = os.path.join('mock_data', 'explanations.h5')
         explanation_path = os.path.join(current_directory, relative_path)
@@ -59,6 +60,7 @@ class TestDeletionInsertionTask(unittest.TestCase):
         args.perc_interval = 7
         args.metric = "deletion"
         args.aggregator = "sentence"
+        args.normalizer = []
         current_directory = os.path.dirname(__file__)
         relative_path = os.path.join('mock_data', 'explanations.h5')
         explanation_path = os.path.join(current_directory, relative_path)

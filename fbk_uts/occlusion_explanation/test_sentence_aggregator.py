@@ -17,7 +17,7 @@ import torch
 from examples.speech_to_text.occlusion_explanation.aggregators.sentence import SentenceLevelAggregator
 
 
-class TestSentenceLevelAggregators(unittest.TestCase):
+class TestSentenceLevelAggregator(unittest.TestCase):
     def setUp(self) -> None:
         self.explanations = {
             0: {
@@ -39,8 +39,7 @@ class TestSentenceLevelAggregators(unittest.TestCase):
                 "tgt_embed_heatmap": torch.tensor([[[100.]]]),  # (1, 1, 1)
                 "tgt_text": "sentence 4."}}
 
-    # test __call__() of SentenceLevelAggregatorNoNormalization()
-    def test_no_norm_call(self):
+    def test_call(self):
         aggregator = SentenceLevelAggregator()
         aggregated_explanations = aggregator(self.explanations)
         self.assertTrue(torch.equal(

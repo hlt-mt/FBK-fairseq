@@ -16,6 +16,7 @@ import logging
 from typing import Dict
 
 from examples.speech_to_text.occlusion_explanation.aggregators import get_aggregator, AGGREGATION_REGISTRY
+from examples.speech_to_text.occlusion_explanation.normalizers import NORMALIZATION_REGISTRY, get_normalizer
 from examples.speech_to_text.occlusion_explanation.utils import read_feature_attribution_maps_from_h5
 from examples.speech_to_text.tasks.speech_to_text_ctc import SpeechToTextCtcTask
 from examples.speech_to_text.xai_metrics.deletion_insertion_dataset import \
@@ -49,14 +50,26 @@ class FeatureAttributionEvaluationTask(SpeechToTextCtcTask):
             default="sentence",
             choices=AGGREGATION_REGISTRY.keys(),
             help="Aggregator type to obtain sentence-level explanations.")
+        parser.add_argument(
+            "--normalizer",
+            default=["single_mean_std"],
+            nargs='+',
+            choices=NORMALIZATION_REGISTRY.keys(),
+            help="Normalizations to be applied to explanations.")
 
     def __init__(self, args, tgt_dict, src_dict):
         super().__init__(args, tgt_dict, src_dict)
         # initialize sentence-level aggregator
         aggregator_class = get_aggregator(args.aggregator)
+        normalizers = [get_normalizer(norm) for norm in args.normalizer]
         aggregator = aggregator_class()
         # get aggregated heatmaps
         explanations = read_feature_attribution_maps_from_h5(self.args.explanation_path)
+        for sample in explanations:
+            for norm in normalizers:
+                norm = norm()
+                explanations[sample]["fbank_heatmap"], explanations[sample]["tgt_embed_heatmap"] = norm(
+                    explanations[sample]["fbank_heatmap"], explanations[sample]["tgt_embed_heatmap"])
         self.aggregated_explanations = aggregator(explanations)
         # Size of the percentage intervals according to which insertion/deletion of input elements is performed
         self.interval_size = int(self.args.perc_interval)

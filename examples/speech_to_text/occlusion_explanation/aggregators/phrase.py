@@ -19,8 +19,6 @@ from torch import Tensor
 
 from examples.speech_to_text.occlusion_explanation.aggregators import \
     register_aggregator, Aggregator
-from examples.speech_to_text.occlusion_explanation.aggregators.utils import _min_max_normalization, \
-    _mean_std_normalization
 
 
 SPACE_TAG = "\u2581"  # special token used by SentencePiece for space
@@ -84,13 +82,6 @@ class PhraseLevelAggregator(Aggregator):
             word_indices.append((start_index, len(tokens) - 1))
 
         return words, word_indices
-
-    @staticmethod
-    def _normalize(fbank_map: Tensor, tgt_map: Tensor) -> Tuple[Tensor, Tensor]:
-        """
-        Identity function, does not perform any normalization.
-        """
-        return fbank_map, tgt_map
 
     def aggregate_fbank_explanations(
             self,
@@ -191,9 +182,6 @@ class PhraseLevelAggregator(Aggregator):
                 fbank_heatmap = explanations[sample_id]["fbank_heatmap"]
                 tgt_embed_heatmap = explanations[sample_id]["tgt_embed_heatmap"]
 
-                # normalize explanations
-                fbank_heatmap, tgt_embed_heatmap = self._normalize(fbank_heatmap, tgt_embed_heatmap)
-
                 include_eos = True if (0, 0) in aggregation_indices else False
                 aggregated_fbank_explanations = self.aggregate_fbank_explanations(
                     aggregation_indices, fbank_heatmap, include_eos)
@@ -207,32 +195,6 @@ class PhraseLevelAggregator(Aggregator):
                 del explanations[sample_id]
 
         return explanations
-
-
-@register_aggregator("phrase_and_token_min_max_norm")
-class PhraseLevelAggregatorMinMaxNormalization(PhraseLevelAggregator):
-    """
-    Aggregates the heatmaps of filterbanks and target embeddings by averaging them
-    over multiple specified tokens. Dimension 1 of target embeddings represents tokens.
-    Before averaging, token-level min-max normalization between explanations of
-    filterbanks and of target embeddings is applied.
-    """
-    @staticmethod
-    def _normalize(fbank_map: Tensor, tgt_map: Tensor) -> Tuple[Tensor, Tensor]:
-        return _min_max_normalization(fbank_map, tgt_map)
-
-
-@register_aggregator("phrase_and_token_mean_std_norm")
-class PhraseLevelAggregatorMeanStdNormalization(PhraseLevelAggregator):
-    """
-    Aggregates the heatmaps of filterbanks and target embeddings by averaging them
-    over multiple specified tokens. Dimension 1 of target embeddings represents tokens.
-    Before averaging, token-level mean-std normalization between explanations of
-    filterbanks and of target embeddings is applied.
-    """
-    @staticmethod
-    def _normalize(fbank_map: Tensor, tgt_map: Tensor) -> Tuple[Tensor, Tensor]:
-        return _mean_std_normalization(fbank_map, tgt_map)
 
 
 @register_aggregator("phrase_and_word")
@@ -305,29 +267,3 @@ class PhraseAndWordLevelAggregator(PhraseLevelAggregator):
                 aggregation_indices, explanation_data["tgt_embed_heatmap"])
             explanation_data["tgt_text"] = phrases
         return aggregated_explanations
-
-
-@register_aggregator("phrase_and_word_min_max_norm")
-class PhraseAndWordLevelAggregatorMinMaxNormalization(PhraseAndWordLevelAggregator):
-    """
-    Aggregates the heatmaps of filterbanks and target embeddings by averaging them
-    over multiple specified tokens. Dimension 1 of target embeddings represents words.
-    Before averaging, token-level min-max normalization between explanations of
-    filterbanks and of target embeddings is applied.
-    """
-    @staticmethod
-    def _normalize(fbank_map: Tensor, tgt_map: Tensor) -> Tuple[Tensor, Tensor]:
-        return _min_max_normalization(fbank_map, tgt_map)
-
-
-@register_aggregator("phrase_and_word_mean_std_norm")
-class PhraseAndWordLevelAggregatorMeanStdNormalization(PhraseAndWordLevelAggregator):
-    """
-    Aggregates the heatmaps of filterbanks and target embeddings by averaging them
-    over multiple specified tokens. Dimension 1 of target embeddings represents words.
-    Before averaging, token-level mean-std normalization between explanations of
-    filterbanks and of target embeddings is applied.
-    """
-    @staticmethod
-    def _normalize(fbank_map: Tensor, tgt_map: Tensor) -> Tuple[Tensor, Tensor]:
-        return _mean_std_normalization(fbank_map, tgt_map)
