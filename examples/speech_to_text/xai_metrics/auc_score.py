@@ -105,7 +105,7 @@ def compute_score(
     all_scores = []
     for hypos_dict in hypos_list:
         scores = []
-        for step in hypos_dict:
+        for step in range(len(hypos_dict)):
             scores.append(compute_single_score(scorer, refs, hypos_dict[step]))
         all_scores.append(scores)
     scores_array = np.array(all_scores)
@@ -140,11 +140,9 @@ def save_plot(percentages: np.array, scores: np.array, save_path: str, scorer: s
 def main(args):
     print(f"Version {_VERSION} of FBK AUC Scorer.")
 
-    assert 0 <= args.conf_interval <= 100, "--conf-interval must be in the range [0-100]."
-
     # get percentage values
     num_intervals = (100 // args.perc_step) + 1
-    percentage_values = np.array([(x + 1) * args.perc_step for x in range(num_intervals)])
+    percentage_values = np.array([x * args.perc_step for x in range(num_intervals)])
 
     # get references
     with open(args.reference, 'r') as f:

@@ -13,8 +13,12 @@
 # limitations under the License
 import os
 import unittest
+from typing import Dict, List
+from unittest.mock import patch, MagicMock
 
-from examples.speech_to_text.xai_metrics.auc_score import read_hypos, filter_hypos
+import numpy as np
+
+from examples.speech_to_text.xai_metrics.auc_score import read_hypos, filter_hypos, compute_score
 from fairseq.scoring import build_scorer
 
 
@@ -101,6 +105,15 @@ class TestMetricSpeechToTextDataset(unittest.TestCase):
             filter_hypos(self.out[0][1], 4, 3, self.out[0][0])
         self.assertEqual(
             str(error_message.exception), f"'Sentence 2 for step 0 not available in file {self.out[0][0]}.'")
+
+    def test_compute_score(self):
+        with patch(
+                'examples.speech_to_text.xai_metrics.auc_score.compute_single_score',
+                new=lambda scorer, refs, hypos: len(hypos)):
+            hypos_list = [{2: ["hypo2", "hypo2", "hypo2", "hypo2"], 0: ["hypo0", "hypo0"], 1: ["hypo1"]}]
+            result = compute_score("dummy", ["ref1", "ref2"], hypos_list)
+            expected_result = np.array([2, 1, 4])
+            self.assertTrue(np.array_equal(result, expected_result))
 
 
 if __name__ == '__main__':
