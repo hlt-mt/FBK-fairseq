@@ -52,7 +52,7 @@ class FeatureAttributionEvaluationTask(SpeechToTextCtcTask):
             help="Aggregator type to obtain sentence-level explanations.")
         parser.add_argument(
             "--normalizer",
-            default=["single_mean_std"],
+            default=[],
             nargs='+',
             choices=NORMALIZATION_REGISTRY.keys(),
             help="Normalizations to be applied to explanations.")
