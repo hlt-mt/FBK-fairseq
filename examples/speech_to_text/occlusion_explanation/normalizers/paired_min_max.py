@@ -32,10 +32,16 @@ class PairedMinMaxNormalizer(Normalizer):
             tgt_explanation.shape[:2], device=tgt_explanation.device).tril().unsqueeze(-1) != 0
         min_vals = torch.minimum(
             fbank_explanation.view(tokens_size, -1).min(dim=1).values,
-            torch.where(tgt_padding_mask, tgt_explanation, torch.inf).view(tokens_size, -1).min(dim=1).values)
+            torch.where(
+                tgt_padding_mask,
+                tgt_explanation,
+                torch.tensor(torch.inf, device=tgt_explanation.device)).view(tokens_size, -1).min(dim=1).values)
         max_vals = torch.maximum(
             fbank_explanation.view(tokens_size, -1).max(dim=1).values,
-            torch.where(tgt_padding_mask, tgt_explanation, -torch.inf).view(tokens_size, -1).max(dim=1).values)
+            torch.where(
+                tgt_padding_mask,
+                tgt_explanation,
+                torch.tensor(-torch.inf, device=tgt_explanation.device)).view(tokens_size, -1).max(dim=1).values)
         min_vals = min_vals.unsqueeze(-1).unsqueeze(-1)
         max_vals = max_vals.unsqueeze(-1).unsqueeze(-1)
         values_ranges = max_vals - min_vals
