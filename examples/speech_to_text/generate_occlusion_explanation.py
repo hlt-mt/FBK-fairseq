@@ -168,7 +168,7 @@ def _main(cfg: DictConfig, output_file):
             tgt_embed_masks=tgt_embed_masks)
 
         gen_timer.stop(batch_size)
-        logger.info(f"Generated {batch_size} single heatmaps for {num_entries} entries")
+        logger.debug(f"Generated {batch_size} single heatmaps for {num_entries} entries")
 
         accumulator(sample, single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks)
 

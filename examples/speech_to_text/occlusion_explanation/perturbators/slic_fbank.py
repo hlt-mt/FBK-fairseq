@@ -134,12 +134,14 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
         segment_dict = {}
         for granularity_level, n_segments in enumerate(self.n_segments):
             n_segments = self.get_n_segments(fbank.size(0), n_segments)
+            LOGGER.debug(f"n_segments for filterbank of size {list(fbank.shape)}: {n_segments}")
             segment_dict[granularity_level] = slic(
                 normalized_fbank.numpy(),
                 compactness=self.compactness,
                 n_segments=n_segments,
                 sigma=self.slic_sigma,
                 channel_axis=None)
+            LOGGER.debug(f"n_segments returned by slic: {np.max(segment_dict[granularity_level])}")
         return segment_dict
 
     def get_granularity_level(self, perturb_index: int) -> int:
