@@ -46,7 +46,7 @@ class Scorer:
         set to 0 in the perturbed probabilities.
 
         Args:
-            - orig_probs: dictionary in the form {"id": Tensor (padded_seq_len, dict_len)}
+            - orig_probs: dictionary in the form {id: Tensor (padded_seq_len, dict_len)}
             - perturb_probs: Tensor of size (batch_size, padded_seq_len, dict_len)
             - orig_indices: Tensor of size (batch_size)
             - target_lengths: Tensor of size (batch_size)
@@ -61,7 +61,7 @@ class Scorer:
             (batch_size, max_length, vocab_size), dtype=torch.float, device=perturb_probs.device)
         prev_count = 0
         for orig_ind, count in zip(unique_indices, counts):
-            single_orig_prob = orig_probs[str(orig_ind.item())]
+            single_orig_prob = orig_probs[orig_ind.item()]
             if single_orig_prob.numel() > 0:  # check if not empty
                 # assign the original probabilities to the corresponding
                 # batch items in the empty padded matrix

@@ -33,7 +33,7 @@ class TestScorer(unittest.TestCase):
 
     def test_get_padded_probs(self):
         orig_probs = {
-            "0": torch.ones(6, 10), "1": torch.ones(7, 10), "3": torch.ones(9, 10)}
+            0: torch.ones(6, 10), 1: torch.ones(7, 10), 3: torch.ones(9, 10)}
         perturb_probs = torch.ones(3, 9, 10)
         batched_orig_probs, batched_perturb_probs = self.scorer.get_padded_probs(
             orig_probs, perturb_probs, self.sample["orig_id"], self.sample["net_input"]["target_lengths"])
@@ -71,7 +71,7 @@ class TestScorer(unittest.TestCase):
     # Test get_padded_probs() with a target_length equal to 0
     def test_get_padded_probs_empty(self):
         orig_probs = {
-            "0": torch.ones(2, 10), "1": torch.ones(3, 10), "3": torch.ones(4, 10), "4": torch.tensor([])}
+            0: torch.ones(2, 10), 1: torch.ones(3, 10), 3: torch.ones(4, 10), 4: torch.tensor([])}
         perturb_probs = torch.ones(2, 4, 10)
         target_lengths = torch.tensor([4, 0])
         orig_indices = torch.tensor([3, 4])
@@ -92,9 +92,9 @@ class TestScorer(unittest.TestCase):
     # Test that float probs are preserved in get_padded_probs()
     def test_get_padded_probs_type(self):
         orig_probs = {
-            "0": torch.full((6, 10), 3.1416),
-            "1": torch.full((7, 10), 3.1416),
-            "3": torch.full((9, 10), 3.1416)}
+            0: torch.full((6, 10), 3.1416),
+            1: torch.full((7, 10), 3.1416),
+            3: torch.full((9, 10), 3.1416)}
         perturb_probs = torch.full((3, 9, 10), 3.0)
         batched_orig_probs, batched_perturb_probs = self.scorer.get_padded_probs(
             orig_probs, perturb_probs, self.sample["orig_id"], self.sample["net_input"]["target_lengths"])

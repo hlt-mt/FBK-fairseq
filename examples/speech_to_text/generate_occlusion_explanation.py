@@ -137,40 +137,47 @@ def _main(cfg: DictConfig, output_file):
         log_interval=cfg.common.log_interval,
         default_log_format=("tqdm" if not cfg.common.no_progress_bar else "simple"))
 
-    # Load original probabilities
-    with h5py.File(cfg.task.original_probs, 'r') as f:
-        orig_probs = {  # len(orig_probs) = n_samples,
-            key: torch.tensor(f[key][()]) for key in f.keys()}  # each value has shape (padded_seq_len, dict_len))
+    with h5py.File(cfg.task.original_probs, 'r') as original_probs_f:
 
-    gen_timer = StopwatchMeter()
-    for sample in progress:
-        sample = utils.move_to_cuda(sample) if use_cuda else sample
-        if "net_input" not in sample:
-            continue
-        batch_size = sample["masks"].shape[0]
-        num_entries = torch.unique(sample["orig_id"]).shape[0]
+        gen_timer = StopwatchMeter()
+        for sample in progress:
 
-        gen_timer.start()
-        with torch.no_grad():
-            decoder_out, ctc_outputs = model(
-                sample["net_input"]["src_tokens"],
-                sample["net_input"]["src_lengths"],
-                sample["net_input"]["target"])
-            tgt_embed_masks = decoder_out[1]["masks"]
-            perturb_probs = model.get_normalized_probs(  # (batch_size, padded_seq_len, dict_len)
-                decoder_out, log_probs=False)
-            assert torch.all((perturb_probs >= 0) & (perturb_probs <= 1))
+            # Load original probabilities only for the samples in the current batch
+            # each value has shape (padded_seq_len, dict_len)
+            orig_probs = {
+                key: torch.tensor(original_probs_f[str(key)][()])
+                for key in torch.unique(sample["orig_id"]).tolist()}
 
-        single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks = scorer(
-            sample=sample,
-            orig_probs=orig_probs,
-            perturb_probs=perturb_probs,
-            tgt_embed_masks=tgt_embed_masks)
+            # Move to GPU
+            sample = utils.move_to_cuda(sample) if use_cuda else sample
+            orig_probs = utils.move_to_cuda(orig_probs) if use_cuda else orig_probs
 
-        gen_timer.stop(batch_size)
-        logger.debug(f"Generated {batch_size} single heatmaps for {num_entries} entries")
+            if "net_input" not in sample:
+                continue
+            batch_size = sample["masks"].shape[0]
+            num_entries = torch.unique(sample["orig_id"]).shape[0]
 
-        accumulator(sample, single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks)
+            gen_timer.start()
+            with torch.no_grad():
+                decoder_out, ctc_outputs = model(
+                    sample["net_input"]["src_tokens"],
+                    sample["net_input"]["src_lengths"],
+                    sample["net_input"]["target"])
+                tgt_embed_masks = decoder_out[1]["masks"]
+                perturb_probs = model.get_normalized_probs(  # (batch_size, padded_seq_len, dict_len)
+                    decoder_out, log_probs=False)
+                assert torch.all((perturb_probs >= 0) & (perturb_probs <= 1))
+
+            single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks = scorer(
+                sample=sample,
+                orig_probs=orig_probs,
+                perturb_probs=perturb_probs,
+                tgt_embed_masks=tgt_embed_masks)
+
+            gen_timer.stop(batch_size)
+            logger.debug(f"Generated {batch_size} single heatmaps for {num_entries} entries")
+
+            accumulator(sample, single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks)
 
 
 def cli_main():
