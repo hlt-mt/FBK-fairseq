@@ -83,7 +83,7 @@ def register_perturbator(name):
                 f"Cannot register perturbation with duplicate class name ({cls.__name__})")
         PERTURBATION_REGISTRY[name] = cls
         PERTURBATION_CLASS_NAMES.add(cls.__name__)
-        LOGGER.info(f"Occlusion perturbation applied: {name}.")
+        LOGGER.debug(f"Occlusion perturbation registered: {name}.")
         return cls
     return register_perturbation_cls
 

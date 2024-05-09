@@ -173,7 +173,7 @@ def register_scorer(name):
                 f"Cannot register scorer with duplicate class name ({cls.__name__})")
         SCORER_REGISTRY[name] = cls
         SCORER_CLASS_NAMES.add(cls.__name__)
-        LOGGER.info(f"Scorer used: {name}.")
+        LOGGER.debug(f"Scorer registered: {name}.")
         return cls
     return register_scorer_cls
 

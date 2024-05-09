@@ -61,7 +61,7 @@ def register_aggregator(name):
                 f"Cannot register aggregator with duplicate class name ({cls.__name__})")
         AGGREGATION_REGISTRY[name] = cls
         AGGREGATION_CLASS_NAMES.add(cls.__name__)
-        LOGGER.info(f"Aggregation registered: {name}.")
+        LOGGER.debug(f"Aggregator registered: {name}.")
         return cls
     return register_aggregation_cls
 
