@@ -5,6 +5,7 @@ Dedicated README for each work can be found in the `fbk_works` directory.
 
  ### 2024
 
+ - [[ACL 2024] **When Good and Reproducible Results are a Giant with Feet of Clay: The Importance of Software Quality in NLP**](fbk_works/BUGFREE_CONFORMER.md)
  - [[LREC-COLING 2024] **How do Hyenas deal with Human Speech? Speech Recognition and Translation with ConfHyena**](fbk_works/HYENA_COLING2024.md)
 
  ### 2023
@@ -18,7 +19,6 @@ Dedicated README for each work can be found in the `fbk_works` directory.
  - [[INTERSPEECH 2023] **Joint Speech Translation and Named Entity Recognition**](fbk_works/JOINT_ST_NER2023.md)
  - [[ACL 2023] **Attention as a Guide for Simultaneous Speech Translation**](fbk_works/EDATT_SIMULST_AGENT_ACL2023.md)
  - [[IWSLT 2023] **Direct Models for Simultaneous Translation and Automatic Subtitling: FBK@IWSLT2023**](fbk_works/IWSLT_2023.md)
- - [**Reproducibility is Nothing Without Correctness: The Importance of Testing Code in NLP**](fbk_works/BUGFREE_CONFORMER.md)
 
  ### 2022
 

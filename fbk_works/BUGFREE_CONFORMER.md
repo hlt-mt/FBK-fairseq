@@ -1,7 +1,8 @@
-# Correctness of Conformer implementation
+# Correctness of Conformer implementation (ACL 2024)
 
 This README contains the instructions to replicate the training and evaluation of the models in the paper
-[Reproducibility is Nothing Without Correctness: The Importance of Testing Code in NLP](https://arxiv.org/abs/2303.16166).
+[When Good and Reproducible Results are a Giant with Feet of Clay: The Importance of Software Quality in NLP](https://arxiv.org/abs/2303.16166)
+published at ACL 2024.
 In addition, we release the pre-trained models used in the paper.
 
 
@@ -152,11 +153,11 @@ vocab_filename_src: srcdict.txt
 
 ## Citation
 ```bibtex
-@article{papi2023reproducibility,
-      title={{Reproducibility is Nothing without Correctness: The Importance of Testing Code in NLP}}, 
-      author={Sara Papi and Marco Gaido and Andrea Pilzer and Matteo Negri},
-      year={2023},
-      url={https://arxiv.org/abs/2303.16166},
-      journal={arXiv preprint arXiv:2303.16166},
+@inproceedings{papi-et-al-2024-when,
+  title={{When Good and Reproducible Results are a Giant with Feet of Clay: The Importance of Software Quality in NLP}},
+  author={Papi, Sara and Gaido, Marco and Pilzer, Andrea and Negri, Matteo},
+  booktitle = "Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)",
+  address = "Bangkok, Thailand",
+  year={2024}
 }
 ```

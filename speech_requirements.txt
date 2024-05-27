@@ -2,3 +2,4 @@ torchaudio
 ctc_segmentation
 srt
 praat-parselmouth
+pangolinn

@@ -12,18 +12,107 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 import copy
-import math
 import unittest
 from argparse import Namespace
 
-import torch
-from torch import nn
+from torch import nn, Tensor, LongTensor
 
 from examples.speech_to_text.models.conformer import conformer_s, ConformerEncoder
 from examples.speech_to_text.modules.conformer_attention import MultiHeadedSelfAttentionModule
 from examples.speech_to_text.modules.conformer_encoder_layer import ConformerEncoderLayer
 from fairseq.data import Dictionary
 from fairseq.data.data_utils import lengths_to_padding_mask
+
+from pangolinn import seq2seq
+
+
+class MultiHeadedSelfAttentionPangolinnWrapper(seq2seq.PangolinnSeq2SeqModuleWrapper):
+    def build_module(self) -> nn.Module:
+        return MultiHeadedSelfAttentionModule(self.num_input_channels, 2)
+
+    @property
+    def num_input_channels(self) -> int:
+        return 8
+
+    def forward(self, x: Tensor, lengths: LongTensor) -> Tensor:
+        return self._module(x, lengths_to_padding_mask(lengths))
+
+
+class ConformerEncoderLayerPangolinnWrapper(seq2seq.PangolinnSeq2SeqModuleWrapper):
+    def build_module(self) -> nn.Module:
+        base_args = Namespace()
+        base_args.input_feat_per_channel = self.num_input_channels
+        base_args.input_channels = 1
+        base_args.max_source_positions = 10
+        base_args.no_syncbatchnorm = True
+        base_args.encoder_embed_dim = 8
+        conformer_s(base_args)
+        return ConformerEncoderLayer(base_args)
+
+    @property
+    def num_input_channels(self) -> int:
+        return 8
+
+    def forward(self, x: Tensor, lengths: LongTensor) -> Tensor:
+        return self._module(x.transpose(0, 1), lengths_to_padding_mask(lengths)).transpose(0, 1)
+
+
+class ConformerEncoderPangolinnWrapper(seq2seq.PangolinnSeq2SeqModuleWrapper):
+    def base_args(self) -> Namespace:
+        base_args = Namespace()
+        base_args.input_feat_per_channel = self.num_input_channels
+        base_args.input_channels = 1
+        base_args.max_source_positions = 10
+        base_args.no_syncbatchnorm = True
+        base_args.encoder_embed_dim = 8
+        base_args.encoder_layers = 3
+        base_args.criterion = "ctc_multi_loss"
+        base_args.ctc_compress_strategy = "none"
+        base_args.ctc_encoder_layer = 2
+        conformer_s(base_args)
+        return base_args
+
+    def build_module(self) -> nn.Module:
+        return ConformerEncoder(self.base_args(), Dictionary())
+
+    @property
+    def num_input_channels(self) -> int:
+        return 8
+
+    @property
+    def sequence_downsampling_factor(self) -> int:
+        # the two initial Conv1D reduce sequence length by a factor of 4
+        return 4
+
+    def forward(self, x: Tensor, lengths: LongTensor) -> Tensor:
+        return self._module(x, lengths)["encoder_out"][0].transpose(0, 1)
+
+
+class ConformerEncoderUnsafePangolinnWrapper(ConformerEncoderPangolinnWrapper):
+    def base_args(self) -> Namespace:
+        args = super().base_args()
+        args.batch_unsafe_relative_shift = True
+        return args
+
+
+class MultiHeadedSelfAttentionTestCase(seq2seq.EncoderPaddingTestCase):
+    module_wrapper_class = MultiHeadedSelfAttentionPangolinnWrapper
+
+
+class ConformerEncoderLayerPaddingTestCase(seq2seq.EncoderPaddingTestCase):
+    module_wrapper_class = ConformerEncoderLayerPangolinnWrapper
+
+
+class ConformerEncoderPaddingTestCase(seq2seq.EncoderPaddingTestCase):
+    module_wrapper_class = ConformerEncoderPangolinnWrapper
+
+
+class ConformerEncoderUnsafePaddingTestCase(seq2seq.EncoderPaddingTestCase):
+    module_wrapper_class = ConformerEncoderUnsafePangolinnWrapper
+
+    def test_batch_size_does_not_matter(self):
+        with self.assertRaises(AssertionError):
+            super().test_batch_size_does_not_matter()
 
 
 class ConformerEncoderTestCase(unittest.TestCase):
@@ -58,104 +147,6 @@ class ConformerEncoderTestCase(unittest.TestCase):
         for layer in range(len(encoder._modules["conformer_layers"])):
             self.assertTrue(
                 isinstance(encoder._modules["conformer_layers"][layer].conv_module.batchnorm, norm_class))
-
-    def test_conformer_encoder_layer_padding(self):
-        batchnorm_args = copy.deepcopy(self.base_args)
-        batchnorm_args.no_syncbatchnorm = True
-        batchnorm_args.encoder_embed_dim = 8
-        fake_sample = torch.rand(2, 10, 8)
-        fake_sample[1, 3:, :] = 0
-        fake_lengths = torch.LongTensor([10, 3])
-        padding_mask = lengths_to_padding_mask(fake_lengths)
-        encoder_layer = ConformerEncoderLayer(batchnorm_args)
-        encoder_layer.eval()
-        out = encoder_layer(fake_sample.transpose(0, 1), padding_mask).transpose(0, 1)
-        self.assertTrue(
-            torch.all(out[1, 3:, :] == 0.0), f"non-zero entries in {out[1, 3:, :]}")
-
-    def test_encoder_padding(self):
-        batchnorm_args = copy.deepcopy(self.base_args)
-        batchnorm_args.no_syncbatchnorm = True
-        batchnorm_args.encoder_embed_dim = 8
-        batchnorm_args.input_feat_per_channel = 8
-        batchnorm_args.encoder_layers = 3
-        fake_sample = torch.rand(2, 27, 8)
-        fake_sample[1, 13:, :] = 0
-        fake_lengths = torch.LongTensor([27, 13])
-        encoder = ConformerEncoder(batchnorm_args, self.fake_dict)
-        encoder.eval()
-        net_out = encoder.forward(fake_sample, fake_lengths, return_all_hiddens=True)
-        padding_area = net_out["encoder_out"][0][4:, 1, :]  # output is N x B x C and downsampled by 4
-        self.assertGreater(padding_area.numel(), 0)
-        self.assertTrue(torch.all(padding_area == 0.0), f"non-zero entries in {padding_area}")
-
-    def test_multihead_selfattn(self):
-        batchnorm_args = copy.deepcopy(self.base_args)
-        batchnorm_args.no_syncbatchnorm = True
-        batchnorm_args.encoder_embed_dim = 8
-        fake_sample = torch.rand(2, 10, 8)
-        fake_sample[1, 3:, :] = 0
-        fake_lengths = torch.LongTensor([10, 3])
-        padding_mask = lengths_to_padding_mask(fake_lengths)
-        fake_sample2 = fake_sample[1:, :3, :]
-        padding_mask2 = lengths_to_padding_mask(fake_lengths[1].unsqueeze(0))
-        attn = MultiHeadedSelfAttentionModule(8, 4)
-        attn.eval()
-        attn_out = attn(fake_sample, padding_mask)
-        attn_out2 = attn(fake_sample2, padding_mask2)
-        torch.testing.assert_allclose(attn_out[1, :3, :], attn_out2[0])
-        self.assertTrue(
-            torch.all(attn_out[1, 3:, :] == 0.0), f"non-zero entries in {attn_out[1, 3:, :]}")
-
-    def test_encoder_batch(self):
-        batchnorm_args = copy.deepcopy(self.base_args)
-        batchnorm_args.no_syncbatchnorm = True
-        batchnorm_args.encoder_embed_dim = 8
-        batchnorm_args.input_feat_per_channel = 8
-        batchnorm_args.encoder_layers = 3
-        fake_sample = torch.rand(5, 27, 8)
-        fake_sample[1, 13:, :] = 0
-        fake_sample[2, 8:, :] = 0
-        fake_sample[3, 8:, :] = 0
-        fake_sample[4, 5:, :] = 0
-        fake_lengths = torch.LongTensor([27, 13, 8, 8, 5])
-        encoder = ConformerEncoder(batchnorm_args, self.fake_dict)
-        encoder.eval()
-        net_out = encoder.forward(fake_sample, fake_lengths, return_all_hiddens=True)
-
-        def test_item(item_idx):
-            item_len = fake_lengths[item_idx].item()
-            item_out_len = math.ceil(item_len / 4)
-            fake_sample2 = fake_sample[item_idx, :item_len, :]
-            net_out2 = encoder.forward(
-                fake_sample2.unsqueeze(0), fake_lengths[item_idx].unsqueeze(0), return_all_hiddens=True)
-            torch.testing.assert_allclose(
-                    net_out["encoder_out"][0][:item_out_len, item_idx, :],
-                    net_out2["encoder_out"][0][:, 0, :])
-
-        for i in range(5):
-            test_item(i)
-
-    def test_encoder_batch_unsafe_fails(self):
-        batchnorm_args = copy.deepcopy(self.base_args)
-        batchnorm_args.no_syncbatchnorm = True
-        batchnorm_args.encoder_embed_dim = 8
-        batchnorm_args.input_feat_per_channel = 8
-        batchnorm_args.encoder_layers = 3
-        batchnorm_args.batch_unsafe_relative_shift = True
-        fake_sample = torch.rand(2, 27, 8)
-        fake_sample[1, 13:, :] = 0
-        fake_lengths = torch.LongTensor([27, 13])
-        encoder = ConformerEncoder(batchnorm_args, self.fake_dict)
-        encoder.eval()
-        net_out = encoder.forward(fake_sample, fake_lengths, return_all_hiddens=True)
-        fake_sample2 = fake_sample[1, :13, :]
-        net_out2 = encoder.forward(fake_sample2.unsqueeze(0), fake_lengths[1].unsqueeze(0), return_all_hiddens=True)
-        with self.assertRaises(AssertionError) as ae:
-            torch.testing.assert_allclose(
-                net_out["encoder_out"][0][:4, 1, :],
-                net_out2["encoder_out"][0][:, 0, :])
-        self.assertTrue("Tensor-likes are not close!" in str(ae.exception))
 
 
 if __name__ == '__main__':
