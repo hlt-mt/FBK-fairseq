@@ -5,6 +5,7 @@ Dedicated README for each work can be found in the `fbk_works` directory.
 
  ### 2024
 
+ - [[ACL 2024] **SBAAM! Eliminating Transcript Dependency in Automatic Subtitling**](fbk_works/SBAAM.md)
  - [[ACL 2024] **When Good and Reproducible Results are a Giant with Feet of Clay: The Importance of Software Quality in NLP**](fbk_works/BUGFREE_CONFORMER.md)
  - [[LREC-COLING 2024] **How do Hyenas deal with Human Speech? Speech Recognition and Translation with ConfHyena**](fbk_works/HYENA_COLING2024.md)
 

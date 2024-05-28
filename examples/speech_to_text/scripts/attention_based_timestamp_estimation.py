@@ -84,10 +84,10 @@ class AttentionMatrixProcessor:
         raise NotImplementedError("Subclasses of AttentionMatrixProcessor should implement aligns")
 
 
-class CustomAttentionAligner(AttentionMatrixProcessor):
+class SBAAMNoForceEndAttentionAligner(AttentionMatrixProcessor):
     """
-    Custom method specifically designed by FBK to determine block boundaries,
-    trying to maximize the value of the attention area of corresponding text and audio.
+    Determines subtitling block boundaries, trying to maximize the value of the attention area
+    of corresponding text and audio.
     """
     def normalize(self):
         self.std_normalize()
@@ -131,10 +131,13 @@ class CustomAttentionAligner(AttentionMatrixProcessor):
         return splitting_time_idxs
 
 
-class CustomForcedEndAttentionAligner(CustomAttentionAligner):
+class SBAAMAttentionAligner(SBAAMNoForceEndAttentionAligner):
     """
-    The current method does not properly estimate the end time of the last eob.
+    SBAAMNoForceEnd does not properly estimate the end time of the last eob.
     As a workaround, this forces the last eob to terminate at the end of the audio.
+
+    This is the method used and described in
+    `"SBAAM! Eliminating Transcript Dependency in Automatic Subtitling" <>`_.
     """
     def aligns(self, boundaries_indexes):
         splitting_time_idxs = super().aligns(boundaries_indexes)
@@ -243,8 +246,8 @@ class DTWMedianFilterAttentionAligner(AttentionMatrixProcessor):
 
 class AttentionAlignerArgparse(argparse.Action):
     AVAILABLE_ALIGNERS = {
-        "custom": CustomAttentionAligner,
-        "custom-forceend": CustomForcedEndAttentionAligner,
+        "sbaam-noforce": SBAAMNoForceEndAttentionAligner,
+        "sbaam": SBAAMAttentionAligner,
         "dtw-medianf": DTWMedianFilterAttentionAligner,
     }
 
@@ -356,7 +359,7 @@ if __name__ == '__main__':
     parser.add_argument('--alignment-operator',
                         action=AttentionAlignerArgparse,
                         choices=AttentionAlignerArgparse.AVAILABLE_ALIGNERS.keys(),
-                        default=AttentionAlignerArgparse.AVAILABLE_ALIGNERS['custom-forceend'],
+                        default=AttentionAlignerArgparse.AVAILABLE_ALIGNERS['sbaam'],
                         help="method to use to perform alignments")
     parser.add_argument('--remove-last-frame', action='store_true', default=False,
                         help="if set, last token is removed before computing alignments")
