@@ -218,6 +218,7 @@ def do_setup(package_data):
                 "fairseq-score = fairseq_cli.score:cli_main",
                 "fairseq-train = fairseq_cli.train:cli_main",
                 "fairseq-validate = fairseq_cli.validate:cli_main",
+                "streamLAAL = examples.speech_to_text.simultaneous_translation.scripts.stream_laal:cli_main"
             ],
         },
         cmdclass=cmdclass,
