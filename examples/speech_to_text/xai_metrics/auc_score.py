@@ -157,12 +157,17 @@ def main(args):
 
     # compute scores
     scores = compute_score(args.scorer, refs, hypos_mapping_list)
-
-    # print/plot AUC
-    if args.fig_path is not None:
-        save_plot(percentage_values, scores, args.fig_path, args.scorer)
     auc_score = compute_auc(scores, percentage_values)
     print(f"AUC: {auc_score}")
+
+    # save data
+    if args.data_path is not None:
+        np.save(os.path.join(args.data_path, "percentage.npy"), percentage_values)
+        np.save(os.path.join(args.data_path, "scores.npy"), scores)
+
+    # plot AUC
+    if args.fig_path is not None:
+        save_plot(percentage_values, scores, args.fig_path, args.scorer)
 
 
 if __name__ == "__main__":
@@ -181,6 +186,11 @@ if __name__ == "__main__":
              "computing insertion/deletion of input features.")
     parser.add_argument(
         "--scorer", type=str, default="wer_max", help="Metric for the evaluation of the task.")
+    parser.add_argument(
+        "--data-path",
+        type=str,
+        default=None,
+        help="Path to the folder where npy arrays containing the data to plot will be saved.")
     parser.add_argument(
         "--fig-path", type=str, default=None, help="Path to the file where the plot is saved.")
     args = parser.parse_args()
