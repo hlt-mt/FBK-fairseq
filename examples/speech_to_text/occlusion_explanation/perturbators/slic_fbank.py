@@ -232,7 +232,7 @@ class SlicOcclusionFbankPerturbatorFixedSegments(SlicOcclusionFbankPerturbatorBa
         if isinstance(self.n_masks_per_segmentation, list):
             LOGGER.info(
                 f"{self.n_masks} masks are used, with {self.n_masks_per_segmentation} masks "
-                f"for the segmentations with {self.n_masks} segments.")
+                f"for the segmentations with {self.n_segments} segments.")
         else:
             LOGGER.info(
                 f"{self.n_masks} masks are used, with {self.n_masks_per_segmentation} "
@@ -265,7 +265,7 @@ class SlicOcclusionFbankPerturbatorDynamicSegments(SlicOcclusionFbankPerturbator
         if isinstance(self.n_masks_per_segmentation, list):
             LOGGER.info(
                 f"{self.n_masks} masks are used, with {self.n_masks_per_segmentation} masks "
-                f"for the segmentations with {self.n_masks} segments considering a reference "
+                f"for the segmentations with {self.n_segments} segments considering a reference "
                 f"duration of {(self.reference_duration * 10 + 25) / 1000} seconds.")
         else:
             LOGGER.info(
