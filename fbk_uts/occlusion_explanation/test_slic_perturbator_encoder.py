@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 
+import copy
 import unittest
 
 import numpy as np
@@ -42,6 +43,8 @@ class TestFixedSlicPerturbator(unittest.TestCase):
         self.assertEqual(self.perturbator.n_masks, 22)
         with self.assertRaises(AttributeError):
             _ = self.perturbator.reference_duration
+        with self.assertRaises(AttributeError):
+            _ = self.perturbator.threshold_duration
 
     # Test get_granularity_level() with n_masks as int
     def test_get_granularity_level_int(self):
@@ -141,7 +144,8 @@ class TestFixedSlicPerturbator(unittest.TestCase):
         self.assertEqual(n_segments, 2)
 
     def test_parse_custom_args(self):
-        fbank_occlusion_config = {"n_masks": 20, "reference_duration": 40}
+        fbank_occlusion_config = {
+            "n_masks": 20, "reference_duration": 40, "threshold_duration": 750}
         add_config = self.perturbator._parse_custom_args(fbank_occlusion_config)
         self.assertEqual(add_config, {})
 
@@ -164,6 +168,7 @@ class TestDynamicSlicPerturbator(unittest.TestCase):
     def test_attributes(self):
         self.assertEqual(self.perturbator.n_segments, [1, 4, 8])
         self.assertEqual(self.perturbator.reference_duration, 10)
+        self.assertEqual(self.perturbator.threshold_duration, None)
         self.assertEqual(self.perturbator.n_segmentations, 3)
         self.assertEqual(self.perturbator.n_masks_per_segmentation, 10)
         self.assertEqual(self.perturbator.n_masks, 30)
@@ -217,9 +222,25 @@ class TestDynamicSlicPerturbator(unittest.TestCase):
         self.assertTrue(torch.any(masked_fbank == 0))
         self.assertTrue(torch.any(masked_fbank == 1))
 
-    def test_get_n_segments(self):
+    def test_get_n_segments_below_threshold(self):
+        # with threshold_duration not set (default behaviour)
         n_segments = self.perturbator.get_n_segments(n_frames=12, n_segments=20)
         self.assertEqual(n_segments, 24)
+        # with threshold_duration set (does not change behaviour if we are below the threshold)
+        perturbator_with_threshold = copy.deepcopy(self.perturbator)
+        perturbator_with_threshold.threshold_duration = 20
+        n_segments = perturbator_with_threshold.get_n_segments(n_frames=12, n_segments=20)
+        self.assertEqual(n_segments, 24)
+
+    def test_get_n_segments_above_threshold(self):
+        # with threshold_duration not set (default behaviour)
+        n_segments = self.perturbator.get_n_segments(n_frames=24, n_segments=20)
+        self.assertEqual(n_segments, 48)
+        # with threshold_duration set
+        perturbator_with_threshold = copy.deepcopy(self.perturbator)
+        perturbator_with_threshold.threshold_duration = 20
+        n_segments = perturbator_with_threshold.get_n_segments(n_frames=24, n_segments=20)
+        self.assertEqual(n_segments, 40)
 
     # check that at least 1 segment is guaranteed
     def test_get_n_segments_zero(self):
@@ -227,14 +248,15 @@ class TestDynamicSlicPerturbator(unittest.TestCase):
         self.assertEqual(n_segments, 1)
 
     def test_parse_custom_args(self):
-        fbank_occlusion_config = {"n_masks": 20, "reference_duration": 40}
+        fbank_occlusion_config = {
+            "n_masks": 20, "reference_duration": 40, "threshold_duration": 750}
         add_config = self.perturbator._parse_custom_args(fbank_occlusion_config)
-        self.assertEqual(add_config, {"reference_duration": 40})
+        self.assertEqual(add_config, {"reference_duration": 40, "threshold_duration": 750})
 
     def test_parse_custom_args_empty(self):
         fbank_occlusion_config = {"n_masks": 20}
         add_config = self.perturbator._parse_custom_args(fbank_occlusion_config)
-        self.assertEqual(add_config, {"reference_duration": 500})
+        self.assertEqual(add_config, {"reference_duration": 500, "threshold_duration": None})
 
 
 if __name__ == '__main__':

@@ -13,7 +13,7 @@
 # limitations under the License
 
 import logging
-from typing import Tuple, Dict, List, Union
+from typing import Optional, Tuple, Dict, List, Union
 
 import numpy as np
 import torch
@@ -259,9 +259,11 @@ class SlicOcclusionFbankPerturbatorDynamicSegments(SlicOcclusionFbankPerturbator
             n_segments: list,
             slic_sigma: int,
             compactness: float,
-            reference_duration: int):
+            reference_duration: int,
+            threshold_duration: Optional[int] = None):
         super().__init__(mask_probability, n_masks, n_segments, slic_sigma, compactness)
         self.reference_duration = reference_duration
+        self.threshold_duration = threshold_duration
         if isinstance(self.n_masks_per_segmentation, list):
             LOGGER.info(
                 f"{self.n_masks} masks are used, with {self.n_masks_per_segmentation} masks "
@@ -272,6 +274,10 @@ class SlicOcclusionFbankPerturbatorDynamicSegments(SlicOcclusionFbankPerturbator
                 f"{self.n_masks} masks are used, with {self.n_masks_per_segmentation} "
                 f"for each of the {int(self.n_segmentations)} segmentations considering a reference "
                 f"duration of {(self.reference_duration * 10 + 25) / 1000} seconds.")
+        if self.threshold_duration is not None:
+            LOGGER.info(
+                "The number of segments is dynamically adapted only for audio samples shorter "
+                f"than {(self.threshold_duration * 10 + 25) / 1000} seconds.")
 
     @staticmethod
     def _parse_custom_args(fbank_occlusion_config: Dict) -> Dict:
@@ -280,13 +286,22 @@ class SlicOcclusionFbankPerturbatorDynamicSegments(SlicOcclusionFbankPerturbator
             - reference_duration: represents the number of frames based on which the numbers of segments
             have been set. Default is 500, which represents the median number of frames of segments
             contained in MuST-C tst-COMMON
+            - threshold_duration: optional parameter. If set, represents the number of frames below 
+            which the number of segments is adapted. If the audio sample is longer than this 
+            threshold, the number of segments remains fixed. This is done to avoid having too many 
+            segments with respect to the number of masks, which means each segment wouldn't be 
+            occluded enough times to have high-quality explanations. Default is None.
         """
-        return {"reference_duration": fbank_occlusion_config.get("reference_duration", 500)}
+        return {"reference_duration": fbank_occlusion_config.get("reference_duration", 500),
+                "threshold_duration": fbank_occlusion_config.get("threshold_duration", None)}
 
     def get_n_segments(self, n_frames: int, n_segments: int) -> int:
         """
         Adjust the number of segments based on duration.
         """
+        if self.threshold_duration is not None and n_frames > self.threshold_duration:
+            # Behave as if the audio sample were as long as the threshold duration
+            n_frames = self.threshold_duration
         n_segments = round(n_segments * n_frames / self.reference_duration)
         # guarantee at least 1 segment and prevent division by 0 in slic
         n_segments = n_segments if n_segments != 0 else 1
