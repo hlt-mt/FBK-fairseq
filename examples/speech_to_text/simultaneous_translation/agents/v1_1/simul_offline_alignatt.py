@@ -46,20 +46,7 @@ class AlignAttSTAgent(EDAttSTAgent):
         new_hypo = hypo['tokens'][prefix_len:-1].int()
         hypo_attn = hypo['attention'][:-1, prefix_len:-1].transpose(0, 1).float()
         if hypo_attn.shape[0] > 0 and hypo_attn.shape[1] > 0:
-            # Compute the frame to which each token mostly attends to
-            most_attended_idxs = torch.argmax(hypo_attn, dim=1)
-            # Compute the first frame starting from which the model cannot attend to
-            first_invalid_frame = hypo_attn.size(1) - self.frame_num
-            # For each element of the tensor, corresponding to a predicted token,
-            # we check if its aligned frame is equal or successive to the
-            # first_invalid_frame, we find the list of indexes for which this is True
-            # (corresponding to 1 value) by applying the nonzero() function, and we
-            # select the first token for which an invalid alignment has been done,
-            # corresponding to the index from which the emission is stopped
-            invalid_tok_idxs = (most_attended_idxs >= first_invalid_frame).nonzero(
-                as_tuple=True)[0]
-            if len(invalid_tok_idxs) > 0:
-                new_hypo = new_hypo[:invalid_tok_idxs[0]]
+            new_hypo = self.alignatt_policy(new_hypo, hypo_attn, self.frame_num)
             # Emit the hypothesis if not empty
             if len(new_hypo) > 0:
                 states.write = new_hypo
@@ -68,3 +55,21 @@ class AlignAttSTAgent(EDAttSTAgent):
                     finished = DEFAULT_EOS in valid_words or len(states.target) > self.max_len
                     return WriteAction(valid_words, finished)
         return ReadAction()
+
+    @staticmethod
+    def alignatt_policy(new_hypo, hypo_attn, frame_num):
+        # Compute the frame to which each token mostly attends to
+        most_attended_idxs = torch.argmax(hypo_attn, dim=1)
+
+        # Compute the first frame starting from which the model cannot attend to
+        first_invalid_frame = hypo_attn.size(1) - frame_num
+
+        # For each element of the tensor, corresponding to a predicted token, we check if its
+        # aligned frame is equal or successive to the first_invalid_frame, and we select the
+        # first token for which an invalid alignment has been done, corresponding to the index
+        # from which the emission is stopped
+        invalid_tok_idxs = torch.where(most_attended_idxs >= first_invalid_frame)[0]
+
+        if len(invalid_tok_idxs) > 0:
+            new_hypo = new_hypo[:invalid_tok_idxs[0]]
+        return new_hypo

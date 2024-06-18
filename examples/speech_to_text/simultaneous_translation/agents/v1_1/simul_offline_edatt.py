@@ -47,8 +47,13 @@ class EDAttSTAgent(FairseqSimulSTAgent):
 
     @staticmethod
     def add_args(parser):
-        # fmt: off
         BaseSimulSTAgent.add_args(parser)
+        EDAttSTAgent.add_edatt_args(parser)
+        return parser
+
+    @staticmethod
+    def add_edatt_args(parser):
+        # fmt: off
         parser.add_argument("--attn-threshold", type=float, default=0.1,
                             help="Threshold on the attention scores that triggers READ action."
                                  "If the last frame attention score >= attn_threshold, READ "
