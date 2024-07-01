@@ -5,6 +5,7 @@ Dedicated README for each work can be found in the `fbk_works` directory.
 
  ### 2024
 
+ - [[IWSLT 2024] **SimulSeamless: FBK at IWSLT 2024 Simultaneous Speech Translation**](fbk_works/SIMULSEAMLESS.md)
  - [[ACL 2024] **StreamAtt: Direct Streaming Speech-to-Text Translation with Attention-based Audio History Selection**](fbk_works/STREAMATT_STREAMLAAL.md)
  - [[ACL 2024] **SBAAM! Eliminating Transcript Dependency in Automatic Subtitling**](fbk_works/SBAAM.md)
  - [[ACL 2024] **When Good and Reproducible Results are a Giant with Feet of Clay: The Importance of Software Quality in NLP**](fbk_works/BUGFREE_CONFORMER.md)
