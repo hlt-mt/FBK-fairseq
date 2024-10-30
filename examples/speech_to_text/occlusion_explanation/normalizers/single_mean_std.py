@@ -40,6 +40,9 @@ class SingleMeanStdNormalizer(Normalizer):
         fbank_expected_values = fbank_expected_values.unsqueeze(-1).unsqueeze(-1)
         fbank_std_devs = fbank_std_devs.unsqueeze(-1).unsqueeze(-1)
         fbank_map_norm = (fbank_explanation - fbank_expected_values) / fbank_std_devs
+        # set value for problematic cases (e.g. when std_devs is 0 and the score becomes inf)
+        problematic_mask = torch.isnan(fbank_map_norm) | torch.isinf(fbank_map_norm)
+        fbank_map_norm[problematic_mask] = 0.
 
         # tgt
         tgt_padding_mask = torch.ones(
@@ -60,7 +63,8 @@ class SingleMeanStdNormalizer(Normalizer):
         tgt_map_norm = torch.where(
             tgt_padding_mask, tgt_map_norm, torch.tensor(0.0, dtype=tgt_explanation.dtype))
         # set value for first step where there is only one token
-        nan_mask = torch.isnan(tgt_map_norm)
-        tgt_map_norm[nan_mask] = 0.
+        # and also for other problematic cases (e.g. when std_devs is 0 and the score becomes inf)
+        problematic_mask = torch.isnan(tgt_map_norm) | torch.isinf(tgt_map_norm)
+        tgt_map_norm[problematic_mask] = 0.
 
         return fbank_map_norm, tgt_map_norm
