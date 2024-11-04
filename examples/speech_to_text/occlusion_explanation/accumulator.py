@@ -84,10 +84,10 @@ class Accumulator:
                 self.src_dict,
                 self.bpe_tokenizer_src)
             tgt_text = decode_line(
-                collated_data["net_input"]["target"][idx_mask][0],
+                collated_data["net_input"]["prev_output_tokens"][idx_mask][0],
                 self.tgt_dict)
             src_length = collated_data["net_input"]["src_lengths"][idx_mask][0].item()
-            target_length = collated_data["net_input"]["target_lengths"][idx_mask][0].item()
+            target_length = collated_data["target_lengths"][idx_mask][0].item()
 
             # Strip padding and summation
             fbank_heatmap_sum = fbank_heatmaps[idx_mask, :target_length, :src_length].sum(dim=0)

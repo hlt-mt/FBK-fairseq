@@ -190,8 +190,9 @@ class TestOcclusionDataset(unittest.TestCase):
         self.assertEqual(collated_data["masks"].size(), (2, 120, 80))
         self.assertEqual(net_input["src_tokens"].size(), (2, 120, 80))
         self.assertEqual(net_input["src_lengths"].tolist(), [120, 100])
-        self.assertTrue(torch.equal(net_input["target"], tensor([[2, 6, 7, 8], [2, 5, 6, 1]])))
-        self.assertEqual(net_input["target_lengths"].tolist(), [4, 3])
+        self.assertTrue(torch.equal(net_input["prev_output_tokens"], tensor([[2, 6, 7, 8], [2, 5, 6, 1]])))
+        self.assertTrue(torch.equal(collated_data["target"], tensor([[6, 7, 8, 2], [5, 6, 2, 1]])))
+        self.assertEqual(collated_data["target_lengths"].tolist(), [4, 3])
         self.assertEqual(collated_data["src_texts"], [None, None])
 
     def test_collater_with_src(self):
@@ -210,8 +211,9 @@ class TestOcclusionDataset(unittest.TestCase):
         self.assertEqual(collated_data["masks"].size(), (3, 150, 80))
         self.assertEqual(net_input["src_tokens"].size(), (3, 150, 80))
         self.assertEqual(net_input["src_lengths"].tolist(), [150, 110, 100])
-        self.assertTrue(torch.equal(net_input["target"], tensor([[2, 5, 5], [2, 6, 1], [2, 6, 5]])))
-        self.assertEqual(net_input["target_lengths"].tolist(), [3, 2, 3])
+        self.assertTrue(torch.equal(net_input["prev_output_tokens"], tensor([[2, 5, 5], [2, 6, 1], [2, 6, 5]])))
+        self.assertTrue(torch.equal(collated_data["target"], tensor([[5, 5, 2], [6, 2, 1], [6, 5, 2]])))
+        self.assertEqual(collated_data["target_lengths"].tolist(), [3, 2, 3])
         self.assertTrue(torch.equal(collated_data["src_texts"][0], torch.tensor([4, 3, 2])))
         self.assertTrue(torch.equal(collated_data["src_texts"][1], torch.tensor([5, 2])))
         self.assertTrue(torch.equal(collated_data["src_texts"][2], torch.tensor([5, 4, 2])))

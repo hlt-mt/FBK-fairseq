@@ -62,16 +62,16 @@ class TestAccumulator(unittest.TestCase):
             "src_texts": ["source text 1", "source text 2", "source text 1"],
             "net_input": {
                 "src_lengths": torch.LongTensor([6, 7, 6]),
-                "target": torch.tensor([[2, 4, 3, 1], [2, 3, 4, 6], [2, 4, 3, 1]]),
-                "target_lengths": torch.LongTensor([3, 4, 3])}}
+                "prev_output_tokens": torch.tensor([[2, 4, 3, 1], [2, 3, 4, 6], [2, 4, 3, 1]])},
+            "target_lengths": torch.LongTensor([3, 4, 3])}
         self.collated_data_batch2 = {
             "orig_id": torch.tensor([1, 1, 2, 2]),
             "src_texts": ["source text 2", "source text 2", "source text 3", "source text 3"],
             "net_input": {
                 "src_lengths": torch.LongTensor([7, 7, 9, 9]),
-                "target": torch.tensor(
-                    [[2, 3, 4, 6, 1], [2, 3, 4, 6, 1], [2, 6, 3, 4, 5], [2, 6, 3, 4, 5]]),
-                "target_lengths": torch.LongTensor([4, 4, 5, 5])}}
+                "prev_output_tokens": torch.tensor(
+                    [[2, 3, 4, 6, 1], [2, 3, 4, 6, 1], [2, 6, 3, 4, 5], [2, 6, 3, 4, 5]])},
+            "target_lengths": torch.LongTensor([4, 4, 5, 5])}
         # the size of fbank_heatmaps is (batch size, sequence length, time, channels)
         self.fbank_heatmaps_batch1 = torch.ones(3, 4, 7, 10)
         self.fbank_heatmaps_batch2 = torch.ones(4, 5, 9, 10)
@@ -116,8 +116,8 @@ class TestAccumulator(unittest.TestCase):
             "src_texts": torch.tensor([[2, 4, 3, 1], [2, 3, 4, 6], [2, 4, 3, 1]]),
             "net_input": {
                 "src_lengths": torch.LongTensor([6, 7, 6]),
-                "target": torch.tensor([[2, 4, 3, 1], [2, 3, 4, 6], [2, 4, 3, 1]]),
-                "target_lengths": torch.LongTensor([3, 4, 3])}}
+                "prev_output_tokens": torch.tensor([[2, 4, 3, 1], [2, 3, 4, 6], [2, 4, 3, 1]])},
+            "target_lengths": torch.LongTensor([3, 4, 3])}
         accumulator._update_heatmaps(
             collated_data_batch,
             self.fbank_heatmaps_batch1,

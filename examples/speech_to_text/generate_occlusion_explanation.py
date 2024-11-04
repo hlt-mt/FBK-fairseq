@@ -159,10 +159,7 @@ def _main(cfg: DictConfig, output_file):
 
             gen_timer.start()
             with torch.no_grad():
-                decoder_out, ctc_outputs = model(
-                    sample["net_input"]["src_tokens"],
-                    sample["net_input"]["src_lengths"],
-                    sample["net_input"]["target"])
+                decoder_out, ctc_outputs = model(**sample["net_input"])
                 tgt_embed_masks = decoder_out[1]["masks"]
                 perturb_probs = model.get_normalized_probs(  # (batch_size, padded_seq_len, dict_len)
                     decoder_out, log_probs=False)

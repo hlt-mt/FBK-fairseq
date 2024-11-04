@@ -152,8 +152,8 @@ class Scorer:
             *args,
             **kwargs) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         padded_orig_probs, padded_perturbed_probs = self.get_padded_probs(
-            orig_probs, perturb_probs, sample["orig_id"], sample["net_input"]["target_lengths"])
-        scores = self.get_prob_diff(padded_orig_probs, padded_perturbed_probs, sample["net_input"]["target"])
+            orig_probs, perturb_probs, sample["orig_id"], sample["target_lengths"])
+        scores = self.get_prob_diff(padded_orig_probs, padded_perturbed_probs, sample["target"])
         single_fbank_heatmaps, fbank_masks, single_tgt_embed_heatmaps, tgt_embed_masks = \
             self.get_heatmaps(scores, sample["masks"], tgt_embed_masks)
         single_tgt_embed_heatmaps = self._make_heatmaps_causal(single_tgt_embed_heatmaps)
