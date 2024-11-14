@@ -15,6 +15,7 @@
 
 import argparse
 from typing import Tuple
+import csv
 import pandas as pd
 import sentencepiece as spm
 
@@ -275,7 +276,7 @@ def main(args: argparse.Namespace):
     df['swapped_tgt_text'] = df.apply(swap_gender_hypothesis, args=(sp,), axis=1)    
 
     # Save the resulting tsv.
-    df[OUTPUT_COLUMNS].to_csv(args.output_tsv, sep='\t', index=False)
+    df[OUTPUT_COLUMNS].to_csv(args.output_tsv, sep='\t', index=False, quoting=csv.QUOTE_NONE, escapechar='\\')
 
 
 if __name__ == "__main__":
