@@ -3,7 +3,11 @@
 This repository contains the open source code by the MT unit of FBK.
 Dedicated README for each work can be found in the `fbk_works` directory.
 
- ### 2024
+ ### 2025
+
+ - [[NAACL 2025] **Prepending or Cross-Attention for Speech-to-Text? An Empirical Comparison**](fbk_works/DECODER_PREPENDING.md)
+
+### 2024
 
  - [[IWSLT 2024] **SimulSeamless: FBK at IWSLT 2024 Simultaneous Speech Translation**](fbk_works/SIMULSEAMLESS.md)
  - [[ACL 2024] **StreamAtt: Direct Streaming Speech-to-Text Translation with Attention-based Audio History Selection**](fbk_works/STREAMATT_STREAMLAAL.md)
