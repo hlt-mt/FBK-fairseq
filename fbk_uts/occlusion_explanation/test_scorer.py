@@ -26,9 +26,8 @@ class TestScorer(unittest.TestCase):
         self.sample = {
             "id": [],
             "orig_id": torch.LongTensor([1, 1, 3]),
-            "net_input": {
-                "target": torch.tensor([[2, 1, 3, 5], [1, 1, 1, 2], [0, 1, 2, 5]]),
-                "target_lengths": torch.LongTensor([7, 7, 9])},
+            "target": torch.tensor([[2, 1, 3, 5], [1, 1, 1, 2], [0, 1, 2, 5]]),
+            "target_lengths": torch.LongTensor([7, 7, 9]),
             "masks": torch.zeros(3, 8, 7)}
 
     def test_get_padded_probs(self):
@@ -36,7 +35,7 @@ class TestScorer(unittest.TestCase):
             0: torch.ones(6, 10), 1: torch.ones(7, 10), 3: torch.ones(9, 10)}
         perturb_probs = torch.ones(3, 9, 10)
         batched_orig_probs, batched_perturb_probs = self.scorer.get_padded_probs(
-            orig_probs, perturb_probs, self.sample["orig_id"], self.sample["net_input"]["target_lengths"])
+            orig_probs, perturb_probs, self.sample["orig_id"], self.sample["target_lengths"])
         expected_probs = torch.tensor(
             [[[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
               [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -97,7 +96,7 @@ class TestScorer(unittest.TestCase):
             3: torch.full((9, 10), 3.1416)}
         perturb_probs = torch.full((3, 9, 10), 3.0)
         batched_orig_probs, batched_perturb_probs = self.scorer.get_padded_probs(
-            orig_probs, perturb_probs, self.sample["orig_id"], self.sample["net_input"]["target_lengths"])
+            orig_probs, perturb_probs, self.sample["orig_id"], self.sample["target_lengths"])
         self.assertTrue(3.1416 in batched_orig_probs)
         self.assertTrue(3.0 in batched_perturb_probs)
         self.assertFalse(torch.equal(batched_orig_probs, batched_perturb_probs))
@@ -129,7 +128,7 @@ class TestScorer(unittest.TestCase):
               [0, 0, 0, 2, 1, 0],
               [1, 3, 3, 2, 1, 2],
               [2, 0, 0, 1, 1, 2]]])
-        scores = self.scorer.get_prob_diff(orig_probs, perturb_probs, self.sample["net_input"]["target"])
+        scores = self.scorer.get_prob_diff(orig_probs, perturb_probs, self.sample["target"])
         expected_scores = torch.tensor(
             [[[1],
               [4],
@@ -149,7 +148,7 @@ class TestScorer(unittest.TestCase):
         scorer = KLScorer()
         orig_probs = torch.rand((3, 8, 10))
         perturb_probs = torch.rand((3, 8, 10))
-        scores = scorer.get_prob_diff(orig_probs, perturb_probs, self.sample["net_input"]["target"])
+        scores = scorer.get_prob_diff(orig_probs, perturb_probs, self.sample["target"])
         self.assertEqual(scores.size(), Size([3, 8, 1]))
 
     # test make_heatmaps_causal() when the masking strategy is 'continuous', thus producing 2D heatmaps
