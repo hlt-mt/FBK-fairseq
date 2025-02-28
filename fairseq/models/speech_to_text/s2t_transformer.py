@@ -312,15 +312,12 @@ class S2TTransformerEncoder(FairseqEncoder):
         for layer in self.transformer_layers:
             x = layer(x, encoder_padding_mask)
 
-        if not encoder_padding_mask.any():
-            encoder_padding_mask = None
-
         if self.layer_norm is not None:
             x = self.layer_norm(x)
 
         return {
             "encoder_out": [x],
-            "encoder_padding_mask": [encoder_padding_mask],
+            "encoder_padding_mask": [encoder_padding_mask] if encoder_padding_mask.any() else [],
             "encoder_embedding":None,
             "encoder_states":None,
             "src_tokens":None,
