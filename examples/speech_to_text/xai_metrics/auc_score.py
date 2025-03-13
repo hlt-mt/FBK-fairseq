@@ -14,8 +14,10 @@
 # limitations under the License
 
 import argparse
+import csv
 import glob
 import logging
+import math
 import os
 from typing import List, Dict, Tuple
 import numpy as np
@@ -27,37 +29,32 @@ _VERSION = "1.0"
 LOGGER = logging.getLogger(__name__)
 
 
-def filter_hypos(
-        lines: List[str], num_intervals: int, ref_length: int, file_path: str
-) -> Dict[int, List[str]]:
+def filter_samples(
+        lines: List[str],
+        tsv: List[Dict],
+        lower_bound: int,
+        upper_bound: int) -> Tuple[Dict[int, List[str]], Dict[int, List[str]]]:
     """
-    Filter hypotheses in a text based on percentage steps.
-    Returns a dictionary which maps each step to corresponding hypotheses.
+    Filter hypotheses in a text based on percentage steps, and hypotheses and
+    references based on the number of frames.
+    Returns two dictionaries that map each step to corresponding hypotheses/reference.
     """
     step_to_sent = {}
+    filtered_refs = {}
     for l in lines:
         if l.startswith("D-"):
             line_components = l.split("\t")
             _, sent_id, step = line_components[0].split("-")
             step = int(step)
             sent_id = int(sent_id)
-            if step not in step_to_sent:
-                step_to_sent[step] = {}
-            step_to_sent[step][sent_id] = line_components[2].strip()
-
-    for step in range(num_intervals):
-        if step not in step_to_sent:
-            raise KeyError(f"Step {step} not available in file {file_path}.")
-        step_text = step_to_sent[step]
-
-        ordered_lines = []
-        for i in range(ref_length):
-            if i not in step_text:
-                raise KeyError(f"Sentence {i} for step {step} not available in file {file_path}.")
-            ordered_lines.append(step_text[i])
-        step_to_sent[step] = ordered_lines
-
-    return step_to_sent
+            n_frames = int(tsv[sent_id]["n_frames"])
+            if lower_bound < n_frames <= upper_bound:
+                if step not in step_to_sent:
+                    step_to_sent[step] = []
+                    filtered_refs[step] = []
+                step_to_sent[step].append(line_components[2].strip())
+                filtered_refs[step].append(tsv[sent_id]["tgt_text"])
+    return step_to_sent, filtered_refs
 
 
 def read_hypos(hypo_path: str) -> List[Tuple[str, List[str]]]:
@@ -83,33 +80,34 @@ def read_hypos(hypo_path: str) -> List[Tuple[str, List[str]]]:
         return file_dict
 
 
-def compute_single_score(scorer: str, refs: List[str], hypos: List[str]) -> float:
+def load_tsv(file_path: str) -> List[Dict]:
     """
-    Compute score for a single output file in a single step.
+    Load tsv file and returns a list of dictionaries, one per sample.
     """
-    assert len(refs) == len(hypos)
-    scorer = build_scorer(scorer, tgt_dict=None)
-    for r, h in zip(refs, hypos):
-        scorer.add_string(r, h)
-    return scorer.score()
+    data = []
+    with open(file_path, 'r', newline='') as csvfile:
+        reader = csv.DictReader(csvfile, delimiter='\t')
+        for row in reader:
+            data.append(row)
+    return data
 
 
 def compute_score(
-        scorer: str,
-        refs: List[str],
-        hypos_list: List[Dict[int, List[str]]]) -> np.array:
+        scorer_name: str,
+        steps_to_refs: Dict[int, List[str]],
+        steps_to_hypos: Dict[int, List[str]]) -> List[float]:
     """
-    Compute scores for all the available output files and for all the steps.
-    Returns the averaged scores across the various output files.
+    Compute scores for a single file for all the steps.
     """
-    all_scores = []
-    for hypos_dict in hypos_list:
-        scores = []
-        for step in range(len(hypos_dict)):
-            scores.append(compute_single_score(scorer, refs, hypos_dict[step]))
-        all_scores.append(scores)
-    scores_array = np.array(all_scores)
-    return np.mean(scores_array, axis=0)
+    scores = []
+    for step in range(len(steps_to_hypos)):
+        assert len(steps_to_hypos[step]) == len(steps_to_refs[step]), \
+            f"Different number of hypotheses and references for step {step}"
+        scorer = build_scorer(scorer_name, tgt_dict=None)
+        for r, h in zip(steps_to_refs[step], steps_to_hypos[step]):
+            scorer.add_string(r, h)
+        scores.append(scorer.score())
+    return scores
 
 
 def compute_auc(scores: np.array, percentage_values: np.array) -> float:
@@ -137,6 +135,26 @@ def save_plot(percentages: np.array, scores: np.array, save_path: str, scorer: s
     plt.savefig(save_path)
 
 
+def check_steps(
+        file_path: str,
+        step_to_hypos: Dict[int, List[str]],
+        expected_steps: set) -> None:
+    """
+    Check if there are missing or extra steps in `step_to_hypos`.
+    """
+    actual_steps = set(step_to_hypos.keys())
+
+    missing_steps = expected_steps - actual_steps
+    extra_steps = actual_steps - expected_steps
+
+    if missing_steps:
+        missing_steps_str = ', '.join(map(str, sorted(missing_steps)))
+        raise ValueError(f"Missing steps for file {file_path}: {missing_steps_str}")
+    if extra_steps:
+        extra_steps_str = ', '.join(map(str, sorted(extra_steps)))
+        LOGGER.warning(f"Extra steps found for file {file_path}: {extra_steps_str}")
+
+
 def main(args):
     print(f"Version {_VERSION} of FBK AUC Scorer.")
 
@@ -144,19 +162,24 @@ def main(args):
     num_intervals = (100 // args.perc_step) + 1
     percentage_values = np.array([x * args.perc_step for x in range(num_intervals)])
 
-    # get references
-    with open(args.reference, 'r') as f:
-        refs = f.readlines()
-
-    # get mapping between hypotheses and percentage steps
+    # get mapping between hypotheses/references and percentage steps and compute scores
+    tsv = load_tsv(args.tsv_path)
     hypos_dict = read_hypos(args.output_path)
-    hypos_mapping_list = []
+    all_scores = []
+    expected_steps = set(range(num_intervals))
     for file_path, text in hypos_dict:
-        step_to_sent = filter_hypos(text, num_intervals, len(refs), file_path)
-        hypos_mapping_list.append(step_to_sent)
+        step_to_hypos, step_to_refs = filter_samples(text, tsv, args.lower_bound, args.upper_bound)
+        check_steps(file_path, step_to_hypos, expected_steps)  # check if there are missing or extra steps
+        scores = compute_score(args.scorer, step_to_refs, step_to_hypos)
+        all_scores.append(scores)
 
-    # compute scores
-    scores = compute_score(args.scorer, refs, hypos_mapping_list)
+    scores_array = np.array(all_scores)
+    scores = np.mean(scores_array, axis=0)
+
+    # print/plot AUC
+    if args.fig_path is not None:
+        save_plot(percentage_values, scores, args.fig_path, args.scorer)
+
     auc_score = compute_auc(scores, percentage_values)
     print(f"AUC: {auc_score}")
 
@@ -174,11 +197,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Calculate (and plot) AUC with CI from predictions generated "
                     "for insertion/deletion metric.")
-    parser.add_argument("--reference", type=str, help="Path to the reference file.")
     parser.add_argument(
         "--output-path",
         help="Path to a single output file or to the folder containing multiple output files. "
              "If the latter, the scores of different output files are averaged.")
+    parser.add_argument(
+        "--tsv-path",
+        required=True,
+        type=str,
+        help="Path to the tsv file of the original samples, where the references and the number "
+             "of frames for each sample are stored.")
     parser.add_argument(
         "--perc-step",
         type=int,
@@ -186,6 +214,18 @@ if __name__ == "__main__":
              "computing insertion/deletion of input features.")
     parser.add_argument(
         "--scorer", type=str, default="wer_max", help="Metric for the evaluation of the task.")
+    parser.add_argument(
+        "--lower-bound",
+        type=int,
+        default=-math.inf,
+        help="Lower bound of the number of frames for which to compute the metric. If not specified, "
+             "there will be no lower bound.")
+    parser.add_argument(
+        "--upper-bound",
+        type=int,
+        default=+math.inf,
+        help="Upper bound of the number of frames for which to compute the metric. If not specified, "
+             "there will be no upper bound.")
     parser.add_argument(
         "--data-path",
         type=str,
