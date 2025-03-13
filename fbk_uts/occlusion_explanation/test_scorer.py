@@ -16,6 +16,7 @@ import unittest
 import torch
 from torch import Size
 
+from examples.speech_to_text.occlusion_explanation.scorers.kl_gender_terms import KLGenderScorer
 from examples.speech_to_text.occlusion_explanation.scorers.predicted_difference import PredictedTokenDifferenceScorer
 from examples.speech_to_text.occlusion_explanation.scorers.kl_divergence import KLScorer
 
@@ -128,7 +129,7 @@ class TestScorer(unittest.TestCase):
               [0, 0, 0, 2, 1, 0],
               [1, 3, 3, 2, 1, 2],
               [2, 0, 0, 1, 1, 2]]])
-        scores = self.scorer.get_prob_diff(orig_probs, perturb_probs, self.sample["target"])
+        scores = self.scorer.get_prob_diff(orig_probs, perturb_probs, self.sample)
         expected_scores = torch.tensor(
             [[[1],
               [4],
@@ -146,16 +147,36 @@ class TestScorer(unittest.TestCase):
 
     def test_get_prob_diff_KL(self):
         scorer = KLScorer()
-        orig_probs = torch.rand((3, 8, 10))
-        perturb_probs = torch.rand((3, 8, 10))
-        scores = scorer.get_prob_diff(orig_probs, perturb_probs, self.sample["target"])
-        self.assertEqual(scores.size(), Size([3, 8, 1]))
+        orig_probs = torch.tensor(
+            [[[0.2, 0.2, 0.2, 0.1, 0.2, 0.1],
+              [0.6, 0.4, 0.2, 0.1, 0.2, 0.1],
+              [0.8, 0.9, 0.2, 0.1, 0.1, 0.1]],
+             [[0.2, 0.2, 0.2, 0.1, 0.2, 0.1],
+              [0.6, 0.4, 0.2, 0.1, 0.2, 0.1],
+              [0.8, 0.9, 0.2, 0.1, 0.1, 0.1]]])
+        perturb_probs = torch.tensor(
+            [[[0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+              [0.2, 0.1, 0.1, 0.3, 0.1, 0.3],
+              [0.1, 0.2, 0.1, 0.1, 0.3, 0.1]],
+             [[0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+              [0.1, 0.1, 0.1, 0.2, 0.1, 0.1],
+              [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]]])
+        scores = scorer.get_prob_diff(orig_probs, perturb_probs, self.sample)
+        self.assertEqual(scores.size(), Size([2, 3, 1]))
+        expected_scores = torch.tensor(
+            [[[0.5545],
+              [1.2712],
+              [3.0460]],
+             [[0.5545],
+              [1.8375],
+              [3.7797]]])
+        self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
 
     # test make_heatmaps_causal() when the masking strategy is 'continuous', thus producing 2D heatmaps
     def test_make_heatmaps_causal(self):
         # Batch size, sequence length, sequence length, embedding dimension
         heatmaps = torch.ones((1, 3, 3, 5))
-        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps)
+        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps, self.sample)
         expected_heatmaps = torch.tensor(
             [[[[1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.]],
               [[1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.]],
@@ -163,7 +184,7 @@ class TestScorer(unittest.TestCase):
         self.assertTrue(torch.equal(causality_heatmaps, expected_heatmaps))
 
         heatmaps = torch.ones((2, 4, 4, 5))
-        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps)
+        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps, self.sample)
         expected_heatmaps = torch.tensor(
             [[[[1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.]],
               [[1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.]],
@@ -176,13 +197,13 @@ class TestScorer(unittest.TestCase):
         self.assertTrue(torch.equal(causality_heatmaps, expected_heatmaps))
 
         heatmaps_empty = torch.empty((0, 0, 0, 0))
-        causality_heatmaps_empty = self.scorer._make_heatmaps_causal(heatmaps_empty)
+        causality_heatmaps_empty = self.scorer._make_heatmaps_causal(heatmaps_empty, self.sample)
         self.assertTrue(torch.equal(causality_heatmaps_empty, heatmaps_empty))
 
     # test make_heatmaps_causal() when the masking strategy is 'discrete'
     def test_make_heatmaps_causal_discrete(self):
         heatmaps = torch.ones((2, 3, 3, 1))  # (Batch size, sequence length, sequence length, 1)
-        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps)
+        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps, self.sample)
         expected_heatmaps = torch.tensor(
             [[[[1.], [0.], [0.]],
               [[1.], [1.], [0.]],
@@ -546,6 +567,55 @@ class TestScorer(unittest.TestCase):
         self.assertTrue(torch.equal(fbank_masks, torch.ones(3, 8, 1).unsqueeze(1)))
         self.assertTrue(torch.equal(single_fbank_heatmaps, expected_single_fbank_heatmaps))
         self.assertTrue(torch.equal(single_tgt_embed_heatmaps, expected_single_tgt_embed_heatmaps))
+
+
+class TestGenderScorer(unittest.TestCase):
+    def setUp(self) -> None:
+        self.scorer = KLGenderScorer()
+        self.sample = {
+            "id": [],
+            "orig_id": torch.LongTensor([1, 1]),
+            "target": torch.tensor([[2, 1, 3], [1, 1, 1]]),
+            "target_lengths": torch.LongTensor([3, 3]),
+            "gender_terms_indices": ['0-1', '1-1']}
+        
+    def test_get_prob_diff(self):
+        orig_probs = torch.tensor(
+            [[[0.2, 0.2, 0.2, 0.1, 0.2, 0.1],
+              [0.6, 0.4, 0.2, 0.1, 0.2, 0.1],
+              [0.8, 0.9, 0.2, 0.1, 0.1, 0.1]],
+             [[0.2, 0.2, 0.2, 0.1, 0.2, 0.1],
+              [0.6, 0.4, 0.2, 0.1, 0.2, 0.1],
+              [0.8, 0.9, 0.2, 0.1, 0.1, 0.1]]])
+        perturb_probs = torch.tensor(
+            [[[0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+              [0.2, 0.1, 0.1, 0.3, 0.1, 0.3],
+              [0.1, 0.2, 0.1, 0.1, 0.3, 0.1]],
+             [[0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+              [0.1, 0.1, 0.1, 0.2, 0.1, 0.1],
+              [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]]])
+        scores = self.scorer.get_prob_diff(orig_probs, perturb_probs, self.sample)
+        self.assertEqual(scores.size(), Size([2, 1, 1]))
+        expected_scores = torch.tensor([[[1.2712]], [[1.8375]]])
+        self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
+
+    def test_make_heatmaps_causal(self):
+        # Batch size, gender term length, sequence length, embedding dimension
+        heatmaps = torch.ones((2, 1, 3, 5))
+        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps, self.sample)
+        expected_heatmaps = torch.tensor(
+            [[[[1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.]]],
+             [[[1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.]]]])
+        self.assertTrue(torch.equal(causality_heatmaps, expected_heatmaps))
+
+    # test make_heatmaps_causal() when the masking strategy is 'discrete'
+    def test_make_heatmaps_causal_discrete(self):
+        heatmaps = torch.ones((2, 1, 3, 1))  # (Batch size, sequence length, sequence length, 1)
+        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps, self.sample)
+        expected_heatmaps = torch.tensor(
+            [[[[1.], [0.], [0.]]],
+             [[[1.], [1.], [0.]]]])
+        self.assertTrue(torch.equal(causality_heatmaps, expected_heatmaps))
 
 
 if __name__ == '__main__':

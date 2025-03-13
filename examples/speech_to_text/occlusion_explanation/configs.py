@@ -18,11 +18,15 @@ from typing import Union
 from dataclasses import dataclass, field
 import yaml
 
+from examples.speech_to_text.occlusion_explanation.explanation_tasks import (
+    TASK_REGISTRY,
+    ExplanationTask, 
+    get_explanation_task)
 from examples.speech_to_text.occlusion_explanation.perturbators import (
     get_perturbator,
     OcclusionFbankPerturbator,
     OcclusionDecoderEmbeddingsPerturbator)
-from examples.speech_to_text.occlusion_explanation.scorers import get_scorer, Scorer
+from examples.speech_to_text.occlusion_explanation.scorers import SCORER_REGISTRY, get_scorer, Scorer
 from fairseq.dataclass import FairseqDataclass
 
 from fairseq.dataclass.utils import gen_parser_from_dataclass
@@ -66,10 +70,17 @@ class PerturbConfig(object):
 
     def get_scorer_from_config(self) -> Scorer:
         scorer_category = self.perturb_cfg.get("scorer", "predicted_token_diff")
-        assert scorer_category == "predicted_token_diff" or scorer_category == "KL", \
-            "Invalid value for 'occlusion_choice'. Must be one of ['fbank_occlusion', 'decoder_occlusion']."
+        assert (scorer_category in SCORER_REGISTRY), \
+            (f"Invalid value for 'occlusion_choice'. Must be one of {SCORER_REGISTRY.keys()}.")
         scorer_class = get_scorer(scorer_category)
         return scorer_class()
+    
+    def get_task_from_config(self) -> ExplanationTask:
+        task_name = self.perturb_cfg.get("explanation_task", "all_tokens")
+        assert task_name in TASK_REGISTRY, \
+            f"Invalid value for 'explanation_task'. Must be one of {TASK_REGISTRY.keys()}."
+        task_class = get_explanation_task(task_name)
+        return task_class()
 
 
 @dataclass

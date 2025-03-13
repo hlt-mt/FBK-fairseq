@@ -22,15 +22,32 @@ from examples.speech_to_text.occlusion_explanation.normalizers import Normalizer
 @register_normalizer("single_mean_std")
 class SingleMeanStdNormalizer(Normalizer):
     """
-    Perform mean-standard deviation normalization of fbanks and
-    tgt map separately map at token level.
+    Perform mean normalization of fbanks and tgt map separately map at token level.
     """
-    def __call__(
-            self, fbank_explanation: Tensor, tgt_explanation: Tensor) -> Tuple[Tensor, Tensor]:
-        tokens_size = fbank_explanation.shape[0]
+    def apply_single_mean_std_normalization(
+            self,
+            fbank_explanation: Tensor,
+            tgt_explanation: Tensor,
+            tgt_ignore_mask: Tensor) -> Tuple[Tensor, Tensor]:
+        """
+        Apply mean normalization to the spectrogram and previous target tokens
+        saliency maps. On the target saliency map, only the tokens that precede the token 
+        being explained are taken into account for normalization.
+        Args:
+            - fbank_explanation: the saliency map of the input spectrogram
+            - tgt_explanation: the saliency map of the previous output target tokens
+            - tgt_ignore_mask: a mask to ignore anything coming after the token being explained
+                in the target explanation
+        Returns:
+            - fbank_map_norm: the normalized saliency map of the input spectrogram
+            - tgt_map_norm: the normalized saliency map of the previous output target tokens
+        """
+
+        # Number of tokens/terms explained
+        n_explanations = fbank_explanation.shape[0]
 
         # fbank
-        flattened_fbank = fbank_explanation.view(tokens_size, -1)
+        flattened_fbank = fbank_explanation.view(n_explanations, -1)
         fbank_row_wise_count = flattened_fbank.shape[1]
         fbank_expected_values = flattened_fbank.sum(dim=1) / fbank_row_wise_count
         fbank_expected_squared_values = (flattened_fbank ** 2).sum(dim=1) / fbank_row_wise_count
@@ -45,13 +62,13 @@ class SingleMeanStdNormalizer(Normalizer):
         fbank_map_norm[problematic_mask] = 0.
 
         # tgt
-        tgt_padding_mask = torch.ones(
-            tgt_explanation.shape[:2], device=tgt_explanation.device).tril().unsqueeze(-1) != 0
+        # set to zero the values of the target explanation
+        # after the generated token we are explaining
         padded_tgt_map = torch.where(
-            tgt_padding_mask,
+            tgt_ignore_mask,
             tgt_explanation,
-            torch.tensor(0.0, dtype=tgt_explanation.dtype)).view(tokens_size, -1)
-        tgt_row_wise_count = tgt_padding_mask.squeeze(-1).sum(dim=1)
+            torch.tensor(0.0, dtype=tgt_explanation.dtype)).view(n_explanations, -1)
+        tgt_row_wise_count = tgt_ignore_mask.squeeze(-1).sum(dim=1)
         tgt_expected_values = padded_tgt_map.sum(dim=1) / tgt_row_wise_count
         tgt_expected_squared_values = (padded_tgt_map ** 2).sum(dim=1) / tgt_row_wise_count
         momentum_order_2 = tgt_expected_squared_values - tgt_expected_values ** 2
@@ -60,11 +77,24 @@ class SingleMeanStdNormalizer(Normalizer):
         tgt_expected_values = tgt_expected_values.unsqueeze(-1).unsqueeze(-1)
         tgt_std_devs = tgt_std_devs.unsqueeze(-1).unsqueeze(-1)
         tgt_map_norm = (tgt_explanation - tgt_expected_values) / tgt_std_devs
+        # set to zero the values of the target explanation
+        # after the generated token we are explaining
         tgt_map_norm = torch.where(
-            tgt_padding_mask, tgt_map_norm, torch.tensor(0.0, dtype=tgt_explanation.dtype))
+            tgt_ignore_mask, tgt_map_norm, torch.tensor(0.0, dtype=tgt_explanation.dtype))
         # set value for first step where there is only one token
         # and also for other problematic cases (e.g. when std_devs is 0 and the score becomes inf)
         problematic_mask = torch.isnan(tgt_map_norm) | torch.isinf(tgt_map_norm)
         tgt_map_norm[problematic_mask] = 0.
 
         return fbank_map_norm, tgt_map_norm
+
+
+    def __call__(
+            self, fbank_explanation: Tensor, tgt_explanation: Tensor) -> Tuple[Tensor, Tensor]:
+
+        # Create a mask to ignore padding tokens in the target explanation
+        tgt_ignore_mask = torch.ones(
+            tgt_explanation.shape[:2], device=tgt_explanation.device).tril().unsqueeze(-1) != 0
+               
+        return self.apply_single_mean_std_normalization(
+            fbank_explanation, tgt_explanation, tgt_ignore_mask)

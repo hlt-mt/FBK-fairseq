@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 
+from typing import Dict
 import torch
 from torch import Tensor
 
@@ -29,10 +30,11 @@ class PredictedTokenDifferenceScorer(Scorer):
     def get_prob_diff(
             orig_probs: Tensor,
             perturb_probs: Tensor,
-            target: Tensor) -> Tensor:
+            sample: Dict) -> Tensor:
         """
         Get the probability difference.
         """
+        target = sample["target"]
         token_orig_probs = torch.take_along_dim(orig_probs, target.unsqueeze(-1), dim=2)
         token_perturb_probs = torch.take_along_dim(perturb_probs, target.unsqueeze(-1), dim=2)
         return token_orig_probs - token_perturb_probs

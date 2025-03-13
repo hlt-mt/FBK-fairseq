@@ -25,28 +25,51 @@ class PairedMinMaxNormalizer(Normalizer):
     Perform min-max normalization across fbank and previous output
     tokens map at token level.
     """
-    def __call__(
-            self, fbank_explanation: Tensor, tgt_explanation: Tensor) -> Tuple[Tensor, Tensor]:
-        tokens_size = fbank_explanation.shape[0]
-        tgt_padding_mask = torch.ones(
-            tgt_explanation.shape[:2], device=tgt_explanation.device).tril().unsqueeze(-1) != 0
+    def apply_min_max_normalization(
+            self,
+            fbank_explanation: Tensor,
+            tgt_explanation: Tensor,
+            tgt_padding_mask: Tensor) -> Tuple[Tensor, Tensor]:
+        
+        # Number of tokens/terms explained
+        n_explanations = fbank_explanation.shape[0]
+
+        # Find the min and max values across fbank and target explanations
         min_vals = torch.minimum(
-            fbank_explanation.view(tokens_size, -1).min(dim=1).values,
+            fbank_explanation.view(n_explanations, -1).min(dim=1).values,
             torch.where(
                 tgt_padding_mask,
                 tgt_explanation,
-                torch.tensor(torch.inf, device=tgt_explanation.device)).view(tokens_size, -1).min(dim=1).values)
+                torch.tensor(torch.inf, device=tgt_explanation.device)).view(n_explanations, -1).min(dim=1).values)
         max_vals = torch.maximum(
-            fbank_explanation.view(tokens_size, -1).max(dim=1).values,
+            fbank_explanation.view(n_explanations, -1).max(dim=1).values,
             torch.where(
                 tgt_padding_mask,
                 tgt_explanation,
-                torch.tensor(-torch.inf, device=tgt_explanation.device)).view(tokens_size, -1).max(dim=1).values)
+                torch.tensor(-torch.inf, device=tgt_explanation.device)).view(n_explanations, -1).max(dim=1).values)
+        
+        # Reshape so they can be broadcasted to the same shape as the explanations
         min_vals = min_vals.unsqueeze(-1).unsqueeze(-1)
         max_vals = max_vals.unsqueeze(-1).unsqueeze(-1)
+
+        # Normalize the explanations
         values_ranges = max_vals - min_vals
         fbank_map_norm = (fbank_explanation - min_vals) / values_ranges
         tgt_map_norm = (tgt_explanation - min_vals) / values_ranges
+
+        # Apply the padding mask to the target explanation
         tgt_map_norm = torch.where(
             tgt_padding_mask, tgt_map_norm, torch.tensor(0.0, dtype=tgt_explanation.dtype))
+        
         return fbank_map_norm, tgt_map_norm
+
+    def __call__(
+            self,
+            fbank_explanation: Tensor,
+            tgt_explanation: Tensor) -> Tuple[Tensor, Tensor]:    
+
+        # Create a mask to ignore padding tokens in the target explanation
+        tgt_padding_mask = torch.ones(
+            tgt_explanation.shape[:2], device=tgt_explanation.device).tril().unsqueeze(-1) != 0
+        
+        return self.apply_min_max_normalization(fbank_explanation, tgt_explanation, tgt_padding_mask)

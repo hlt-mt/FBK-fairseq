@@ -110,8 +110,11 @@ def _main(cfg: DictConfig, output_file):
         model.cuda()
     model.prepare_for_inference_(cfg)
 
+    # abstraction containing methods that depend on what we want to explain
+    explanation_task = perturb_config.get_task_from_config()
+
     task.load_dataset(cfg.dataset.gen_subset)  # instantiating the dataset to be perturbed
-    occluded_dataset = OccludedSpeechToTextDataset(  # creating the perturbed dataset
+    occluded_dataset = explanation_task.get_occluded_dataset(  # creating the perturbed dataset
         task.dataset(cfg.dataset.gen_subset), fbank_perturbator, tgt_dict)
 
     scorer = perturb_config.get_scorer_from_config()

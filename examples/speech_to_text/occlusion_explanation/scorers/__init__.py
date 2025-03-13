@@ -121,7 +121,7 @@ class Scorer:
         return single_fbank_heatmaps, fbank_masks, single_tgt_embed_heatmaps, tgt_embed_masks
 
     @staticmethod
-    def _make_heatmaps_causal(heatmaps: Tensor) -> Tensor:
+    def _make_heatmaps_causal(heatmaps: Tensor, sample: Dict) -> Tensor:
         """
         Enforces causality in the tgt_embed_heatmaps by zeroing out the embeddings related
         to the tokens after the one that is being considered. This is needed because the
@@ -153,10 +153,10 @@ class Scorer:
             **kwargs) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         padded_orig_probs, padded_perturbed_probs = self.get_padded_probs(
             orig_probs, perturb_probs, sample["orig_id"], sample["target_lengths"])
-        scores = self.get_prob_diff(padded_orig_probs, padded_perturbed_probs, sample["target"])
+        scores = self.get_prob_diff(padded_orig_probs, padded_perturbed_probs, sample)
         single_fbank_heatmaps, fbank_masks, single_tgt_embed_heatmaps, tgt_embed_masks = \
             self.get_heatmaps(scores, sample["masks"], tgt_embed_masks)
-        single_tgt_embed_heatmaps = self._make_heatmaps_causal(single_tgt_embed_heatmaps)
+        single_tgt_embed_heatmaps = self._make_heatmaps_causal(single_tgt_embed_heatmaps, sample)
         return single_fbank_heatmaps, fbank_masks, single_tgt_embed_heatmaps, tgt_embed_masks
 
 
