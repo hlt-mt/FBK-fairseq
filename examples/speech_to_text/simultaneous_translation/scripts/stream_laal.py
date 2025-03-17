@@ -27,7 +27,7 @@ from simuleval.evaluator.scorers.latency_scorer import LAALScorer
 from simuleval.evaluator.scorers.quality_scorer import SacreBLEUScorer
 
 
-VERSION = "1.0.0"
+VERSION = "2.0"
 _CITATION = r"""@inproceedings{papi-etal-2024-streamatt,
       title={{Direct Streaming Speech-to-Text Translation with Attention-based Audio History Selection}}, 
       author={Sara Papi and Marco Gaido and Matteo Negri and Luisa Bentivogli},
@@ -180,9 +180,10 @@ class SegmentLevelDelayElapsed:
                 stream_elapsed = self.prev_stream_elapsed - self.prev_stream_delay + delay
             else:
                 stream_elapsed = elapsed - self.prev_elapsed + self.prev_delay
-            # Subtract the offset (start time of the segment)
-            stream_delay = delay - sentence_start_ms
-            stream_elapsed = stream_elapsed - sentence_start_ms
+            # Subtract the offset (start time of the segment), if the result is negative, set to 0
+            stream_delay = max(0.0, delay - sentence_start_ms)
+            stream_elapsed = max(0.0, stream_elapsed - sentence_start_ms)
+
             stream_delays.append(stream_delay)
             stream_elapseds.append(stream_elapsed)
             self.prev_elapsed = elapsed

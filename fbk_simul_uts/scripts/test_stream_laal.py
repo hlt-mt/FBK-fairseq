@@ -149,6 +149,32 @@ class StreamLAALTest(unittest.TestCase):
             stream_elapseds,
             [12937.360082626343])
 
+    def test_segmentlevel_delay_elapsed_with_negative_delays(self):
+        # Create an instance with negative delays in first segment
+        stream_instance = {
+            "prediction": "fangen Sie an zu erfinden.",
+            "delays": [0.0, 1000.0, 3000.0, 3500.0, 4000.0],
+            "elapsed": [1000.0, 2000.0, 4000.0, 5000.0, 6000.0],
+        }
+        resegmented_preds = ["fangen Sie an", "zu erfinden."]
+
+        delays_processor = SegmentLevelDelayElapsed(SimulEvalLogInstance(stream_instance, latency_unit="word"))
+        delays_processor.prev_elapsed = None
+        delays_processor.prev_delay = None
+        delays_processor.prev_stream_elapsed = None
+
+        # First segment with possible negative delays
+        stream_delays, stream_elapseds = delays_processor(
+            resegmented_preds[0], 1500.0)
+        self.assertEqual(stream_delays, [0.0, 0.0, 1500.0])
+        self.assertEqual(stream_elapseds, [0.0, 0.0, 1500.0])
+
+        # Second segment without negative delays
+        stream_delays, stream_elapseds = delays_processor(
+            resegmented_preds[1], 3000.0)
+        self.assertEqual(stream_delays, [500.0, 1000.0])
+        self.assertEqual(stream_elapseds, [1000.0, 1500.0])
+
 
 if __name__ == '__main__':
     unittest.main()
