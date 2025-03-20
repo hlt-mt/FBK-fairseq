@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -27,14 +27,53 @@ class OcclusionDecoderEmbeddingsPerturbatorContinuous(
         OcclusionDecoderEmbeddingsPerturbator):
     """
     Class for implementing continuous occlusion perturbations.
-    In this method, each value in the input data is zoroed out
+    In this method, each value in the input data is zeroed out
     independently of the others.
     """
-    def __call__(self, embeddings: Tensor) -> Tuple[Tensor, Tensor]:
-        # embeddings Tensor has shape (B x T x C)
-        masks = (torch.rand(embeddings.shape, device=embeddings.device) > self.p).to(embeddings.dtype)
-        embeddings *= masks
-        return embeddings, masks
+    @staticmethod
+    def _adjust_occlusion_masks_length(occlusion_masks, embeddings):
+        """
+        The occlusion masks will be adjusted to match the embeddings. 
+        If the occlusion_masks are longer than the embeddings, they will be truncated.
+        If they are shorter, they are padded with ones (this can happen when studying gender terms,
+        if the swapped hypothesis is longer or shorter than the original one).
+
+        Args:
+            occlusion_masks (torch.Tensor): The initial occlusion masks.
+            embeddings (torch.Tensor): The embeddings tensor which is going to be perturbed.
+
+        Returns:
+            torch.Tensor: The adjusted occlusion masks.
+        """
+        if embeddings.shape[1] > occlusion_masks.shape[1]:
+            occlusion_masks = torch.cat(
+                [occlusion_masks, torch.ones(
+                    embeddings.shape[0], embeddings.shape[1] - occlusion_masks.shape[1],
+                    embeddings.shape[2], device=embeddings.device, dtype=occlusion_masks.dtype)], dim=1)
+        elif embeddings.shape[1] < occlusion_masks.shape[1]:
+            occlusion_masks = occlusion_masks[:, :embeddings.shape[1], :]
+        return occlusion_masks
+    
+    def _generate_occlusion_masks(self, embeddings: Tensor) -> Tensor:
+        """
+        Args:
+            embeddings (torch.Tensor): The embeddings tensor which is going to be perturbed.
+
+        Returns:
+            torch.Tensor: The occlusion masks.
+        """
+        return (torch.rand(embeddings.shape, device=embeddings.device) > self.p).to(embeddings.dtype)
+
+    def _apply_occlusion(self, embeddings: Tensor, occlusion_masks: Tensor) -> Tensor:
+        """
+        Args:
+            embeddings (torch.Tensor): The embeddings tensor which is going to be perturbed.
+            occlusion_masks (torch.Tensor): The occlusion masks.
+
+        Returns:
+            torch.Tensor: The perturbed embeddings.
+        """
+        return embeddings * occlusion_masks
 
 
 @register_perturbator("discrete_embed")
@@ -44,9 +83,48 @@ class OcclusionDecoderEmbeddingsPerturbatorDiscrete(
     Class for implementing discrete occlusion perturbations.
     In this method, entire token embeddings are zeroed out.
     """
-    def __call__(self, embeddings: Tensor) -> Tuple[Tensor, Tensor]:
-        # embeddings Tensor has shape (B x T x C)
-        masks = (torch.rand(
-            embeddings.shape[0], embeddings.shape[1], device=embeddings.device) > self.p).to(embeddings.dtype)
-        embeddings *= masks.view(masks.shape[0], masks.shape[1], 1)
-        return embeddings, masks
+    @staticmethod
+    def _adjust_occlusion_masks_length(occlusion_masks, embeddings):
+        """
+        The occlusion masks will be adjusted to match the embeddings. 
+        If the occlusion_masks are longer than the embeddings, they will be truncated.
+        If they are shorter, they are padded with ones (this can happen when studying gender terms,
+        if the swapped hypothesis is longer or shorter than the original one).
+
+        Args:
+            occlusion_masks (torch.Tensor): The initial occlusion masks.
+            embeddings (torch.Tensor): The embeddings tensor which is going to be perturbed.
+
+        Returns:
+            torch.Tensor: The adjusted occlusion masks.
+        """
+        if embeddings.shape[1] > occlusion_masks.shape[1]:
+            occlusion_masks = torch.cat(
+                [occlusion_masks, torch.ones(
+                    embeddings.shape[0], embeddings.shape[1] - occlusion_masks.shape[1],
+                    device=embeddings.device, dtype=occlusion_masks.dtype)], dim=1)
+        elif embeddings.shape[1] < occlusion_masks.shape[1]:
+            occlusion_masks = occlusion_masks[:, :embeddings.shape[1]]
+
+        return occlusion_masks
+
+    def _generate_occlusion_masks(self, embeddings: Tensor) -> Tensor:
+        """
+        Args:
+            embeddings (torch.Tensor): The embeddings tensor which is going to be perturbed.
+
+        Returns:
+            torch.Tensor: The occlusion masks.
+        """
+        return (torch.rand(embeddings.shape[0], embeddings.shape[1], device=embeddings.device) > self.p).to(embeddings.dtype)
+
+    def _apply_occlusion(self, embeddings: Tensor, occlusion_masks: Tensor) -> Tensor:
+        """
+        Args:
+            embeddings (torch.Tensor): The embeddings tensor which is going to be perturbed.
+            occlusion_masks (torch.Tensor): The occlusion masks.
+
+        Returns:
+            torch.Tensor: The perturbed embeddings.
+        """
+        return embeddings * occlusion_masks.view(occlusion_masks.shape[0], occlusion_masks.shape[1], 1)

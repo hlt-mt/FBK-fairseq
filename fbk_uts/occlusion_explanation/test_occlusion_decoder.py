@@ -56,10 +56,24 @@ class TestOcclusionDecoderEmbeddingsPerturbator(unittest.TestCase):
         self.assertFalse(torch.all(torch.eq(perturbed_embeddings, self.original_embeddings)))
         self.assertTrue(torch.all(torch.eq(mask, expected_mask)))
 
+        # Check that if a mask is provided, it is used instead of generating a new one
+        torch.manual_seed(1)
+        self.embeddings = self.original_embeddings.clone()
+        perturbed_embeddings, mask = perturbator(self.embeddings, occlusion_masks=expected_mask)
+        self.assertFalse(torch.all(torch.eq(perturbed_embeddings, self.original_embeddings)))
+        self.assertTrue(torch.all(torch.eq(mask, expected_mask)))
+
+        # Check that if last_tokens_to_perturb is provided, no occlusion happens after those positions
+        self.embeddings = self.original_embeddings.clone()
+        perturbed_embeddings, mask = perturbator(self.embeddings, last_tokens_to_perturb=[3, 3, 3])
+        self.assertTrue(torch.all(mask[:, 4:]))
+        self.assertTrue(torch.all(torch.eq(perturbed_embeddings[:, 4:], self.original_embeddings[:, 4:])))
+
     def test_discrete_perturbator(self):
         torch.manual_seed(0)
         perturbator = OcclusionDecoderEmbeddingsPerturbatorDiscrete(
             no_position_occlusion=False, p=0.5)
+        self.embeddings = self.original_embeddings.clone()
         perturbed_embeddings, masks = perturbator(self.embeddings)
         expected_masks = torch.tensor([[0., 1., 0., 0., 0.],
                                        [1., 0., 1., 0., 1.],
@@ -74,6 +88,19 @@ class TestOcclusionDecoderEmbeddingsPerturbator(unittest.TestCase):
                     self.assertTrue((perturbed_embeddings[i][k] == 0).all())
                 else:
                     self.assertTrue((perturbed_embeddings[i][k] != 0).all())
+
+        # Check that if a mask is provided, it is used instead of generating a new one
+        torch.manual_seed(1)
+        self.embeddings = self.original_embeddings.clone()
+        perturbed_embeddings, masks = perturbator(self.embeddings, occlusion_masks=expected_masks)
+        self.assertFalse(torch.all(torch.eq(perturbed_embeddings, self.original_embeddings)))
+        self.assertTrue(torch.equal(masks, expected_masks))
+
+        # Check that if last_tokens_to_perturb is provided, no occlusion happens after those positions
+        self.embeddings = self.original_embeddings.clone()
+        perturbed_embeddings, masks = perturbator(self.embeddings, last_tokens_to_perturb=[3, 3, 3])
+        self.assertTrue(torch.all(masks[:, 4:]))
+        self.assertTrue(torch.all(torch.eq(perturbed_embeddings[:, 4:], self.original_embeddings[:, 4:])))
 
     def test_from_config_dict_no_config(self):
         perturbator = OcclusionDecoderEmbeddingsPerturbatorContinuous.from_config_dict(
@@ -107,7 +134,7 @@ class TestOcclusionTransformerDecoderScriptable(unittest.TestCase):
             "src_tokens": [],
             "src_lengths": []}
 
-    # check whether the size are as expected
+    # check whether the sizes are as expected
     def test_embed_tokens_positions(self):
         positions = torch.randn(3, 7, 512)
         x, masks = self.decoder.embed_tokens_positions(self.prev_output_tokens, positions)
@@ -141,6 +168,26 @@ class TestOcclusionTransformerDecoderScriptable(unittest.TestCase):
     def test_forward(self):
         output, _ = self.decoder.forward(self.prev_output_tokens, self.encoder_out)
         self.assertEqual(output.shape, torch.Size([3, 7, 9]))  # batch, tgt_len, vocab_size
+
+    # Check that if occlusion_masks are provided, they are used instead of generating new ones
+    def test_forward_with_without_masks(self):
+        provided_masks = torch.randn(3, 7, 512)
+
+        # masks are not provided
+        output, model_specific_output = self.decoder.forward(
+            self.prev_output_tokens, self.encoder_out)
+        self.assertFalse(torch.allclose(model_specific_output["masks"], provided_masks))
+
+        # masks are provided
+        output, model_specific_output = self.decoder.forward(
+            self.prev_output_tokens, self.encoder_out, occlusion_masks=provided_masks)
+        self.assertTrue(torch.allclose(model_specific_output["masks"], provided_masks))
+
+    # Check that if last_tokens_to_perturb is provided, no occlusion happens after those positions
+    def test_forward_last_tokens_to_perturb(self):
+        output, model_specific_output = self.decoder.forward(
+            self.prev_output_tokens, self.encoder_out, last_tokens_to_perturb=[3, 3, 3])
+        self.assertTrue(torch.all(model_specific_output["masks"][:, 4:]))
 
 
 if __name__ == '__main__':

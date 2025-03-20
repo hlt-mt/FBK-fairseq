@@ -51,6 +51,45 @@ class ExplanationTask:
             task at hand.
         """
         raise NotImplementedError
+    
+    @staticmethod
+    def save_original_probs(model: S2TTransformerModel, sample: Dict, save_file: str) -> None:
+        """
+        Performs a forward pass of the model on the sample and saves the output probabilities in a h5 file.
+        Args:
+            - model: the model to be used to compute the probabilities.
+            - sample: the utterances to be used as input to the model, it should
+                        contain the tokenized target text on which to perform forced decoding.
+            - save_file: the path to the h5 file where to save the probabilities.
+        """
+        raise NotImplementedError
+    
+    @staticmethod
+    def read_original_probs(original_probs_file: h5py.File, sample: Dict) -> Dict:
+        """
+        Args:
+            - original_probs_file: open h5py file containing the original probabilities ouput 
+                                   by the model.
+            - sample: dictionary containing the sample on which to compute explanations.
+        Returns:
+            - original_probs: a dictionary in the form {id: Tensor (padded_seq_len, dict_len)}
+                              containing the original probabilities relevant for the 
+                              task at hand for each utterance in the sample.
+        """
+        raise NotImplementedError
+    
+    @staticmethod
+    def get_perturbed_probs(model: S2TTransformerModel, sample: Dict) -> Dict:
+        """
+        Args:
+            - model: a model with a decoder of type OcclusionTransformerDecoderScriptable
+                     to be used to compute the perturbed probabilities.
+            - sample: dictionary containing the sample on which to compute explanations.
+        Returns:
+            A dictionary containing the perturbed probabilities relevant for the task at hand
+            and the corresponding mask(s) indicating which target embeddings where occluded.
+        """
+        raise NotImplementedError
 
 
 TASK_REGISTRY = {}
@@ -61,7 +100,7 @@ def register_explanation_task(name):
     def register_explanation_task_cls(cls):
         if name in TASK_REGISTRY:
             raise ValueError(
-                f"Cannot register duplicate scorer ({name})")
+                f"Cannot register duplicate task ({name})")
         if not issubclass(cls, ExplanationTask):
             raise ValueError(
                 f"Explanation task ({name}: {cls.__name__}) must extend ExplanationTask")

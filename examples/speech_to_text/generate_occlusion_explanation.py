@@ -118,7 +118,6 @@ def _main(cfg: DictConfig, output_file):
         task.dataset(cfg.dataset.gen_subset), fbank_perturbator, tgt_dict)
 
     scorer = perturb_config.get_scorer_from_config()
-
     accumulator = Accumulator(cfg.task, occluded_dataset)
 
     # Load dataset (possibly sharded)
@@ -147,9 +146,7 @@ def _main(cfg: DictConfig, output_file):
 
             # Load original probabilities only for the samples in the current batch
             # each value has shape (padded_seq_len, dict_len)
-            orig_probs = {
-                key: torch.tensor(original_probs_f[str(key)][()])
-                for key in torch.unique(sample["orig_id"]).tolist()}
+            orig_probs = explanation_task.read_original_probs(original_probs_f, sample)
 
             # Move to GPU
             sample = utils.move_to_cuda(sample) if use_cuda else sample
@@ -161,18 +158,13 @@ def _main(cfg: DictConfig, output_file):
             num_entries = torch.unique(sample["orig_id"]).shape[0]
 
             gen_timer.start()
-            with torch.no_grad():
-                decoder_out, ctc_outputs = model(**sample["net_input"])
-                tgt_embed_masks = decoder_out[1]["masks"]
-                perturb_probs = model.get_normalized_probs(  # (batch_size, padded_seq_len, dict_len)
-                    decoder_out, log_probs=False)
-                assert torch.all((perturb_probs >= 0) & (perturb_probs <= 1))
+            # Get the perturbed probabilities for the current batch (batch_size, padded_seq_len, dict_len)
+            occluded_decoder_out = explanation_task.get_perturbed_probs(model, sample)
 
             single_fbank_heatmaps, fbank_masks, single_decoder_heatmaps, decoder_masks = scorer(
                 sample=sample,
                 orig_probs=orig_probs,
-                perturb_probs=perturb_probs,
-                tgt_embed_masks=tgt_embed_masks)
+                **occluded_decoder_out)
 
             gen_timer.stop(batch_size)
             logger.debug(f"Generated {batch_size} single heatmaps for {num_entries} entries")

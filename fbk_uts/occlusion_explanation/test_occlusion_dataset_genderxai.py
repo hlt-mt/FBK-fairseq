@@ -89,7 +89,7 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
             audio_paths=[absolute_path1, absolute_path2],
             n_frames=[100, 150],
             src_texts=["mock_src_text_1", "mock_src_text_2"],
-            tgt_texts=["_lui mock_tgt_text", "_and _lei"],
+            tgt_texts=["_lui mock_tgt_text mock_tgt_text", "_and _lei"],
             speakers=["speaker_1", "speaker_2"],
             src_langs=["it", "it"],
             tgt_langs=["it", "it"],
@@ -101,7 +101,7 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
             found_terms=["lui", "lei"],
             found_term_pairs=["lui lei", "lui lei"],
             gender_terms_indices=["0-0", "1-1"],
-            swapped_tgt_texts=["_lei mock_tgt_text", "_and _lui"])
+            swapped_tgt_texts=["_lei mock_tgt_text mock_tgt_text", "_and _lui"])
         self.concat_datasets = ConcatDataset([self.mock_dataset])
         self.occlusion_dataset = OccludedSpeechToTextDatasetGenderXai(
             to_be_occluded_dataset=self.concat_datasets,
@@ -119,11 +119,11 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
         self.assertIsInstance(perturbed_fbank, Tensor)
         self.assertEqual(perturbed_fbank.size(), (100, 80))
         self.assertEqual(source_text.size(), (2,))
-        self.assertEqual(tgt_tokens.tolist(), [4, 3, 2])  # lui <unk>, </s>
+        self.assertEqual(tgt_tokens.tolist(), [4, 3, 3, 2])  # lui <unk> <unk> </s>
         self.assertEqual(found_term, "lui")
         self.assertEqual(found_term_pair, "lui lei")
         self.assertEqual(gender_term_index, "0-0")
-        self.assertEqual(swapped_tgt_tokens.tolist(), [9, 3, 2])  # lei <unk>, </s>
+        self.assertEqual(swapped_tgt_tokens.tolist(), [9, 3, 3, 2])  # _lei <unk> <unk> </s>
 
     def test_collater_empty_samples(self):
         samples = []

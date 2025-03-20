@@ -28,6 +28,7 @@ import numpy as np
 import torch
 from omegaconf import DictConfig
 
+from examples.speech_to_text.occlusion_explanation.explanation_tasks import get_explanation_task
 from fairseq import checkpoint_utils, options, tasks, utils
 from fairseq.dataclass import FairseqDataclass
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf, gen_parser_from_dataclass
@@ -41,10 +42,12 @@ def main(cfg: DictConfig):
     assert cfg.common_eval.path is not None, "--path required for generation!"
     assert cfg.task.save_file is not None, "--save-file required for saving!"
     save_file_hdf5 = cfg.task.save_file + ".h5"
-    return _main(cfg, sys.stdout, save_file_hdf5)
+    # abstraction containing methods that depend on what we want to explain
+    explanation_task = get_explanation_task(cfg.task.explanation_task)
+    return _main(cfg, sys.stdout, save_file_hdf5, explanation_task)
 
 
-def _main(cfg: DictConfig, output_file, save_file):
+def _main(cfg: DictConfig, output_file, save_file, explanation_task):
     logging.basicConfig(
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
@@ -119,16 +122,9 @@ def _main(cfg: DictConfig, output_file, save_file):
         gen_save_timer.start()
         if "net_input" not in sample:
             continue
-        decoder_out, _ = model(**sample["net_input"])
-        probs = model.get_normalized_probs(  # (batch_size, padded_seq_len, dict_len)
-            decoder_out, log_probs=False)
-        assert torch.all((probs >= 0) & (probs <= 1))
-        # probs = decoder_out[0]
-        with h5py.File(save_file, "a") as f:
-            for i, sample_id in enumerate(sample["id"].tolist()):
-                f.create_dataset(
-                    str(sample_id),
-                    data=probs[i, :sample["target_lengths"][i], :].cpu().detach().numpy())  # strip padding
+
+        # Perform the forward pass with forced decoding and save the output probabilities
+        explanation_task.save_original_probs(model, sample, save_file)
 
         gen_save_timer.stop(len(sample))
 
@@ -136,6 +132,11 @@ def _main(cfg: DictConfig, output_file, save_file):
 @dataclass
 class SavingConfig(FairseqDataclass):
     save_file: str = field(default=None, metadata={"help": "File where probabilities will be saved."})
+    explanation_task: str = field(
+        default='generic', 
+        metadata={
+            "help": "The explanation task for which the probabilities will be used.", 
+            "choices": ['generic', 'gender']})
 
 
 def add_saving_args(parser):

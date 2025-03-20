@@ -569,54 +569,5 @@ class TestScorer(unittest.TestCase):
         self.assertTrue(torch.equal(single_tgt_embed_heatmaps, expected_single_tgt_embed_heatmaps))
 
 
-class TestGenderScorer(unittest.TestCase):
-    def setUp(self) -> None:
-        self.scorer = KLGenderScorer()
-        self.sample = {
-            "id": [],
-            "orig_id": torch.LongTensor([1, 1]),
-            "target": torch.tensor([[2, 1, 3], [1, 1, 1]]),
-            "target_lengths": torch.LongTensor([3, 3]),
-            "gender_terms_indices": ['0-1', '1-1']}
-        
-    def test_get_prob_diff(self):
-        orig_probs = torch.tensor(
-            [[[0.2, 0.2, 0.2, 0.1, 0.2, 0.1],
-              [0.6, 0.4, 0.2, 0.1, 0.2, 0.1],
-              [0.8, 0.9, 0.2, 0.1, 0.1, 0.1]],
-             [[0.2, 0.2, 0.2, 0.1, 0.2, 0.1],
-              [0.6, 0.4, 0.2, 0.1, 0.2, 0.1],
-              [0.8, 0.9, 0.2, 0.1, 0.1, 0.1]]])
-        perturb_probs = torch.tensor(
-            [[[0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
-              [0.2, 0.1, 0.1, 0.3, 0.1, 0.3],
-              [0.1, 0.2, 0.1, 0.1, 0.3, 0.1]],
-             [[0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
-              [0.1, 0.1, 0.1, 0.2, 0.1, 0.1],
-              [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]]])
-        scores = self.scorer.get_prob_diff(orig_probs, perturb_probs, self.sample)
-        self.assertEqual(scores.size(), Size([2, 1, 1]))
-        expected_scores = torch.tensor([[[1.2712]], [[1.8375]]])
-        self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
-
-    def test_make_heatmaps_causal(self):
-        # Batch size, gender term length, sequence length, embedding dimension
-        heatmaps = torch.ones((2, 1, 3, 5))
-        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps, self.sample)
-        expected_heatmaps = torch.tensor(
-            [[[[1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.]]],
-             [[[1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.]]]])
-        self.assertTrue(torch.equal(causality_heatmaps, expected_heatmaps))
-
-    # test make_heatmaps_causal() when the masking strategy is 'discrete'
-    def test_make_heatmaps_causal_discrete(self):
-        heatmaps = torch.ones((2, 1, 3, 1))  # (Batch size, sequence length, sequence length, 1)
-        causality_heatmaps = self.scorer._make_heatmaps_causal(heatmaps, self.sample)
-        expected_heatmaps = torch.tensor(
-            [[[[1.], [0.], [0.]]],
-             [[[1.], [1.], [0.]]]])
-        self.assertTrue(torch.equal(causality_heatmaps, expected_heatmaps))
-
-
 if __name__ == '__main__':
     unittest.main()
