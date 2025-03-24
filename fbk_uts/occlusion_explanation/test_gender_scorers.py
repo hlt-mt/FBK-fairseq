@@ -17,6 +17,7 @@ import torch
 from torch import Size
 
 from examples.speech_to_text.occlusion_explanation.scorers.gender_term_contrastive import GenderTermContrastiveScorer
+from examples.speech_to_text.occlusion_explanation.scorers.gender_term_predicted_diff import GenderTermPredictedDiffScorer
 from examples.speech_to_text.occlusion_explanation.scorers.kl_gender_terms import KLGenderScorer
 
 
@@ -24,6 +25,7 @@ class TestGenderScorer(unittest.TestCase):
     def setUp(self) -> None:
         self.KL_scorer = KLGenderScorer()
         self.contrastive_scorer = GenderTermContrastiveScorer()
+        self.diff_scorer = GenderTermPredictedDiffScorer()
         self.sample = {
             "id": [],
             "orig_id": torch.LongTensor([1, 1]),
@@ -69,6 +71,13 @@ class TestGenderScorer(unittest.TestCase):
         scores = self.KL_scorer.get_prob_diff(self.orig_probs, self.perturb_probs, self.sample)
         self.assertEqual(scores.size(), Size([2, 1, 1]))
         expected_scores = torch.tensor([[[1.2712]], [[1.8375]]])
+        self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
+
+    def test_get_prob_diff_predicted_diff(self):
+        scores = self.diff_scorer.get_prob_diff(
+            self.orig_probs, self.perturb_probs, self.sample)
+        self.assertEqual(scores.size(), Size([2, 1, 1]))
+        expected_scores = torch.tensor([[[0.18284]], [[0.3]]])
         self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
 
     def test_get_prob_diff_contrastive(self):
