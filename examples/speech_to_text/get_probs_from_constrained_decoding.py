@@ -28,7 +28,7 @@ import numpy as np
 import torch
 from omegaconf import DictConfig
 
-from examples.speech_to_text.occlusion_explanation.explanation_tasks import get_explanation_task
+from examples.speech_to_text.occlusion_explanation.explanation_tasks import TASK_REGISTRY, get_explanation_task
 from fairseq import checkpoint_utils, options, tasks, utils
 from fairseq.dataclass import FairseqDataclass
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf, gen_parser_from_dataclass
@@ -133,10 +133,10 @@ def _main(cfg: DictConfig, output_file, save_file, explanation_task):
 class SavingConfig(FairseqDataclass):
     save_file: str = field(default=None, metadata={"help": "File where probabilities will be saved."})
     explanation_task: str = field(
-        default='generic', 
+        default='all_tokens', 
         metadata={
             "help": "The explanation task for which the probabilities will be used.", 
-            "choices": ['generic', 'gender']})
+            "choices": f"{list(TASK_REGISTRY.keys())}"})
 
 
 def add_saving_args(parser):
