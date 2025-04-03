@@ -15,6 +15,7 @@ import unittest
 
 import torch
 
+from examples.speech_to_text.occlusion_explanation.normalizers.gender_single_min_max import SingleMinMaxNormalizerGender
 from examples.speech_to_text.occlusion_explanation.normalizers.gender_paired_min_max import PairedMinMaxNormalizerGender
 from examples.speech_to_text.occlusion_explanation.normalizers.paired_min_max import PairedMinMaxNormalizer
 from examples.speech_to_text.occlusion_explanation.normalizers.single_mean_std import SingleMeanStdNormalizer
@@ -64,8 +65,6 @@ class TestGenericNormalizers(unittest.TestCase):
              [[-1.], [0.], [1.], [0.]],
              [[1.2247], [-1.2247], [0.], [0.]]])
         norm_fbank, norm_tgt = self.single_mean_std_normalizer(self.fbank_explanations, self.tgt_explanations)
-        print(norm_fbank)
-        print(norm_tgt)
         self.assertTrue(torch.allclose(norm_fbank, expected_fbank, atol=0.0001))
         self.assertTrue(torch.allclose(norm_tgt, expected_tgt, atol=0.0001))
 
@@ -98,6 +97,7 @@ class TestGenderNormalizers(unittest.TestCase):
     def setUp(self) -> None:
         self.gender_single_mean_std_normalizer = SingleMeanStdNormalizerGender()
         self.gender_paired_min_max_normalizer = PairedMinMaxNormalizerGender()
+        self.gender_single_min_max_normalizer = SingleMinMaxNormalizerGender()
         self.fbank_explanations = torch.tensor(
             [[[1., 2., 1., 0.],
               [1., 2., 1., 0.],
@@ -127,6 +127,21 @@ class TestGenderNormalizers(unittest.TestCase):
             [[[0.5], [1.], [0.], [0.]]])
         gender_term_index = 1
         norm_fbank, norm_tgt = self.gender_paired_min_max_normalizer(
+            self.fbank_explanations, self.tgt_explanations, gender_term_index)
+        self.assertTrue(torch.equal(norm_fbank, expected_fbank))
+        self.assertTrue(torch.equal(norm_tgt, expected_tgt))
+
+    def test_gender_single_min_max_normalization(self):
+        self.tgt_explanations = torch.tensor(
+            [[[1.], [3.], [0.], [-1.]]])
+        expected_fbank = torch.tensor(
+            [[[0.5, 1., 0.5, 0.],
+              [0.5, 1., 0.5, 0.],
+              [0.5, 1., 0.5, 0.]]])
+        expected_tgt = torch.tensor(
+            [[[0.], [1.], [0.], [0.]]])
+        gender_term_index = 1
+        norm_fbank, norm_tgt = self.gender_single_min_max_normalizer(
             self.fbank_explanations, self.tgt_explanations, gender_term_index)
         self.assertTrue(torch.equal(norm_fbank, expected_fbank))
         self.assertTrue(torch.equal(norm_tgt, expected_tgt))
