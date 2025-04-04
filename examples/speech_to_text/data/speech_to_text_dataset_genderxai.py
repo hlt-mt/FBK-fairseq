@@ -155,16 +155,22 @@ class SpeechToTextDatasetGenderXai(SpeechToTextDataset):
             ntokens = sum(t.size(0) for _, _, t, _, _, _, _, _, _ in samples)
 
         # Extra fields for gender analysis
-        tgt_texts = [t for _, _, _, _, t, _, _, _, _, _ in samples]
-        tgt_texts = [tgt_texts[i] for i in order]
         found_terms = [ft for _, _, _, _, _, ft, _, _, _, _ in samples]
         found_terms = [found_terms[i] for i in order]
         found_term_pairs = [ftp for _, _, _, _, _, ftp, _, _, _ in samples]
         found_term_pairs = [found_term_pairs[i] for i in order]
         gender_terms_indices = [gti for _, _, _, _, _, _, gti, _, _ in samples]
         gender_terms_indices = [gender_terms_indices[i] for i in order]
-        swapped_tgt_texts = [st for _, _, _, _, _, _, _, _, st, _ in samples]
-        swapped_tgt_texts = [swapped_tgt_texts[i] for i in order]
+        
+        swapped_target = fairseq_data_utils.collate_tokens(
+            [stt for _, _, _, _, _, _, _, _, _, stt in samples],
+            self.tgt_dict.pad(),
+            self.tgt_dict.eos(),
+            left_pad=False,
+            move_eos_to_beginning=False)
+        swapped_target = swapped_target.index_select(0, order)
+        swapped_tgt_lengths = torch.tensor(
+                [stt.size(0) for  _, _, _, _, _, _, _, _, _, stt in samples], dtype=torch.long).index_select(0, order)
         prev_swapped_tokens = fairseq_data_utils.collate_tokens(
             [stt for _, _, _, _, _, _, _, _, stt in samples],
             self.tgt_dict.pad(),
@@ -172,9 +178,7 @@ class SpeechToTextDatasetGenderXai(SpeechToTextDataset):
             left_pad=False,
             move_eos_to_beginning=True)
         prev_swapped_tokens = prev_swapped_tokens.index_select(0, order)
-        swapped_tgt_lengths = torch.tensor(
-                [stt.size(0) for  _, _, _, _, _, _, _, _, _, stt in samples], dtype=torch.long).index_select(0, order)
-
+        
         out = {
             "id": indices,
             "net_input": {
@@ -185,14 +189,13 @@ class SpeechToTextDatasetGenderXai(SpeechToTextDataset):
             },
             "target": target,
             "target_lengths": target_lengths,
+            "swapped_target": swapped_target,
             "swapped_target_lengths": swapped_tgt_lengths,
             "ntokens": ntokens,
             "nsentences": len(samples),
-            "tgt_texts": tgt_texts,
             "found_terms": found_terms,
             "found_term_pairs": found_term_pairs,
-            "gender_terms_indices": gender_terms_indices,
-            "swapped_tgt_texts": swapped_tgt_texts}
+            "gender_terms_indices": gender_terms_indices}
         return out
 
 
