@@ -18,6 +18,7 @@ import os
 import unittest
 import torch
 
+from examples.speech_to_text.tasks.deletion_insertion_task_ctc import FeatureAttributionEvaluationCtcTask
 from examples.speech_to_text.tasks.deletion_insertion_task import FeatureAttributionEvaluationTask
 from fairseq.tasks import TASK_REGISTRY, FairseqTask
 
@@ -35,11 +36,17 @@ class TestDeletionInsertionTask(unittest.TestCase):
         relative_path = os.path.join('mock_data', 'explanations.h5')
         explanation_path = os.path.join(current_directory, relative_path)
         args.explanation_path = explanation_path
-        self.task = FeatureAttributionEvaluationTask(args=args, tgt_dict=None, src_dict=None)
+        self.task = FeatureAttributionEvaluationTask(args=args, tgt_dict=None)
+        self.task_ctc = FeatureAttributionEvaluationCtcTask(args=args, tgt_dict=None, src_dict=None)
 
     def test_task_registration(self):
         self.assertIn("feature_attribution_evaluation_task", TASK_REGISTRY)
         task_cls = TASK_REGISTRY["feature_attribution_evaluation_task"]
+        self.assertTrue(issubclass(task_cls, FairseqTask))
+    
+    def test_task_registration(self):
+        self.assertIn("feature_attribution_evaluation_task_ctc", TASK_REGISTRY)
+        task_cls = TASK_REGISTRY["feature_attribution_evaluation_task_ctc"]
         self.assertTrue(issubclass(task_cls, FairseqTask))
 
     def test_customize_sample_id(self):
@@ -51,6 +58,8 @@ class TestDeletionInsertionTask(unittest.TestCase):
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])}
         new_sample_id = self.task.customize_sample_id(24, 44, sample)
+        self.assertEqual(new_sample_id, "1-2")
+        new_sample_id = self.task_ctc.customize_sample_id(24, 44, sample)
         self.assertEqual(new_sample_id, "1-2")
 
     def test_assertion_interval_size(self):
@@ -66,8 +75,10 @@ class TestDeletionInsertionTask(unittest.TestCase):
         explanation_path = os.path.join(current_directory, relative_path)
         args.explanation_path = explanation_path
         with self.assertRaises(AssertionError):
-            metric_dataset_with_src = FeatureAttributionEvaluationTask(
+            metric_dataset_with_src = FeatureAttributionEvaluationCtcTask(
                 args=args, tgt_dict=None, src_dict=None)
+        with self.assertRaises(AssertionError):
+            metric_dataset = FeatureAttributionEvaluationTask(args=args, tgt_dict=None)
 
 
 if __name__ == '__main__':

@@ -123,7 +123,7 @@ python /fbk-fairseq/fairseq_cli/generate.py ${data_dir} \
     --beam 5 \
     --max-source-positions 10000 \
     --max-target-positions 1000 \
-    --task feature_attribution_evaluation_task \
+    --task feature_attribution_evaluation_task_ctc \
     --aggregator sentence \
     --criterion ctc_multi_loss \
     --underlying-criterion label_smoothed_cross_entropy --label-smoothing 0.1 \

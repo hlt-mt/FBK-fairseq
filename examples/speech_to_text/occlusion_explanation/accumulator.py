@@ -79,10 +79,13 @@ class Accumulator:
             n_masks = count.item()
             idx_mask = orig_indices == orig_ind
 
-            src_text = decode_line(
-                list(compress(collated_data["src_texts"], idx_mask))[0],
-                self.src_dict,
-                self.bpe_tokenizer_src)
+            if "src_texts" in collated_data:
+                src_text = decode_line(
+                    list(compress(collated_data["src_texts"], idx_mask))[0],
+                    self.src_dict,
+                    self.bpe_tokenizer_src)
+            else:
+                src_text = None
             tgt_text = decode_line(
                 collated_data["net_input"]["prev_output_tokens"][idx_mask][0],
                 self.tgt_dict)
@@ -103,13 +106,14 @@ class Accumulator:
                 self.accumulated_masks[ind]["tgt_embed_mask"] += tgt_embed_mask_sum
             else:
                 self.accumulated_masks[ind] = {
-                    "src_text": src_text,
                     "tgt_text": tgt_text,
                     "n_masks": n_masks,
                     "fbank_heatmap": fbank_heatmap_sum,
                     "tgt_embed_heatmap": tgt_embed_heatmap_sum,
                     "fbank_mask": fbank_mask_sum,
                     "tgt_embed_mask": tgt_embed_mask_sum}
+                if src_text is not None:
+                    self.accumulated_masks[ind]["src_text"] = src_text
 
     def _normalize(self, index: int) -> None:
         """

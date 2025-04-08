@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 
-from typing import Dict, Tuple
+from typing import Dict
 import torch
 import h5py
 from examples.speech_to_text.data.occlusion_dataset import OccludedSpeechToTextDataset
 from examples.speech_to_text.data.occlusion_dataset_genderxai import OccludedSpeechToTextDatasetGenderXai
+from examples.speech_to_text.data.occlusion_dataset_with_src_genderxai import OccludedSpeechToTextDatasetWithSrcGenderXai
+from examples.speech_to_text.data.speech_to_text_dataset_with_src_genderxai import SpeechToTextDatasetWithSrcGenderXai
 from examples.speech_to_text.models.s2t_transformer_fbk import S2TTransformerModel
 from examples.speech_to_text.occlusion_explanation.explanation_tasks import ExplanationTask, register_explanation_task
 from examples.speech_to_text.occlusion_explanation.perturbators import OcclusionFbankPerturbator
@@ -46,7 +48,16 @@ class GenderExplanationTask(ExplanationTask):
             OccludedSpeechToTextDatasetGenderXai object, which contains special fields with 
             gender term annotations.
         """
-        return OccludedSpeechToTextDatasetGenderXai(to_be_occluded_dataset, perturbator, tgt_dict)
+        dataset_type = type(to_be_occluded_dataset.datasets[0])
+        assert all(type(d) == dataset_type for d in to_be_occluded_dataset.datasets), \
+            "Datasets of different type are not supported. Dataset types are: " \
+            f"{[type(d) == dataset_type for d in to_be_occluded_dataset.datasets]}"
+        if dataset_type == SpeechToTextDatasetWithSrcGenderXai:
+            occluded_dataset_type = OccludedSpeechToTextDatasetWithSrcGenderXai
+        else:
+            occluded_dataset_type = OccludedSpeechToTextDatasetGenderXai
+        return occluded_dataset_type(
+            to_be_occluded_dataset, perturbator, tgt_dict)
 
     @staticmethod
     def save_original_probs(model: S2TTransformerModel, sample: Dict, save_file: str) -> None:
@@ -63,8 +74,10 @@ class GenderExplanationTask(ExplanationTask):
         # Generated hypothesis
         net_input = sample["net_input"]
         
-        decoder_out, _ = model(
-            net_input["src_tokens"], net_input["src_lengths"], net_input["prev_output_tokens"])
+        decoder_out, _ = model(**net_input)
+        if not isinstance(decoder_out, tuple):
+            # This step is necessary so we can handle both models with and without ctc
+            decoder_out = (decoder_out,)
         probs = model.get_normalized_probs(  # (batch_size, padded_seq_len, dict_len)
             decoder_out, log_probs=False)
         assert torch.all((probs >= 0) & (probs <= 1))
@@ -72,6 +85,9 @@ class GenderExplanationTask(ExplanationTask):
         # Swapped hypothesis
         decoder_out_swapped, _ = model(
             net_input["src_tokens"], net_input["src_lengths"], net_input["swapped_prev_output_tokens"])
+        if not isinstance(decoder_out_swapped, tuple):
+            # This step is necessary so we can handle both models with and without ctc
+            decoder_out_swapped = (decoder_out_swapped,)
         swapped_probs = model.get_normalized_probs(  # (batch_size, padded_seq_len, dict_len)
             decoder_out_swapped, log_probs=False)
         assert torch.all((swapped_probs >= 0) & (swapped_probs <= 1))

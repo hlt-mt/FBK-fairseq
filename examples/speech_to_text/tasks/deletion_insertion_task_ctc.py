@@ -14,20 +14,20 @@
 
 import logging
 from examples.speech_to_text.tasks.deletion_insertion_support import FeatureAttributionEvaluationSupport
+from examples.speech_to_text.tasks.speech_to_text_ctc import SpeechToTextCtcTask
 from fairseq.tasks import register_task
-from fairseq.tasks.speech_to_text import SpeechToTextTask
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-@register_task("feature_attribution_evaluation_task")
-class FeatureAttributionEvaluationTask(SpeechToTextTask, FeatureAttributionEvaluationSupport):
+@register_task("feature_attribution_evaluation_task_ctc")
+class FeatureAttributionEvaluationCtcTask(SpeechToTextCtcTask, FeatureAttributionEvaluationSupport):
     @staticmethod
     def add_args(parser):
-        SpeechToTextTask.add_args(parser)
+        SpeechToTextCtcTask.add_args(parser)
         FeatureAttributionEvaluationSupport.add_args(parser)
 
-    def __init__(self, args, tgt_dict):
-        super().__init__(args, tgt_dict)
+    def __init__(self, args, tgt_dict, src_dict):
+        super().__init__(args, tgt_dict, src_dict)
         self.setup_evaluation(args)

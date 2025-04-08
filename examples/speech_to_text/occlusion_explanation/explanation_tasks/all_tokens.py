@@ -58,6 +58,9 @@ class AllTokensExplanationTask(ExplanationTask):
             - save_file: the path to the h5 file where to save the probabilities.
         """
         decoder_out, _ = model(**sample["net_input"])
+        if not isinstance(decoder_out, tuple):
+            # This step is necessary so we can handle both models with and without ctc
+            decoder_out = (decoder_out,) 
         probs = model.get_normalized_probs(  # (batch_size, padded_seq_len, dict_len)
             decoder_out, log_probs=False)
         assert torch.all((probs >= 0) & (probs <= 1))
