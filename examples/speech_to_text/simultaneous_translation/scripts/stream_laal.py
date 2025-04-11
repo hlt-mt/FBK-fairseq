@@ -83,7 +83,7 @@ class MwerSegmenter:
     The tool can be downloaded at:
     https://www-i6.informatik.rwth-aachen.de/web/Software/mwerSegmenter.tar.gz
     """
-    def __init__(self):
+    def __init__(self, character_level=False):
         self.mwer_command = "mwerSegmenter"
         if shutil.which(self.mwer_command) is None:
             mwerSegmenter_root = os.getenv("MWERSEGMENTER_ROOT")
@@ -99,6 +99,10 @@ class MwerSegmenter:
         tmp_pred = tempfile.NamedTemporaryFile(mode="w", delete=False)
         tmp_ref = tempfile.NamedTemporaryFile(mode="w", delete=False)
         tmp_dir = tempfile.mkdtemp()  # temporary directory where mwerSegmenter writes the segments. It works in paralel
+        if self.character_level:
+            # If character-level evaluation, add spaces for resegmentation
+            prediction = " ".join(prediction)
+            reference_sentences = [" ".join(reference) for reference in reference_sentences]
         try:
             tmp_pred.write(prediction)
             tmp_ref.writelines(ref + '\n' for ref in reference_sentences)
@@ -113,15 +117,21 @@ class MwerSegmenter:
                 "-usecase",
                 "1"], cwd=tmp_dir)
             # mwerSegmenter writes into the __segments file in the temporary directory. 
-            segments = os.path.join(tmp_dir, "__segments")
-            with open(segments, "r") as f:
-                return [line.strip() for line in f.readlines()]
+            segments_file = os.path.join(tmp_dir, "__segments")
+            with open(segments_file, "r") as f:
+                segments = []
+                for line in f.readlines():
+                    if self.character_level:
+                        # If character-level evaluation, remove only spaces between characters
+                        line = re.sub(r'(.)\s', r'\1', line)
+                    segments.append(line.strip())
+                return segments
         finally:
             tmp_pred.close()
             tmp_ref.close()
             os.unlink(tmp_pred.name)
             os.unlink(tmp_ref.name)
-            os.unlink(segments)
+            os.unlink(segments_file)
             os.rmdir(tmp_dir)
 
 class SegmentLevelDelayElapsed:
