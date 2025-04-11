@@ -74,7 +74,6 @@ class SimulEvalLogInstance:
         else:
             raise NotImplementedError
 
-
 class MwerSegmenter:
     """
     Executes the mWERSegmenter tool introduced in `"Evaluating Machine Translation Output
@@ -84,9 +83,8 @@ class MwerSegmenter:
     The tool can be downloaded at:
     https://www-i6.informatik.rwth-aachen.de/web/Software/mwerSegmenter.tar.gz
     """
-    def __init__(self, character_level=False):
+    def __init__(self):
         self.mwer_command = "mwerSegmenter"
-        self.character_level = character_level
         if shutil.which(self.mwer_command) is None:
             mwerSegmenter_root = os.getenv("MWERSEGMENTER_ROOT")
             assert mwerSegmenter_root is not None, \
@@ -100,10 +98,7 @@ class MwerSegmenter:
         """
         tmp_pred = tempfile.NamedTemporaryFile(mode="w", delete=False)
         tmp_ref = tempfile.NamedTemporaryFile(mode="w", delete=False)
-        if self.character_level:
-            # If character-level evaluation, add spaces for resegmentation
-            prediction = " ".join(prediction)
-            reference_sentences = [" ".join(reference) for reference in reference_sentences]
+        tmp_dir = tempfile.mkdtemp()  # temporary directory where mwerSegmenter writes the segments. It works in paralel
         try:
             tmp_pred.write(prediction)
             tmp_ref.writelines(ref + '\n' for ref in reference_sentences)
@@ -116,23 +111,18 @@ class MwerSegmenter:
                 "-hypfile",
                 tmp_pred.name,
                 "-usecase",
-                "1"])
-            # mwerSegmenter writes into the __segments file of the current working directory
-            with open("__segments") as f:
-                segments = []
-                for line in f.readlines():
-                    if self.character_level:
-                        # If character-level evaluation, remove only spaces between characters
-                        line = re.sub(r'(.)\s', r'\1', line)
-                    segments.append(line.strip())
-                return segments
+                "1"], cwd=tmp_dir)
+            # mwerSegmenter writes into the __segments file in the temporary directory. 
+            segments = os.path.join(tmp_dir, "__segments")
+            with open(segments, "r") as f:
+                return [line.strip() for line in f.readlines()]
         finally:
             tmp_pred.close()
             tmp_ref.close()
             os.unlink(tmp_pred.name)
             os.unlink(tmp_ref.name)
-            os.unlink("__segments")
-
+            os.unlink(segments)
+            os.rmdir(tmp_dir)
 
 class SegmentLevelDelayElapsed:
     """
