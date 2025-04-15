@@ -100,6 +100,9 @@ class MwerSegmenter:
         """
         tmp_pred = tempfile.NamedTemporaryFile(mode="w", delete=False)
         tmp_ref = tempfile.NamedTemporaryFile(mode="w", delete=False)
+        # create a  temporary directory where mwerSegmenter writes the segments
+        # so that multiple parallel runs of stream_laal do not conflict
+        tmp_dir = tempfile.mkdtemp()
         if self.character_level:
             # If character-level evaluation, add spaces for resegmentation
             prediction = " ".join(prediction)
@@ -116,9 +119,10 @@ class MwerSegmenter:
                 "-hypfile",
                 tmp_pred.name,
                 "-usecase",
-                "1"])
-            # mwerSegmenter writes into the __segments file of the current working directory
-            with open("__segments") as f:
+                "1"], cwd=tmp_dir)
+            # mwerSegmenter writes into the __segments file in the temporary directory. 
+            segments_file = os.path.join(tmp_dir, "__segments")
+            with open(segments_file, "r") as f:
                 segments = []
                 for line in f.readlines():
                     if self.character_level:
@@ -131,7 +135,8 @@ class MwerSegmenter:
             tmp_ref.close()
             os.unlink(tmp_pred.name)
             os.unlink(tmp_ref.name)
-            os.unlink("__segments")
+            os.unlink(segments_file)
+            os.rmdir(tmp_dir)
 
 
 class SegmentLevelDelayElapsed:
