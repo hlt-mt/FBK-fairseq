@@ -100,7 +100,9 @@ class MwerSegmenter:
         """
         tmp_pred = tempfile.NamedTemporaryFile(mode="w", delete=False)
         tmp_ref = tempfile.NamedTemporaryFile(mode="w", delete=False)
-        tmp_dir = tempfile.mkdtemp()  # temporary directory where mwerSegmenter writes the segments. It works in paralel
+        # create a  temporary directory where mwerSegmenter writes the segments
+        # so that multiple parallel runs of stream_laal do not conflict
+        tmp_dir = tempfile.mkdtemp()
         if self.character_level:
             # If character-level evaluation, add spaces for resegmentation
             prediction = " ".join(prediction)
