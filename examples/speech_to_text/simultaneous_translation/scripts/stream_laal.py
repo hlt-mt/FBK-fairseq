@@ -74,6 +74,7 @@ class SimulEvalLogInstance:
         else:
             raise NotImplementedError
 
+
 class MwerSegmenter:
     """
     Executes the mWERSegmenter tool introduced in `"Evaluating Machine Translation Output
@@ -85,6 +86,7 @@ class MwerSegmenter:
     """
     def __init__(self, character_level=False):
         self.mwer_command = "mwerSegmenter"
+        self.character_level = character_level
         if shutil.which(self.mwer_command) is None:
             mwerSegmenter_root = os.getenv("MWERSEGMENTER_ROOT")
             assert mwerSegmenter_root is not None, \
@@ -133,6 +135,7 @@ class MwerSegmenter:
             os.unlink(tmp_ref.name)
             os.unlink(segments_file)
             os.rmdir(tmp_dir)
+
 
 class SegmentLevelDelayElapsed:
     """
