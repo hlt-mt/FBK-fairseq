@@ -56,6 +56,6 @@ class ContinuousOcclusionFbankPerturbator(OcclusionFbankPerturbator):
             - mask: Tensor of shape (time, channels)
             - masked_fbank: masked version of the original fbank with shape (time, channels)
         """
-        mask = (torch.rand(fbank.size()) > self.mask_probability).to(fbank.dtype)
+        mask = torch.rand(fbank.size()).ge(self.mask_probability).to(fbank.dtype)
         masked_fbank = fbank * mask
         return mask, masked_fbank

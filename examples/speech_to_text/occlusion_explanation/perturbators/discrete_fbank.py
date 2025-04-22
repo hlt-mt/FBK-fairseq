@@ -33,7 +33,7 @@ class DiscreteTimeOcclusionFbankPerturbator(ContinuousOcclusionFbankPerturbator)
     In this method, entire time frames in the input data are perturbed.
     """
     def __call__(self, fbank: Tensor, *args, **kwargs) -> Tuple[Tensor, Tensor]:
-        mask = (torch.rand(fbank.size(0)) > self.mask_probability).to(fbank.dtype)
+        mask = torch.rand(fbank.size(0)).ge(self.mask_probability).to(fbank.dtype)
         masked_fbank = fbank * mask.unsqueeze(1)
         return mask, masked_fbank
 
@@ -45,6 +45,6 @@ class DiscreteFrequencyOcclusionFbankPerturbator(ContinuousOcclusionFbankPerturb
     In this method, entire frequency rows in the input data are perturbed.
     """
     def __call__(self, fbank: Tensor, *args, **kwargs) -> Tuple[Tensor, Tensor]:
-        mask = (torch.rand(fbank.size(1)) > self.mask_probability).to(fbank.dtype)
+        mask = torch.rand(fbank.size(1)).ge(self.mask_probability).to(fbank.dtype)
         masked_fbank = fbank * mask.unsqueeze(0)
         return mask, masked_fbank

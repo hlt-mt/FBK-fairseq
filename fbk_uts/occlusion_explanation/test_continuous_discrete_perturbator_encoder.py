@@ -13,7 +13,9 @@
 # limitations under the License
 
 import unittest
+from unittest.mock import patch
 
+import numpy as np
 import torch
 
 from examples.speech_to_text.occlusion_explanation.perturbators.discrete_fbank import (
@@ -57,18 +59,39 @@ class TestOcclusionFbankPerturbator(unittest.TestCase):
         self.assertFalse(torch.equal(masked_fbank1, masked_fbank2))
 
     # Evaluate the effectiveness of setting p = 0 or p = 1 in masking all or any of the values.
-    def test_continuous_fbank_p_value(self):
-        perturbator_0 = ContinuousOcclusionFbankPerturbator(mask_probability=0., n_masks=5)
-        masks, masked_fbanks = perturbator_0(self.fbank)
-        self.assertEqual(masked_fbanks.shape, (5, 10))
-        self.assertFalse(torch.any(masked_fbanks == 0))
-        self.assertTrue(torch.all(masked_fbanks == 1))
+    def test_p_value(self):
 
-        perturbator_1 = ContinuousOcclusionFbankPerturbator(mask_probability=1., n_masks=5)
-        masks, masked_fbanks = perturbator_1(self.fbank)
-        self.assertEqual(masked_fbanks.shape, (5, 10))
-        self.assertFalse(torch.any(masked_fbanks == 1))
-        self.assertTrue(torch.all(masked_fbanks == 0))
+        def fake_random_with_zeros(shape):
+            if isinstance(shape, torch.Size):
+                shape = list(shape)
+            else:
+                shape = [shape]
+            mask = torch.tensor(np.random.random(shape))
+            if len(shape) == 2:
+                mask[0][0] = 0
+            elif len(shape) == 3:
+                mask[0][0][0] = 0
+            else:
+                mask[0] = 0
+            return mask
+
+        with patch.object(torch, 'rand', new=fake_random_with_zeros):
+            for perturbator_class in [
+                    ContinuousOcclusionFbankPerturbator,
+                    DiscreteTimeOcclusionFbankPerturbator,
+                    DiscreteFrequencyOcclusionFbankPerturbator]:
+
+                perturbator_0 = perturbator_class(mask_probability=0., n_masks=5)
+                masks, masked_fbanks = perturbator_0(self.fbank)
+                self.assertEqual(masked_fbanks.shape, (5, 10))
+                self.assertFalse(torch.any(masked_fbanks == 0))
+                self.assertTrue(torch.all(masked_fbanks == 1))
+
+                perturbator_1 = perturbator_class(mask_probability=1., n_masks=5)
+                masks, masked_fbanks = perturbator_1(self.fbank)
+                self.assertEqual(masked_fbanks.shape, (5, 10))
+                self.assertFalse(torch.any(masked_fbanks == 1))
+                self.assertTrue(torch.all(masked_fbanks == 0))
 
     def test_discrete_fbank_time(self):
         torch.manual_seed(0)

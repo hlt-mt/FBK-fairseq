@@ -205,11 +205,9 @@ class SlicOcclusionFbankPerturbatorBase(OcclusionFbankPerturbator):
             - Tensor: the perturbed filterbank, of the same shape of fbank
         """
         segment_partition = self.get_segments(fbank, test_index, perturb_index)
-        # segment_partition range is from 1 to the number of segments in the current granularity level
-        unique_values = torch.rand(
-            segment_partition.max() + 1).ge(
-            1 - self.mask_probability).long()
-        mask = unique_values[segment_partition.flatten()].view(segment_partition.shape)
+        # segment_partition indexes range from 1 to the number of segments in the current granularity level
+        unique_values = torch.rand(segment_partition.max()).ge(self.mask_probability).long()
+        mask = unique_values[segment_partition.flatten() - 1].view(segment_partition.shape)
         masked_fbank = fbank * mask
         return mask, masked_fbank
 

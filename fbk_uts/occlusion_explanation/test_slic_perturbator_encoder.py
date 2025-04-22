@@ -14,6 +14,7 @@
 
 import copy
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import torch
@@ -257,6 +258,54 @@ class TestDynamicSlicPerturbator(unittest.TestCase):
         fbank_occlusion_config = {"n_masks": 20}
         add_config = self.perturbator._parse_custom_args(fbank_occlusion_config)
         self.assertEqual(add_config, {"reference_duration": 500, "threshold_duration": None})
+
+    def test_p_value(self):
+
+        def fake_random_with_zeros(shape):
+            if isinstance(shape, torch.Size):
+                shape = list(shape)
+            else:
+                shape = [shape]
+            mask = torch.tensor(np.random.random(shape))
+            if len(shape) == 2:
+                mask[0][0] = 0
+            elif len(shape) == 3:
+                mask[0][0][0] = 0
+            else:
+                mask[0] = 0
+            return mask
+
+        fbank = torch.tensor(
+            [[0.1, 2, 45, 100, 100, 100, 50, 43, 21, 23, 1],
+             [1, 23, 23, 1, 1, 1, 32, 54, 23, 54, 0.5],
+             [22, 1.5, 22, 0.3, 1.5, 1.5, 10, 11, 67, 10, 45],
+             [44, 32, 45, 30, 65, 90, 243, 12, 43, 23, 34]])
+
+        with patch.object(torch, 'rand', new=fake_random_with_zeros):
+            perturbator_0 = SlicOcclusionFbankPerturbatorDynamicSegments(
+                n_masks=32,
+                mask_probability=0.0,
+                n_segments=[1, 4, 8],
+                slic_sigma=1,
+                compactness=0.1,
+                reference_duration=10)
+
+            masks, masked_fbanks = perturbator_0(fbank, 1, 1)
+            self.assertEqual(masked_fbanks.shape, (4, 11))
+            self.assertFalse(torch.any(masked_fbanks == 0))
+            self.assertTrue(torch.all(masks == 1))
+
+            perturbator_1 = self.perturbator = SlicOcclusionFbankPerturbatorDynamicSegments(
+                n_masks=32,
+                mask_probability=1.0,
+                n_segments=[1, 4, 8],
+                slic_sigma=1,
+                compactness=0.1,
+                reference_duration=10)
+            masks, masked_fbanks = perturbator_1(fbank, 1, 1)
+            self.assertEqual(masked_fbanks.shape, (4, 11))
+            self.assertFalse(torch.any(masks == 1))
+            self.assertTrue(torch.all(masked_fbanks == 0))
 
 
 if __name__ == '__main__':

@@ -62,7 +62,8 @@ class OcclusionDecoderEmbeddingsPerturbatorContinuous(
         Returns:
             torch.Tensor: The occlusion masks.
         """
-        return (torch.rand(embeddings.shape, device=embeddings.device) > self.p).to(embeddings.dtype)
+        random_values = torch.rand(embeddings.shape, device=embeddings.device)
+        return random_values.ge(self.p).to(embeddings.dtype)
 
     def _apply_occlusion(self, embeddings: Tensor, occlusion_masks: Tensor) -> Tensor:
         """
@@ -116,7 +117,9 @@ class OcclusionDecoderEmbeddingsPerturbatorDiscrete(
         Returns:
             torch.Tensor: The occlusion masks.
         """
-        return (torch.rand(embeddings.shape[0], embeddings.shape[1], device=embeddings.device) > self.p).to(embeddings.dtype)
+        random_values = torch.rand(
+            embeddings.shape[0], embeddings.shape[1], device=embeddings.device)
+        return random_values.ge(self.p).to(embeddings.dtype)
 
     def _apply_occlusion(self, embeddings: Tensor, occlusion_masks: Tensor) -> Tensor:
         """
