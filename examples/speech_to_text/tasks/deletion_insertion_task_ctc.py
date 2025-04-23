@@ -22,7 +22,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 @register_task("feature_attribution_evaluation_task_ctc")
-class FeatureAttributionEvaluationCtcTask(SpeechToTextCtcTask, FeatureAttributionEvaluationSupport):
+class FeatureAttributionEvaluationCtcTask(FeatureAttributionEvaluationSupport, SpeechToTextCtcTask):
     @staticmethod
     def add_args(parser):
         SpeechToTextCtcTask.add_args(parser)
