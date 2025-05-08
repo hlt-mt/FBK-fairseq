@@ -29,6 +29,7 @@ class TestDeletionInsertionTask(unittest.TestCase):
         args.data = "path/to/data"
         args.config_yaml = "config.yaml"
         args.perc_interval = 5
+        args.max_percent = 100
         args.metric = "deletion"
         args.aggregator = "sentence"
         args.normalizer = []
@@ -44,7 +45,7 @@ class TestDeletionInsertionTask(unittest.TestCase):
         task_cls = TASK_REGISTRY["feature_attribution_evaluation_task"]
         self.assertTrue(issubclass(task_cls, FairseqTask))
     
-    def test_task_registration(self):
+    def test_task_ctc_registration(self):
         self.assertIn("feature_attribution_evaluation_task_ctc", TASK_REGISTRY)
         task_cls = TASK_REGISTRY["feature_attribution_evaluation_task_ctc"]
         self.assertTrue(issubclass(task_cls, FairseqTask))
@@ -67,6 +68,7 @@ class TestDeletionInsertionTask(unittest.TestCase):
         args.data = "path/to/data"
         args.config_yaml = "config.yaml"
         args.perc_interval = 7
+        args.max_percent = 100
         args.metric = "deletion"
         args.aggregator = "sentence"
         args.normalizer = []

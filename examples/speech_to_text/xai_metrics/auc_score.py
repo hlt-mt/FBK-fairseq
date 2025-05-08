@@ -159,7 +159,7 @@ def main(args):
     print(f"Version {_VERSION} of FBK AUC Scorer.")
 
     # get percentage values
-    num_intervals = (100 // args.perc_step) + 1
+    num_intervals = (args.max_percent // args.perc_step) + 1
     percentage_values = np.array([x * args.perc_step for x in range(num_intervals)])
 
     # get mapping between hypotheses/references and percentage steps and compute scores
@@ -212,6 +212,11 @@ if __name__ == "__main__":
         type=int,
         help="Percentage step size according to which "
              "computing insertion/deletion of input features.")
+    parser.add_argument(
+        "--max-percent",
+        type=int,
+        default=100,
+        help="Maximum percentage of input features to insert/delete.")
     parser.add_argument(
         "--scorer", type=str, default="wer_max", help="Metric for the evaluation of the task.")
     parser.add_argument(

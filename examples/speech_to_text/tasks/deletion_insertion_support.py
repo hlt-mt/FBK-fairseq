@@ -38,6 +38,9 @@ class FeatureAttributionEvaluationSupport:
             default=5,
             help="Percentage interval indicating how often input features are removed/inserted.")
         parser.add_argument(
+            "--max-percent",
+            default=100)
+        parser.add_argument(
             "--explanation-path",
             default=None,
             help="Path of the h5 file where heatmaps are saved.")
@@ -68,9 +71,10 @@ class FeatureAttributionEvaluationSupport:
         self.aggregated_explanations = aggregator(explanations)
         # Size of the percentage intervals according to which insertion/deletion of input elements is performed
         self.interval_size = int(self.args.perc_interval)
-        assert 100 % self.interval_size == 0, "100 must be a multiple of --perc-interval."
+        self.max_percent = int(self.args.max_percent)
+        assert self.max_percent % self.interval_size == 0, "--max-percent must be a multiple of --perc-interval."
         # number of num_intervals in which insertion/deletion of input elements is performed
-        self.num_intervals = (100 // self.interval_size) + 1
+        self.num_intervals = (self.max_percent // self.interval_size) + 1
 
     # creating the perturbed dataset for the metric
     def load_dataset(self, split, epoch=1, combine=False, **kwargs):
