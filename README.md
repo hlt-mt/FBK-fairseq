@@ -5,6 +5,7 @@ Dedicated README for each work can be found in the `fbk_works` directory.
 
  ### 2025
 
+ - [**FAMA: The First Large-Scale Open-Science Speech Foundation Model for English and Italian**](fbk_works/FAMA.md)
  - [[IWSLT 2025] **The Warmup Dilemma: How Learning Rate Strategies Impact Speech-to-Text Model Convergence**](fbk_works/LR_WARMUP.md)
  - [[NAACL 2025] **Prepending or Cross-Attention for Speech-to-Text? An Empirical Comparison**](fbk_works/DECODER_PREPENDING.md)
 
