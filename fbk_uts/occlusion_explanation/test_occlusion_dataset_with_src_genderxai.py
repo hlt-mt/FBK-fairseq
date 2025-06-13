@@ -105,8 +105,8 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
         
     def test_getitem(self):
         perturb_index, orig_dataset_index, mask, perturbed_fbank, \
-            predicted_tokens, source_text, tgt_text, found_term, found_term_pair, \
-            gender_term_index, swapped_tgt_text, swapped_tgt_tokens = self.occlusion_dataset[1]
+            predicted_tokens, source_text, found_term, found_term_pair, \
+            gender_term_index, swapped_tgt_tokens = self.occlusion_dataset[1]
         self.assertEqual(perturb_index, 1)
         self.assertEqual(orig_dataset_index, 0)
         self.assertIsInstance(mask, Tensor)
@@ -115,11 +115,9 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
         self.assertEqual(perturbed_fbank.size(), (100, 80))
         self.assertEqual(source_text.size(), (2,))
         self.assertEqual(predicted_tokens.tolist(), [4, 3, 3, 2])  # lui <unk> <unk> </s>
-        self.assertEqual(tgt_text, "_lui mock_tgt_text mock_tgt_text")
         self.assertEqual(found_term, "lui")
         self.assertEqual(found_term_pair, "lui lei")
         self.assertEqual(gender_term_index, "0-0")
-        self.assertEqual(swapped_tgt_text, "_lei mock_tgt_text mock_tgt_text")
         self.assertEqual(swapped_tgt_tokens.tolist(), [9, 3, 3, 2])  # _lei <unk> <unk> </s>
 
     def test_collater_empty_samples(self):
@@ -131,9 +129,9 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
     def test_collater(self):
         samples = [
             (1, 0, torch.ones(100, 80), torch.randint(0, 1, (100, 80)), torch.tensor([4, 3, 3, 2]), None,
-             "_lui mock_tgt_text mock_tgt_text", "lui", "lui lei", "0-0", "_lei mock_tgt_text mock_tgt_text", torch.tensor([9, 3, 3, 2])),
+             "lui", "lui lei", "0-0", torch.tensor([9, 3, 3, 2])),
             (9, 1, torch.ones(120, 80), torch.randint(0, 1, (120, 80)), torch.tensor([5, 9, 2]), None,
-             "_and _lei", "lei", "lui lei", "1-1", "_and _lui", torch.tensor([5, 4, 2]))]
+             "lei", "lui lei", "1-1", torch.tensor([5, 4, 2]))]
         collated_data = self.occlusion_dataset.collater(samples)
         self.assertIsInstance(collated_data, dict)
         net_input = collated_data["net_input"]
@@ -147,11 +145,9 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
         self.assertEqual(collated_data["target_lengths"].tolist(), [3, 4])
         self.assertTrue(torch.equal(net_input["prev_output_tokens"], tensor([[2, 5, 9, 1], [2, 4, 3, 3]])))
         self.assertEqual(collated_data["src_texts"], [None, None])
-        self.assertEqual(collated_data["tgt_texts"], ["_and _lei", "_lui mock_tgt_text mock_tgt_text"])
         self.assertEqual(collated_data["found_terms"], ["lei", "lui"])
         self.assertEqual(collated_data["found_term_pairs"], ["lui lei", "lui lei"])
         self.assertEqual(collated_data["gender_terms_indices"], ["1-1", "0-0"])
-        self.assertEqual(collated_data["swapped_tgt_texts"], ["_and _lui", "_lei mock_tgt_text mock_tgt_text"])
         self.assertTrue(torch.equal(collated_data["swapped_target"], tensor([[5, 4, 2, 1], [9, 3, 3, 2]])))
         self.assertEqual(collated_data["swapped_target_lengths"].tolist(), [3, 4])
         self.assertEqual(net_input["swapped_prev_output_tokens"].tolist(), [[2, 5, 4, 1], [2, 9, 3, 3]])

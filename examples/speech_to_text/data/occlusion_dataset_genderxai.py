@@ -64,10 +64,7 @@ class OccludedSpeechToTextDatasetGenderXai(OccludedSpeechToTextDataset):
             Tensor,
             Tensor,
             Tensor,
-            Union[Tensor, None],
             List[str],
-            List[str],
-            List[int],
             List[str],
             List[str],
             Tensor]]) -> Dict:

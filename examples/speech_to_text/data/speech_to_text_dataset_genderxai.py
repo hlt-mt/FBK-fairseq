@@ -122,11 +122,11 @@ class SpeechToTextDatasetGenderXai(SpeechToTextDataset):
         if len(samples) == 0:
             return {}
         
-        indices = torch.tensor([i for i, _, _, _, _, _, _, _, _ in samples], dtype=torch.long)
+        indices = torch.tensor([i for i, _, _, _, _, _, _ in samples], dtype=torch.long)
         frames = _collate_frames(
-            [s for _, s, _, _, _, _, _,  _, _ in samples], self.data_cfg.use_audio_input)
+            [s for _, s, _, _, _, _, _ in samples], self.data_cfg.use_audio_input)
         # sort samples by descending number of frames
-        n_frames = torch.tensor([s.size(0) for _, s, _, _, _, _, _, _, _ in samples], dtype=torch.long)
+        n_frames = torch.tensor([s.size(0) for _, s, _, _, _, _, _ in samples], dtype=torch.long)
         n_frames, order = n_frames.sort(descending=True)
         indices = indices.index_select(0, order)
         frames = frames.index_select(0, order)
@@ -136,43 +136,43 @@ class SpeechToTextDatasetGenderXai(SpeechToTextDataset):
         ntokens = None
         if self.tgt_texts is not None:
             target = fairseq_data_utils.collate_tokens(
-                [t for _, _, t, _, _, _, _, _, _ in samples],
+                [t for _, _, t, _, _, _, _ in samples],
                 self.tgt_dict.pad(),
                 self.tgt_dict.eos(),
                 left_pad=False,
                 move_eos_to_beginning=False)
             target = target.index_select(0, order)
             target_lengths = torch.tensor(
-                [t.size(0) for _, _, t, _, _, _, _, _, _ in samples], dtype=torch.long
+                [t.size(0) for _, _, t, _, _, _, _ in samples], dtype=torch.long
             ).index_select(0, order)
             prev_output_tokens = fairseq_data_utils.collate_tokens(
-                [t for _, _, t, _, _, _, _, _, _ in samples],
+                [t for _, _, t, _, _, _, _ in samples],
                 self.tgt_dict.pad(),
                 self.tgt_dict.eos(),
                 left_pad=False,
                 move_eos_to_beginning=True)
             prev_output_tokens = prev_output_tokens.index_select(0, order)
-            ntokens = sum(t.size(0) for _, _, t, _, _, _, _, _, _ in samples)
+            ntokens = sum(t.size(0) for _, _, t, _, _, _, _ in samples)
 
         # Extra fields for gender analysis
-        found_terms = [ft for _, _, _, _, _, ft, _, _, _, _ in samples]
+        found_terms = [ft for _, _, _, ft, _, _, _ in samples]
         found_terms = [found_terms[i] for i in order]
-        found_term_pairs = [ftp for _, _, _, _, _, ftp, _, _, _ in samples]
+        found_term_pairs = [ftp for _, _, _, _, ftp, _, _ in samples]
         found_term_pairs = [found_term_pairs[i] for i in order]
-        gender_terms_indices = [gti for _, _, _, _, _, _, gti, _, _ in samples]
+        gender_terms_indices = [gti for _, _, _, _, _, gti, _ in samples]
         gender_terms_indices = [gender_terms_indices[i] for i in order]
         
         swapped_target = fairseq_data_utils.collate_tokens(
-            [stt for _, _, _, _, _, _, _, _, _, stt in samples],
+            [stt for _, _, _, _, _, _, stt in samples],
             self.tgt_dict.pad(),
             self.tgt_dict.eos(),
             left_pad=False,
             move_eos_to_beginning=False)
         swapped_target = swapped_target.index_select(0, order)
         swapped_tgt_lengths = torch.tensor(
-                [stt.size(0) for  _, _, _, _, _, _, _, _, _, stt in samples], dtype=torch.long).index_select(0, order)
+                [stt.size(0) for _, _, _, _, _, _, stt in samples], dtype=torch.long).index_select(0, order)
         prev_swapped_tokens = fairseq_data_utils.collate_tokens(
-            [stt for _, _, _, _, _, _, _, _, stt in samples],
+            [stt for _, _, _, _, _, _, stt in samples],
             self.tgt_dict.pad(),
             self.tgt_dict.eos(),
             left_pad=False,
