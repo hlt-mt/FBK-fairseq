@@ -20,11 +20,8 @@ import os.path as op
 
 import numpy as np
 import torch
-try:
-    from ctc_segmentation import CtcSegmentationParameters, ctc_segmentation, \
-        prepare_token_list
-except ImportError:
-    raise ImportError("Please install ctc_segmentation with: pip install ctc_segmentation")
+from ctc_segmentation import CtcSegmentationParameters, ctc_segmentation, \
+    prepare_token_list
 from torch.nn import functional as F
 
 from examples.speech_to_text.data.speech_to_text_dataset_with_src import S2TDataConfigSrc

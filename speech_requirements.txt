@@ -1,4 +1,5 @@
 torchaudio
+ctc_segmentation<1.7
 srt
 praat-parselmouth
 scikit-image
