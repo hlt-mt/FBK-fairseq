@@ -48,14 +48,18 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
             prev_output_tokens: LongTensor,
             positions: Tensor,
             occlusion_masks: Optional[Tensor] = None,
-            last_tokens_to_perturb: Optional[List[int]] = None) -> Tuple[Tensor, Tensor]:
+            last_tokens_to_perturb: Optional[List[int]] = None,
+            force_masks_length: Optional[bool] = False) -> Tuple[Tensor, Tensor]:
         """
         Returns decoder input embeddings with positions applying occlusion.
         """
         x = self.embed_scale * self.embed_tokens(prev_output_tokens)
         if self.perturbator.no_position_occlusion:
             x, occlusion_masks = self.perturbator(
-                x, occlusion_masks=occlusion_masks, last_tokens_to_perturb=last_tokens_to_perturb)
+                x,
+                occlusion_masks=occlusion_masks,
+                last_tokens_to_perturb=last_tokens_to_perturb,
+                force_masks_length=force_masks_length)
         if self.quant_noise is not None:
             x = self.quant_noise(x)
         if self.project_in_dim is not None:
@@ -64,7 +68,10 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
             x += positions
         if not self.perturbator.no_position_occlusion:
             x, occlusion_masks = self.perturbator(
-                x, occlusion_masks=occlusion_masks, last_tokens_to_perturb=last_tokens_to_perturb)
+                x,
+                occlusion_masks=occlusion_masks,
+                last_tokens_to_perturb=last_tokens_to_perturb,
+                force_masks_length=force_masks_length)
         if self.layernorm_embedding is not None:
             x = self.layernorm_embedding(x)
         return x, occlusion_masks
@@ -78,7 +85,8 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
             alignment_layer: Optional[int] = None,
             alignment_heads: Optional[int] = None,
             occlusion_masks: Optional[Tensor] = None,
-            last_tokens_to_perturb: Optional[List[int]] = None) -> Tuple[Tensor, Dict]:
+            last_tokens_to_perturb: Optional[List[int]] = None,
+            force_masks_length: Optional[bool] = False) -> Tuple[Tensor, Dict]:
         """
         Overrides extract_features_scriptable() of TransformerDecoder
         to implement occlusion of decoder input emebddings.
@@ -95,6 +103,8 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
                 will not be occluded. This is useful when explaining only a specific word
                 in each sentence, so tokens that are part of this word are not occluded,
                 only tokens that precede it.
+            - force_masks_length (bool): If True, the occlusion masks will be adjusted (truncated or padded)
+                to match the embeddings, this is useful e.g. when studying gender.
         Returns:
             tuple:
                 - the decoder's features of shape `(batch, tgt_len, embed_dim)`
@@ -115,8 +125,12 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
             if positions is not None:
                 positions = positions[:, -1:]
 
-        x, occlusion_masks = self.embed_tokens_positions(prev_output_tokens, positions,
-            occlusion_masks=occlusion_masks, last_tokens_to_perturb=last_tokens_to_perturb)
+        x, occlusion_masks = self.embed_tokens_positions(
+            prev_output_tokens,
+            positions,
+            occlusion_masks=occlusion_masks,
+            last_tokens_to_perturb=last_tokens_to_perturb,
+            force_masks_length=force_masks_length)
 
         x = self.dropout_module(x)
 
@@ -182,7 +196,8 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
             alignment_layer: Optional[int] = None,
             alignment_heads: Optional[int] = None,
             occlusion_masks: Optional[Tensor] = None,
-            last_tokens_to_perturb: Optional[List[int]] = None) -> Tuple[Tensor, Dict]:
+            last_tokens_to_perturb: Optional[List[int]] = None,
+            force_masks_length: Optional[bool] = False) -> Tuple[Tensor, Dict]:
         x, model_specific_output = self.extract_features_scriptable(
             prev_output_tokens,
             encoder_out,
@@ -191,7 +206,8 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
             alignment_layer,
             alignment_heads,
             occlusion_masks=occlusion_masks,
-            last_tokens_to_perturb=last_tokens_to_perturb)
+            last_tokens_to_perturb=last_tokens_to_perturb,
+            force_masks_length=force_masks_length)
         if alignment_layer is None:
             return x, model_specific_output
         return x, model_specific_output
@@ -208,7 +224,8 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
         src_lengths: Optional[Any] = None,
         return_all_hiddens: bool = False,
         occlusion_masks: Optional[Tensor] = None,
-        last_tokens_to_perturb: Optional[List[int]] = None):
+        last_tokens_to_perturb: Optional[List[int]] = None,
+        force_masks_length: Optional[bool] = False):
         """
         Args:
             prev_output_tokens (LongTensor): previous decoder outputs of shape
@@ -227,6 +244,8 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
                 will not be occluded. This is useful when explaining only a specific word
                 in each sentence, so tokens that are part of this word are not occluded,
                 only tokens that precede it.
+            force_masks_length (bool): If True, the occlusion masks will be adjusted (truncated or padded)
+                to match the embeddings, this is useful e.g. when studying gender.
 
         Returns:
             tuple:
@@ -241,7 +260,8 @@ class OcclusionTransformerDecoderScriptable(TransformerDecoderScriptable):
             alignment_layer=alignment_layer,
             alignment_heads=alignment_heads,
             occlusion_masks=occlusion_masks,
-            last_tokens_to_perturb=last_tokens_to_perturb)
+            last_tokens_to_perturb=last_tokens_to_perturb,
+            force_masks_length=force_masks_length)
         if not features_only:
             x = self.output_layer(x)
         return x, extra
