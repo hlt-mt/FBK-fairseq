@@ -23,8 +23,8 @@ class KLScorer(Scorer):
     Compute the difference between the original and perturbed probability distributions,
     using KL divergence.
     """
+    @staticmethod
     def get_prob_diff(
-            self,
             orig_probs: Tensor,
             perturb_probs: Tensor,
             *args) -> Tensor:

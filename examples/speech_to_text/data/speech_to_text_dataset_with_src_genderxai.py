@@ -200,8 +200,6 @@ class SpeechToTextDatasetWithSrcGenderXai(SpeechToTextDatasetWithSrc):
         found_terms = [found_terms[i] for i in order]
         found_term_pairs = [ftp for _, _, _, _, _, ftp, _, _ in samples]
         found_term_pairs = [found_term_pairs[i] for i in order]
-        gender_terms_indices = [gti for _, _, _, _, _, _, gti, _ in samples]
-        gender_terms_indices = [gender_terms_indices[i] for i in order]
         prev_swapped_tokens = fairseq_data_utils.collate_tokens(
             [stt for _, _, _, _, _, _, _, stt in samples],
             self.tgt_dict.pad(),
@@ -219,6 +217,17 @@ class SpeechToTextDatasetWithSrcGenderXai(SpeechToTextDatasetWithSrc):
         swapped_tgt_lengths = torch.tensor(
                 [stt.size(0) for  _, _, _, _, _, _, _, stt in samples], dtype=torch.long
             ).index_select(0, order)
+       
+        gender_term_starts = [int(gti.split('-')[0]) for _, _, _, _, _, _, gti, _ in samples]
+        gender_term_ends = [int(gti.split('-')[1]) for _, _, _, _, _, _, gti, _ in samples]       
+        swapped_term_ends = gender_term_ends.copy()
+        # We retrieve the index of the last token in the swapped term from the difference
+        # between the swapped target length and the original target length
+        for i, (_, _, tgts, _, _, _, term_indices, swapped_tgts) in enumerate(samples):
+            swapped_term_ends[i] += swapped_tgts.size(0) - tgts.size(0)
+        gender_term_starts = torch.LongTensor([gender_term_starts[i] for i in order])
+        gender_term_ends = torch.LongTensor([gender_term_ends[i] for i in order])
+        swapped_term_ends = torch.LongTensor([swapped_term_ends[i] for i in order])
 
         out = {
             "id": indices,
@@ -240,7 +249,9 @@ class SpeechToTextDatasetWithSrcGenderXai(SpeechToTextDatasetWithSrc):
             "nsentences": len(samples),
             "found_terms": found_terms,
             "found_term_pairs": found_term_pairs,
-            "gender_terms_indices": gender_terms_indices}
+            "gender_term_starts": gender_term_starts,
+            "gender_term_ends": gender_term_ends,
+            "swapped_term_ends": swapped_term_ends}
         return out
 
 

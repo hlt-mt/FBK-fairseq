@@ -16,7 +16,6 @@ import unittest
 import torch
 from torch import Size
 
-from examples.speech_to_text.occlusion_explanation.scorers.kl_gender_terms import KLGenderScorer
 from examples.speech_to_text.occlusion_explanation.scorers.predicted_difference import PredictedTokenDifferenceScorer
 from examples.speech_to_text.occlusion_explanation.scorers.kl_divergence import KLScorer
 

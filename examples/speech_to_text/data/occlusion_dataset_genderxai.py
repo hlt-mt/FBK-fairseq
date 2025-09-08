@@ -15,9 +15,8 @@
 from typing import List, Tuple, Dict, Union
 import logging
 
-import numpy as np
 import torch
-from torch import Tensor
+from torch import LongTensor, Tensor
 
 from examples.speech_to_text.data.occlusion_dataset import OccludedSpeechToTextDataset
 from fairseq.data.audio.speech_to_text_dataset import _collate_frames
@@ -107,9 +106,7 @@ class OccludedSpeechToTextDatasetGenderXai(OccludedSpeechToTextDataset):
         found_terms = [found_terms[i] for i in order]
         found_term_pairs = [ftp for _, _, _, _, _, _, ftp, _, _ in samples]
         found_term_pairs = [found_term_pairs[i] for i in order]
-        gender_terms_indices = [gti for _, _, _, _, _, _, _, gti, _ in samples]
-        gender_terms_indices = [gender_terms_indices[i] for i in order]
-        
+
         swapped_target = data_utils.collate_tokens(
             [st for _, _, _, _, _, _, _, _, st in samples],
             self.tgt_dict.pad(),
@@ -121,7 +118,24 @@ class OccludedSpeechToTextDatasetGenderXai(OccludedSpeechToTextDataset):
             [st.size(0) for _, _, _, _, _, _, _, _, st in samples],
             dtype=torch.long
         ).index_select(0, order)
-        
+        swapped_prev_output_tokens = data_utils.collate_tokens(
+            [stt for _, _, _, _, _, _, _, _, stt in samples],
+            self.tgt_dict.pad(),
+            self.tgt_dict.eos(),
+            left_pad=False,
+            move_eos_to_beginning=True)
+        swapped_prev_output_tokens = swapped_prev_output_tokens.index_select(0, order)
+
+        gender_term_starts = [int(gti.split('-')[0]) for _, _, _, _, _, _, _, gti, _ in samples]
+        gender_term_ends = [int(gti.split('-')[1]) for _, _, _, _, _, _, _, gti, _ in samples]
+        swapped_term_ends = gender_term_ends.copy()
+        # We retrieve the index of the last token in the swapped term from the difference
+        # between the swapped target length and the original target length
+        for i, (_, _, _, _, tgts, _, _, _, swapped_tgts) in enumerate(samples):
+            swapped_term_ends[i] += swapped_tgts.size(0) - tgts.size(0)
+        gender_term_starts = LongTensor([gender_term_starts[i] for i in order])
+        gender_term_ends = LongTensor([gender_term_ends[i] for i in order])
+        swapped_term_ends = LongTensor([swapped_term_ends[i] for i in order])
 
         out = {
             "id": perturb_indices,
@@ -129,14 +143,17 @@ class OccludedSpeechToTextDatasetGenderXai(OccludedSpeechToTextDataset):
             "net_input": {
                 "src_tokens": frames,
                 "src_lengths": n_frames,
-                "prev_output_tokens": prev_output_tokens},
+                "prev_output_tokens": prev_output_tokens,
+                "swapped_prev_output_tokens": swapped_prev_output_tokens},
             "target": target,
             "target_lengths": target_lengths,
             "masks": masks,
             "nsentences": len(samples),
             "found_terms": found_terms,
             "found_term_pairs": found_term_pairs,
-            "gender_terms_indices": gender_terms_indices,
+            "gender_term_starts": gender_term_starts,
+            "gender_term_ends": gender_term_ends,
+            "swapped_term_ends": swapped_term_ends,
             "swapped_target": swapped_target,
             "swapped_target_lengths": swapped_target_lengths}
         return out

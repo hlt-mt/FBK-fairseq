@@ -27,6 +27,7 @@ from examples.speech_to_text.occlusion_explanation.perturbators import (
     OcclusionFbankPerturbator,
     OcclusionDecoderEmbeddingsPerturbator)
 from examples.speech_to_text.occlusion_explanation.scorers import SCORER_REGISTRY, get_scorer, Scorer
+from fairseq.data.dictionary import Dictionary
 from fairseq.dataclass import FairseqDataclass
 
 from fairseq.dataclass.utils import gen_parser_from_dataclass
@@ -67,14 +68,14 @@ class PerturbConfig(object):
         perturbation_category = self.perturb_cfg.get(occlusion_choice, {}).get("category", category)
         perturbation_class = get_perturbator(perturbation_category)
         return perturbation_class.from_config_dict(self.perturb_cfg)
-
-    def get_scorer_from_config(self) -> Scorer:
-        scorer_category = self.perturb_cfg.get("scorer", "predicted_token_diff")
-        assert (scorer_category in SCORER_REGISTRY), \
-            (f"Invalid value for 'occlusion_choice'. Must be one of {SCORER_REGISTRY.keys()}.")
-        scorer_class = get_scorer(scorer_category)
-        return scorer_class()
     
+    def get_scorer_from_config(self, tgt_dict: Dictionary) -> Scorer:
+        scorer_category = self.perturb_cfg.get("scorer", {}).get("category", "predicted_token_diff")
+        assert (scorer_category in SCORER_REGISTRY), \
+            (f"Invalid value for scorer 'category'. Must be one of {SCORER_REGISTRY.keys()}.")
+        scorer_class = get_scorer(scorer_category)
+        return scorer_class.from_config_dict(self.perturb_cfg, tgt_dict)
+
     def get_task_from_config(self) -> ExplanationTask:
         task_name = self.perturb_cfg.get("explanation_task", "all_tokens")
         assert task_name in TASK_REGISTRY, \

@@ -16,16 +16,16 @@ import unittest
 import torch
 from torch import Size
 
-from examples.speech_to_text.occlusion_explanation.scorers.gender_term_contrastive import GenderTermContrastiveScorer
+from examples.speech_to_text.occlusion_explanation.scorers.gender_term_contrastive_raw_diff import GenderTermContrastiveRawDiffScorer
 from examples.speech_to_text.occlusion_explanation.scorers.gender_term_predicted_diff import GenderTermPredictedDiffScorer
-from examples.speech_to_text.occlusion_explanation.scorers.kl_gender_terms import KLGenderScorer
+from examples.speech_to_text.occlusion_explanation.scorers.probability_aggregators import get_prob_aggregator
 
 
 class TestGenderScorer(unittest.TestCase):
     def setUp(self) -> None:
-        self.KL_scorer = KLGenderScorer()
-        self.contrastive_scorer = GenderTermContrastiveScorer()
-        self.diff_scorer = GenderTermPredictedDiffScorer()
+        length_norm_aggregator = get_prob_aggregator("length_norm")()
+        self.contrastive_scorer = GenderTermContrastiveRawDiffScorer(length_norm_aggregator)
+        self.diff_scorer = GenderTermPredictedDiffScorer(length_norm_aggregator)
         self.sample = {
             "id": [],
             "orig_id": torch.LongTensor([1, 1]),
@@ -33,7 +33,9 @@ class TestGenderScorer(unittest.TestCase):
             "target_lengths": torch.LongTensor([3, 3]),
             "swapped_target": torch.tensor([[2, 1, 3, 0], [1, 1, 2, 1]]),
             "swapped_target_lengths": torch.LongTensor([3, 4]),
-            "gender_terms_indices": ['0-1', '1-1']}
+            "gender_term_starts": torch.LongTensor([0, 1]),
+            "gender_term_ends": torch.LongTensor([1, 1]),
+            "swapped_term_ends": torch.LongTensor([1, 2])}
         self.orig_probs = torch.tensor(
             [[[0.2, 0.2, 0.2, 0.1, 0.2, 0.1],
               [0.6, 0.4, 0.2, 0.1, 0.2, 0.1],
@@ -66,32 +68,30 @@ class TestGenderScorer(unittest.TestCase):
               [0.1, 0.1, 0.1, 0.2, 0.1, 0.1],
               [0.1, 0.2, 0.1, 0.1, 0.1, 0.1],
               [0.1, 0.02, 0.1, 0.1, 0.3, 0.1]]]) # (Batch size, sequence length, vocab size)
-        
-    def test_get_prob_diff_KL(self):
-        scores = self.KL_scorer.get_prob_diff(self.orig_probs, self.perturb_probs, self.sample)
-        self.assertEqual(scores.size(), Size([2, 1, 1]))
-        expected_scores = torch.tensor([[[1.2712]], [[1.8375]]])
-        self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
 
     def test_get_prob_diff_predicted_diff(self):
-        scores = self.diff_scorer.get_prob_diff(
-            self.orig_probs, self.perturb_probs, self.sample)
+        gt_orig_probs = torch.tensor([[[0.2828]], [[0.4000]]])
+        gt_perturb_probs = torch.tensor([[[0.1000]], [[0.1000]]])
+        scores = self.diff_scorer.get_prob_diff(gt_orig_probs, gt_perturb_probs)
         self.assertEqual(scores.size(), Size([2, 1, 1]))
         expected_scores = torch.tensor([[[0.18284]], [[0.3]]])
         self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
 
     def test_get_prob_diff_contrastive(self):
+        orig_gt_probs = torch.tensor([[[0.2828]], [[0.4000]]])
+        perturb_gt_probs = torch.tensor([[[0.1]], [[0.1]]])
+        swapped_orig_gt_probs = torch.tensor([[[0.1]], [[0.0447]]])
+        swapped_perturb_gt_probs = torch.tensor([[[0.0316]], [[0.1]]])
         scores = self.contrastive_scorer.get_prob_diff(
-            self.orig_probs, self.perturb_probs, self.swapped_orig_probs,
-            self.swapped_perturb_probs, self.sample)
+            orig_gt_probs, perturb_gt_probs, swapped_orig_gt_probs, swapped_perturb_gt_probs)
         self.assertEqual(scores.size(), Size([2, 1, 1]))
         expected_scores = torch.tensor([[[0.11446]], [[0.35528]]])    # (Batch size, 1, 1)
-        self.assertTrue(torch.allclose(scores, expected_scores, atol=0.00001))
+        self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
 
     def test_make_heatmaps_causal(self):
         # Batch size, gender term length, sequence length, embedding dimension
         heatmaps = torch.ones((2, 1, 3, 5))
-        causality_heatmaps = self.KL_scorer._make_heatmaps_causal(heatmaps, self.sample)
+        causality_heatmaps = self.contrastive_scorer._make_heatmaps_causal(heatmaps, self.sample)
         expected_heatmaps = torch.tensor(
             [[[[1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.]]],
              [[[1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [0., 0., 0., 0., 0.]]]])
@@ -100,7 +100,7 @@ class TestGenderScorer(unittest.TestCase):
     # test make_heatmaps_causal() when the masking strategy is 'discrete'
     def test_make_heatmaps_causal_discrete(self):
         heatmaps = torch.ones((2, 1, 3, 1))  # (Batch size, sequence length, sequence length, 1)
-        causality_heatmaps = self.KL_scorer._make_heatmaps_causal(heatmaps, self.sample)
+        causality_heatmaps = self.contrastive_scorer._make_heatmaps_causal(heatmaps, self.sample)
         expected_heatmaps = torch.tensor(
             [[[[1.], [0.], [0.]]],
              [[[1.], [1.], [0.]]]])

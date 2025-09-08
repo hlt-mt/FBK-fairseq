@@ -16,7 +16,7 @@ import os
 import unittest
 
 import torch
-from torch import Tensor, tensor
+from torch import LongTensor, Tensor, tensor
 
 from examples.speech_to_text.data.occlusion_dataset_with_src_genderxai import OccludedSpeechToTextDatasetWithSrcGenderXai
 from examples.speech_to_text.data.speech_to_text_dataset_with_src_genderxai import \
@@ -104,9 +104,16 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
             tgt_dict=MockDictionary())
         
     def test_getitem(self):
-        perturb_index, orig_dataset_index, mask, perturbed_fbank, \
-            predicted_tokens, source_text, found_term, found_term_pair, \
-            gender_term_index, swapped_tgt_tokens = self.occlusion_dataset[1]
+        (perturb_index,
+         orig_dataset_index,
+         mask,
+         perturbed_fbank,
+         predicted_tokens,
+         source_text,
+         found_term,
+         found_term_pair,
+         gender_term_index,
+         swapped_tgt_tokens) = self.occlusion_dataset[1]
         self.assertEqual(perturb_index, 1)
         self.assertEqual(orig_dataset_index, 0)
         self.assertIsInstance(mask, Tensor)
@@ -147,7 +154,9 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
         self.assertEqual(collated_data["src_texts"], [None, None])
         self.assertEqual(collated_data["found_terms"], ["lei", "lui"])
         self.assertEqual(collated_data["found_term_pairs"], ["lui lei", "lui lei"])
-        self.assertEqual(collated_data["gender_terms_indices"], ["1-1", "0-0"])
+        self.assertTrue(torch.equal(collated_data["gender_term_starts"], LongTensor([1, 0])))
+        self.assertTrue(torch.equal(collated_data["gender_term_ends"], LongTensor([1, 0])))
+        self.assertTrue(torch.equal(collated_data["swapped_term_ends"], LongTensor([1, 0])))
         self.assertTrue(torch.equal(collated_data["swapped_target"], tensor([[5, 4, 2, 1], [9, 3, 3, 2]])))
         self.assertEqual(collated_data["swapped_target_lengths"].tolist(), [3, 4])
         self.assertEqual(net_input["swapped_prev_output_tokens"].tolist(), [[2, 5, 4, 1], [2, 9, 3, 3]])

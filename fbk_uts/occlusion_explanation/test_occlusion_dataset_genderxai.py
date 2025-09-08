@@ -16,7 +16,7 @@ import os
 import unittest
 
 import torch
-from torch import Tensor, tensor
+from torch import LongTensor, Tensor, tensor
 
 from examples.speech_to_text.data.occlusion_dataset_genderxai import \
     OccludedSpeechToTextDatasetGenderXai
@@ -143,9 +143,12 @@ class TestOcclusionDatasetGenderXAI(unittest.TestCase):
         self.assertEqual(collated_data["target_lengths"].tolist(), [4, 3])
         self.assertEqual(collated_data["found_terms"], ["lei", "lui"])
         self.assertEqual(collated_data["found_term_pairs"], ["lui lei", "lui lei"])
-        self.assertEqual(collated_data["gender_terms_indices"], ["1-1", "0-0"])
+        self.assertTrue(torch.equal(collated_data["gender_term_starts"], LongTensor([1, 0])))
+        self.assertTrue(torch.equal(collated_data["gender_term_ends"], LongTensor([1, 0])))
+        self.assertTrue(torch.equal(collated_data["swapped_term_ends"], LongTensor([1, 0])))
         self.assertTrue(torch.equal(collated_data["swapped_target"], tensor([[9, 7, 8, 2], [5, 9, 2, 1]])))
         self.assertEqual(collated_data["swapped_target_lengths"].tolist(), [4, 3])
+        self.assertEqual(net_input["swapped_prev_output_tokens"].tolist(), [[2, 9, 7, 8], [2, 5, 9, 1]])
 
 
 if __name__ == '__main__':

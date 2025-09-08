@@ -117,7 +117,7 @@ def _main(cfg: DictConfig, output_file):
     occluded_dataset = explanation_task.get_occluded_dataset(  # creating the perturbed dataset
         task.dataset(cfg.dataset.gen_subset), fbank_perturbator, tgt_dict)
 
-    scorer = perturb_config.get_scorer_from_config()
+    scorer = perturb_config.get_scorer_from_config(tgt_dict)
     accumulator = Accumulator(cfg.task, occluded_dataset)
 
     # Load dataset (possibly sharded)

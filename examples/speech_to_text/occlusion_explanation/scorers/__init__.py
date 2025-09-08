@@ -33,6 +33,16 @@ class Scorer:
     Assign the attribution scores based on the difference between the original and
     perturbed probabilities.
     """
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    @classmethod
+    def from_config_dict(cls, config: Dict = None):
+        if "prob_aggregation" in config.get("scorer", {}):
+            raise ValueError(
+                f"Probability aggregation method is not supported for scorer {cls.__name__}.")
+        return cls()
+
     @staticmethod
     def get_padded_probs(
             orig_probs: Dict,

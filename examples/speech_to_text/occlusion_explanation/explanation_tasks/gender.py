@@ -151,7 +151,7 @@ class GenderExplanationTask(ExplanationTask):
             encoder_out = model.encoder(
                 src_tokens=sample["net_input"]["src_tokens"],
                 src_lengths=sample["net_input"]["src_lengths"])
-            gender_term_pos = [int(range.split('-')[0]) for range in sample["gender_terms_indices"]]
+            gender_term_pos = sample["gender_term_starts"].tolist()
             # Here, we don't pass the occlusion_masks, so they are generated randomly by the perturbator
             decoder_out = model.decoder(
                 prev_output_tokens=sample["net_input"]["prev_output_tokens"],
