@@ -14,7 +14,7 @@
 # limitations under the License
 
 import argparse
-from typing import Tuple
+from typing import Dict, List, Tuple
 import csv
 import pandas as pd
 import sentencepiece as spm
@@ -35,6 +35,7 @@ OUTPUT_COLUMNS = [
 
 def bpe_to_moses(bpe_text: str, sp: spm.SentencePieceProcessor) -> str:
     """
+    Get Moses tokenization starting from BPE tokenization.
     Args:
         bpe_text: text tokenized with BPE.
         sp: a sentencepiece model used for BPE tokenization.
@@ -44,31 +45,36 @@ def bpe_to_moses(bpe_text: str, sp: spm.SentencePieceProcessor) -> str:
     # Get rid of BPE tokenization
     untokenized_hyp = sp.decode(bpe_text.lower().split())
     # Tokenize with moses
-    from sacremoses import MosesTokenizer
+    try:
+        from sacremoses import MosesTokenizer
+    except ImportError:
+        raise ImportError("Please install sacremoses by running 'pip install sacremoses'.")
     mt = MosesTokenizer()
     tokenized_hyp = mt.tokenize(untokenized_hyp, return_str=True)
     return tokenized_hyp
 
 
-def filter_gender_terms(df_row: pd.Series) -> str:
+def filter_gender_terms(row: Dict) -> Tuple[str, str]:
     """
+    Remove the gender terms which were not generated in the hypothesis.
     Args:
-        df_row: a row of the dataframe containing the hypotheses tokenized with moses
-                (field 'moses_tgt_text') and the gender terms which should be present 
-                according to MuST-SHE annotations (field 'gender_terms').
+        row: a dictionary representing a MuST-SHE sentence. It should contain 
+            - the hypothesis tokenized with moses (field 'moses_tgt_text');
+            - the gender terms which should be present according to MuST-SHE annotations 
+                (field 'gender_terms').
     Returns:
         - The gender terms present in the hypothesis separated by semicolons.
         - The gender term pairs present in the hypothesis separated by semicolons (the correct term
          followed by the term equivalent in the opposite gender, as annotated in MuST-SHE).
     """
-    tokenized_hyp = df_row['moses_tgt_text'].split()
+    tokenized_hyp = row['moses_tgt_text'].split()
     # Look for the terms in the lower case, tokenized hypothesis 
     # (without matching the same occurrence twice).
-    gender_terms = df_row['gender_terms'].split(';')
+    gender_terms = row['gender_terms'].split(';')
     found_terms = []
     found_term_pairs = []
     for pair in gender_terms:
-        correct_term, wrong_term = pair.split()
+        correct_term, wrong_term = pair.split(maxsplit=1)
         found_correct, found_wrong = False, False
         if correct_term.lower() in tokenized_hyp:
             pos_found = tokenized_hyp.index(correct_term.lower())
@@ -89,147 +95,126 @@ def filter_gender_terms(df_row: pd.Series) -> str:
     return ';'.join(found_terms), ';'.join(found_term_pairs)
 
 
+def get_bpe_variants(term: str, sp: spm.SentencePieceProcessor) -> List[str]:
+    """
+    Generate different BPE tokenization variants of the term, including the case where
+    the term is capitalized in the reference, but lower case in the hypothesis, or vice versa.
+    Args:
+        term: The term to be tokenized.
+        sp: The sentencepiece model used for BPE tokenization.
+    Returns:
+        A list of different BPE tokenization variants of the term.
+    """
+    # Start with the most likely encoding
+    term_variants = [' '.join(sp.encode(term, out_type=str)).lower()]
+    # Try different capitalizations
+    capitalizations = [term, term.lower(), term.capitalize()]
+    
+    # Generate alternative BPE tokenizations using sampling
+    for _ in range(100):
+        for term in capitalizations:
+            sampled_variant = ' '.join(sp.encode(term, out_type=str, enable_sampling=True, alpha=0.1, nbest_size=-1)).lower()
+            if sampled_variant not in term_variants:
+                term_variants.append(sampled_variant)
+    
+    return term_variants
+
+
 def _find_term_indices(hyp: str, gender_term: str) -> Tuple[str, str]:
     """
+    Find the start and end indices of a BPE tokenized gender term in a hypothesis.
     Args:
         hyp: The BPE-tokenized hypothesis.
         gender_term: The BPE-tokenized gender terms to find in the hypothesis.
     Returns:
-        A string with the start and end indices of the gender term in the hypothesis
-        and the hypothesis with the gender term erased to avoid matching it again.
+        - The start and end indices of the gender term in the hypothesis.
+        - The hypothesis with the gender term erased to avoid matching it again.
     """
     hyp = hyp.split(' ')
     gender_term = gender_term.split(' ')
     for i, token in enumerate(hyp):
         if token == gender_term[0]:
             j = 1
-            while j < len(gender_term) and i+j < len(hyp) and gender_term[j] == hyp[i+j]:
+            while j < len(gender_term) and i + j < len(hyp) and gender_term[j] == hyp[i + j]:
                 j += 1 
             if j == len(gender_term):
-                for k in range(i, i+j):
+                for k in range(i, i + j):
                     hyp[k] = '***'
-                return f'{i}-{i+j-1}', ' '.join(hyp)
+                if gender_term[0] == '▁"':
+                    return f"{i + 1}-{i + j - 1}", ' '.join(hyp)
+                return f"{i}-{i + j - 1}", ' '.join(hyp)
     raise ValueError(f'Could not find "{gender_term}" in "{hyp}"')
 
 
-def find_terms_bpe(df_row: pd.Series, sp: spm.SentencePieceProcessor) -> str:
+def find_bpe_indices(hypothesis: str, term_bpe: str) -> tuple:
     """
+    Find the indices of a BPE tokenized term within the hypothesis, if present.
     Args:
-        df_row: a row of a pandas dataframe containing the fields 'tgt_text' (the BPE-tokenized 
-                hypothesis generated by the model) and 'found_terms' (the gender terms
-                annotated in MuST-SHE that are present in this hypothesis).
+        hypothesis: The BPE-tokenized hypothesis.
+        term_bpe: The BPE-tokenized term to find in the hypothesis.
+    Returns:
+        - The start and end indices of the term in the hypothesis, if found.
+        - The hypothesis with the term erased to avoid matching it again.
+    """
+    # Final spaces are added to avoid matching substrings
+    # (e.g. considering '▁el' to be present when the token is '▁ella').
+    if term_bpe + ' ' in hypothesis + ' ':
+        return _find_term_indices(hypothesis, term_bpe)
+    # Theis if is necessary so we are able to find terms that are preceded by quotation marks 
+    # in the hypothesis, because then the quotation marks are included in the term's BPE tokenization.
+    elif '▁" ' + term_bpe[1:] + ' ' in hypothesis + ' ':
+        return _find_term_indices(hypothesis, '▁" ' + term_bpe[1:])
+    return None, hypothesis  # No match found
+
+
+def find_terms_bpe(row: Dict, sp: spm.SentencePieceProcessor) -> str:
+    """
+    Finds BPE token indices corresponding to gender terms in a tokenized hypothesis.
+    Args:
+        row: a dictionary containing the fields 'tgt_text' (the BPE-tokenized 
+            hypothesis generated by the model) and 'found_terms' (the gender terms
+            annotated in MuST-SHE that are present in this hypothesis).
         sp: the sentencepiece model used for BPE tokenization.
     Returns:
-        The indices of the BPE tokens in the hypothesis that correspond to the gender terms (ranges
-        of integers separated by semicolons).
+        The indices of the BPE tokens in the hypothesis that correspond to the gender terms.
     """
-    found_terms = df_row['found_terms'].split(';')
-    hypothesis = df_row['tgt_text'].lower()
+    found_terms = row['found_terms'].split(';')
+    hypothesis = row['tgt_text'].lower()
     indices = []
-    for found_term in found_terms:
-        # Get a BPE tokenization of the gender terms.
-        found_term_bpe = ' '.join(sp.encode(found_term, out_type=str)).lower()
-        # Look for the BPE tokens in the hypothesis.
-        if found_term_bpe in hypothesis:
-            tok_indices, hypothesis = _find_term_indices(hypothesis, found_term_bpe)
-            indices.append(tok_indices)
-        else:
-            # There are many possible BPE tokenizations for a single string, if the most likely
-            # one is not found, try other possibilities.
-            for _ in range(50):
-                found_term_bpe = ' '.join(
-                    sp.encode(found_term, out_type=str, enable_sampling=True, alpha=0.1, nbest_size=-1)).lower()
-                if found_term_bpe in hypothesis:
-                    tok_indices, hypothesis = _find_term_indices(hypothesis, found_term_bpe)
-                    indices.append(tok_indices)
-                    break
-                # The problem could also be that the term is capitalized in the reference, but 
-                # lower case in the hypothesis.
-                found_term_bpe_lower = ' '.join(sp.encode(found_term.lower(), out_type=str)).lower()
-                if found_term_bpe_lower in hypothesis:
-                    tok_indices, hypothesis = _find_term_indices(hypothesis, found_term_bpe_lower)
-                    indices.append(tok_indices)
-                    break
-                # Or viceversa.
-                found_term_bpe_upper = ' '.join(
-                    sp.encode(found_term[0].upper() + found_term[1:], out_type=str)).lower()
-                if found_term_bpe_upper in hypothesis:
-                    tok_indices, hypothesis = _find_term_indices(hypothesis, found_term_bpe_upper)
-                    indices.append(tok_indices)
-                    break
+
+    for term in found_terms:
+        for term_bpe in get_bpe_variants(term, sp):
+            tok_indices, hypothesis = find_bpe_indices(hypothesis, term_bpe)
+            if tok_indices is not None:
+                indices.append(tok_indices)
+                break  # Stop once a valid match is found
+
     return ';'.join(indices)
 
 
-def one_term_per_row(df: pd.DataFrame) -> pd.DataFrame:
+def swap_gender_hypothesis(row: Dict, sp: spm.SentencePieceProcessor) -> str:
     """
+    Create a version of the hypothesis where the gender of the annotated term is swapped.
     Args:
-        df: dataframe with each row duplicated as many types as there are gender terms present 
-            in that hypothesis. The dataframe should contain a column 'id' with the id of the MuST-SHE sample,
-            a column 'found_terms' with the gender terms present in that row's hypothesis, 
-            separated by semicolons, a column 'found_term_pairs' with the pair of correct and wrong 
-            terms corresponding to the found terms and a column 'gender_terms_indices' with the indices of the
-            BPE tokens in the hypothesis corresponding to the found terms.
-    Returns:
-        The same dataframe with only one different gender term pair per row (hypotheses stay the 
-        same, only the 'gender_terms_indices' and 'found_terms' columns change).
-    """
-    # Dictionary that maps each hypothesis' ID to the index of the term that should be considered
-    # next in the list of gender terms for that hypothesis.
-    hyp_id_to_term_index = {}
-
-    # Iterate over the DataFrame rows
-    for index, row in df.iterrows():
-        hyp_id = row['id']
-        # If this is the first time we see this hypothesis, initialize the term index to 0
-        if hyp_id not in hyp_id_to_term_index:
-            hyp_id_to_term_index[hyp_id] = 0
-
-        found_terms_list = row['found_terms'].split(';')
-        found_pairs_list = row['found_term_pairs'].split(';')
-        indices_list = row['gender_terms_indices'].split(';')
-        assert len(found_terms_list) == len(found_pairs_list) == len(indices_list), \
-            f"Row {index} has different number of gender terms, gender pairs and indices"
-
-        # Get the current term index for this hypothesis ID
-        current_index = hyp_id_to_term_index[hyp_id]
-
-        # If the current index is out of bounds, skip this row
-        if current_index >= len(found_terms_list):
-            continue
-
-        # Update this row with the current term, term pair, and indices
-        df.at[index, 'found_terms'] = found_terms_list[current_index]
-        df.at[index, 'found_term_pairs'] = found_pairs_list[current_index]
-        df.at[index, 'gender_terms_indices'] = indices_list[current_index]
-
-        # Increment the term index for this hypothesis ID
-        hyp_id_to_term_index[hyp_id] = current_index + 1
-
-    return df
-
-
-def swap_gender_hypothesis(df_row: pd.Series, sp: spm.SentencePieceProcessor) -> str:
-    """
-    Args:
-        df_row: a row of a pandas dataframe containing the fields 'tgt_text' (the BPE-tokenized 
-                hypothesis generated by the model), 'found_terms' (the gender term present 
-                in this hypothesis), 'found_term_pairs' (the pair of correct and wrong terms corresponding
-                to the found term, in the MuST-SHE annotation format) and 'gender_terms_indices'  
-                (the indices of the BPE tokens in the hypothesis that correspond to the gender terms).
+        row: a dictionary containing the fields 'tgt_text' (the BPE-tokenized 
+            hypothesis generated by the model), 'found_terms' (the gender term present 
+            in this hypothesis), 'found_term_pairs' (the pair of correct and wrong terms corresponding
+            to the found term, in the MuST-SHE annotation format) and 'gender_terms_indices'  
+            (the indices of the BPE tokens in the hypothesis that correspond to the gender terms).
         sp: the sentencepiece model used for BPE tokenization.
     Returns:
         The BPE-tokenized hypothesis with the gender of the gender term swapped.
     """
-    hypothesis = df_row['tgt_text'].split(' ')
+    hypothesis = row['tgt_text'].split(' ')
     # If there are no gender terms, leave hypothesis unchanged.
-    if df_row['found_terms'] == '' or df_row['found_term_pairs'] == '' \
-            or df_row['gender_terms_indices'] == '':
+    if row['found_terms'] == '' or row['found_term_pairs'] == '' \
+            or row['gender_terms_indices'] == '':
         return ' '.join(hypothesis)
-    found_terms = df_row['found_terms'].split(';')
-    found_term_pairs = df_row['found_term_pairs'].split(';')
-    gt_indices = df_row['gender_terms_indices'].split(';')
+    found_terms = row['found_terms'].split(';')
+    found_term_pairs = row['found_term_pairs'].split(';')
+    gt_indices = row['gender_terms_indices'].split(';')
     for found_term, term_pair, indices in zip(found_terms, found_term_pairs, gt_indices):
-        correct_term, wrong_term = term_pair.split()
+        correct_term, wrong_term = term_pair.split(maxsplit=1)
         swap_term = correct_term if found_term == wrong_term else wrong_term
         start, end = indices.split('-')
         start, end = int(start), int(end)
@@ -253,29 +238,31 @@ def main(args: argparse.Namespace):
     df = df.merge(df_mustshe[['id', 'GENDERTERMS']], on='id')
     df.rename(columns={'GENDERTERMS': 'gender_terms'}, inplace=True)
 
-    # Get moses tokenized hypotheses to look for gender terms.
+    data_list = df.to_dict(orient='records')
     sp = spm.SentencePieceProcessor(model_file=args.spm_model)
-    df['moses_tgt_text'] = df['tgt_text'].apply(bpe_to_moses, args=(sp,))
+    for row in data_list:
+        # Get moses tokenized hypotheses to look for gender terms.
+        row['moses_tgt_text'] = bpe_to_moses(row['tgt_text'], sp)        
+        # Filter out gender terms which were not generated in the hypotheses.
+        row['found_terms'], row['found_term_pairs'] = filter_gender_terms(row)
+    data_list = [row for row in data_list if row['found_terms'] != '']
 
-    # Filter out gender terms which were not generated in the hypotheses.
-    df[['found_terms', 'found_term_pairs']] = df.apply(
-        filter_gender_terms, axis=1, result_type='expand')
-    df = df[df.found_terms != '']
-
-    # Find the indices of the remaining gender term tokens in the hypotheses.
-    df['gender_terms_indices'] = df.apply(find_terms_bpe, args=(sp,), axis=1)
-
-    # Repeat each row as many times as there are found terms.
-    df['nb_found_terms'] = df['found_terms'].apply(lambda x: len(x.split(';') if x != '' else 0))
-    df = df.loc[df.index.repeat(df.nb_found_terms)]
-    df = df.reset_index(drop=True) # To avoid duplicate index values
-    # Keep only one (different) gender term per row.
-    df = one_term_per_row(df)    
-        
-    # Create a version of the hypotheses where the gender of the term is swapped.
-    df['swapped_tgt_text'] = df.apply(swap_gender_hypothesis, args=(sp,), axis=1)    
+    # Repeat each row as many times as there are found terms and keep only one gender term per row.
+    repeated_data_list = []
+    for row in data_list:
+        # Find the indices of the remaining gender term tokens in the hypotheses.
+        gender_terms_indices = find_terms_bpe(row, sp)
+        for i, indices in enumerate(gender_terms_indices.split(';')):
+            new_row = row.copy()
+            new_row['gender_terms_indices'] = indices
+            new_row['found_terms'] = row['found_terms'].split(';')[i]
+            new_row['found_term_pairs'] = row['found_term_pairs'].split(';')[i]
+            # Create a version of the hypotheses where the gender of the term is swapped.
+            new_row['swapped_tgt_text'] = swap_gender_hypothesis(new_row, sp)
+            repeated_data_list.append(new_row)
 
     # Save the resulting tsv.
+    df = pd.DataFrame(repeated_data_list)
     df[OUTPUT_COLUMNS].to_csv(args.output_tsv, sep='\t', index=False, quoting=csv.QUOTE_NONE, escapechar='\\')
 
 
