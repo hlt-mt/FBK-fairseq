@@ -1,4 +1,4 @@
-# Copyright 2024 FBK
+# Copyright 2025 FBK
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,15 +18,11 @@ from examples.speech_to_text.occlusion_explanation.scorers import register_score
 from examples.speech_to_text.occlusion_explanation.scorers.gender_term_contrastive import GenderTermContrastive
 
 
-@register_scorer("gender_term_contrastive_raw_difference")
-class GenderTermContrastiveRawDiffScorer(GenderTermContrastive):
+@register_scorer("gender_term_contrastive_ratio_difference")
+class GenderTermContrastiveRatioDiffScorer(GenderTermContrastive):
     """
-    Assign the attribution scores based on the difference between the 
-    difference between the original probability and the perturbed probability of the generated term
-    and the difference between the original probability and the perturbed probability of the swapped term.
-    Only gender terms are considered.
-    This scorer is referred to as the "contrastive difference scorer" in the paper "The Unheard Alternative:
-    Contrastive Explanations for Speech-to-Text Models" (Conti et al., BlackboxNLP 2025).
+    Assign the attribution scores based on the difference between ratio of the original probability
+    and the perturbed probability for the generated term and the swapped term.
     """
     @staticmethod
     def get_prob_diff(
@@ -35,6 +31,8 @@ class GenderTermContrastiveRawDiffScorer(GenderTermContrastive):
             swapped_gt_orig_probs: Tensor,
             swapped_gt_perturb_probs: Tensor) -> Tensor:
         """
+        Compute the attribution scores based on the difference between the ratio of the original
+        probability and the perturbed probability for the generated term and the swapped term.
         Args:
             - gt_orig_probs: The original probability of the predicted gender term for each item in the batch (B x 1 x 1)
             - gt_perturb_probs: The perturbed probability of the predicted gender term for each item in the batch (B x 1 x 1)
@@ -43,6 +41,6 @@ class GenderTermContrastiveRawDiffScorer(GenderTermContrastive):
         Returns:
             - Tensor of size (batch_size, 1, 1). There is only one score for each utterance
             in the batch, since only one gender term is annotated per utterance.
-        """     
-        return (gt_orig_probs - gt_perturb_probs) - (swapped_gt_orig_probs - swapped_gt_perturb_probs)
+        """
+        return (gt_orig_probs / gt_perturb_probs) - (swapped_gt_orig_probs / swapped_gt_perturb_probs)
 

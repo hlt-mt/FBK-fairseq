@@ -12,37 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 
-import logging
-
 from torch import Tensor
 
 from examples.speech_to_text.occlusion_explanation.scorers import register_scorer
 from examples.speech_to_text.occlusion_explanation.scorers.gender_scorer import GenderScorer
 
 
-LOGGER = logging.getLogger(__name__)
-
-
-@register_scorer("gender_term_predicted_diff")
-class GenderTermPredictedDiffScorer(GenderScorer):
+@register_scorer("gender_term_predicted_ratio")
+class GenderTermPredictedRatioScorer(GenderScorer):
     """
-    Assign the attribution scores based on the difference between the original and
-    perturbed probabilities of the gender term of the constrained decoding.
-    This scorer is referred to as the "base scorer" in the paper "The Unheard Alternative:
-    Contrastive Explanations for Speech-to-Text Models" (Conti et al., BlackboxNLP 2024).
-    Only gender terms are considered. 
+    Assign the attribution scores based on the ratio between the original and
+    perturbed probabilities of the gender term.
+    Only gender terms are considered. If the gender term is composed of multiple tokens,
+    the probabilities are aggregated with a product and a brevity penalty can be applied.
     """
+
     @staticmethod
     def get_prob_diff(
             gt_orig_probs: Tensor,
             gt_perturb_probs: Tensor) -> Tensor:
         """
         Args:
-            - gt_orig_probs: Tensor of size (batch_size, 1, 1)
-            - gt_perturb_probs: Tensor of size (batch_size, 1, 1)
+            - gt_orig_probs: original probabilities of the generated term.
+            - gt_perturb_probs: perturbed probabilities of the generated term.
         Returns:
-            - Tensor of size (batch_size, 1, 1). There is only one score for each utterance
-            in the batch, since only one gender term is annotated per utterance.
+            Attribution scores based on the ratio between the original and
+             perturbed probabilities of the gender term.
         """
-        return gt_orig_probs - gt_perturb_probs
-
+        return (gt_orig_probs / gt_perturb_probs)
