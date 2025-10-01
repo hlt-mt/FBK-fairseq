@@ -17,6 +17,7 @@ import torch
 from torch import Size
 
 from examples.speech_to_text.occlusion_explanation.scorers.gender_term_contrastive_cross_ratio import GenderTermContrastiveCrossRatioScorer
+from examples.speech_to_text.occlusion_explanation.scorers.gender_term_contrastive_parity_ratio import GenderTermContrastiveParityRatioScorer
 from examples.speech_to_text.occlusion_explanation.scorers.gender_term_contrastive_ratio_difference import GenderTermContrastiveRatioDiffScorer
 from examples.speech_to_text.occlusion_explanation.scorers.gender_term_contrastive_raw_diff import GenderTermContrastiveRawDiffScorer
 from examples.speech_to_text.occlusion_explanation.scorers.gender_term_predicted_diff import GenderTermPredictedDiffScorer
@@ -30,8 +31,9 @@ class TestGenderScorer(unittest.TestCase):
         self.contrastive_raw_diff_scorer = GenderTermContrastiveRawDiffScorer(length_norm_aggregator)
         self.contrastive_ratio_diff_scorer = GenderTermContrastiveRatioDiffScorer(length_norm_aggregator)
         self.contrastive_cross_ratio_scorer = GenderTermContrastiveCrossRatioScorer(length_norm_aggregator)
+        self.contrastive_parity_ratio_scorer = GenderTermContrastiveParityRatioScorer(length_norm_aggregator)
         self.diff_scorer = GenderTermPredictedDiffScorer(length_norm_aggregator)
-        self.ratio_scorer = GenderTermPredictedRatioScorer(length_norm_aggregator)        
+        self.ratio_scorer = GenderTermPredictedRatioScorer(length_norm_aggregator)       
         self.sample = {
             "id": [],
             "orig_id": torch.LongTensor([1, 1]),
@@ -120,6 +122,16 @@ class TestGenderScorer(unittest.TestCase):
             self.swapped_perturb_gt_probs)
         self.assertEqual(scores.size(), Size([2, 1, 1]))
         expected_scores = torch.tensor([[[-0.33656]], [[7.9485]]])
+        self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
+
+    def test_get_prob_diff_contrastive_parity_ratio(self):
+        scores = self.contrastive_parity_ratio_scorer.get_prob_diff(
+            self.gt_orig_probs,
+            self.gt_perturb_probs,
+            self.swapped_orig_gt_probs,
+            self.swapped_perturb_gt_probs)
+        self.assertEqual(scores.size(), Size([2, 1, 1]))
+        expected_scores = torch.tensor([[[-0.021111]], [[0.39948]]])
         self.assertTrue(torch.allclose(scores, expected_scores, atol=0.0001))
 
     def test_make_heatmaps_causal(self):
