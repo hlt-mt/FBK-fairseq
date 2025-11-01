@@ -34,6 +34,7 @@ jobs:
       run: |
         apt-get update && apt-get --yes install libsndfile1
         python -m pip install --upgrade pip
+        pip install sacremoses
         pip install --upgrade setuptools wheel
         git submodule update --init --recursive
         python setup.py build_ext --inplace
