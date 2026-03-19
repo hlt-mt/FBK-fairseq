@@ -1,4 +1,8 @@
 # FBK-fairseq
+![Python 3.8](https://img.shields.io/badge/python-3.8-blue.svg)
+
+> [!WARNING]
+> Notice that this repo has not been tested for Python versions > 3.8 and does not work with recent python versions.
 
 This repository contains the open source code by the MT unit of FBK.
 Dedicated README for each work can be found in the `fbk_works` directory.
